@@ -1,10 +1,12 @@
 # Testing Strategy
 
 The entire display pipeline reduces to: **render an image -> pack it into
-48,000 bytes -> send those bytes over SPI with the right command sequence.**
+a byte buffer -> send those bytes over SPI with the right command sequence.**
 
-If we can verify the bytes are correct on any machine, hardware integration
-becomes a deployment concern, not a development concern.
+The buffer size and command sequence are determined by the configured
+`DisplayProfile` (e.g. 48,000 bytes for the 7.5" V2 at 800x480 BW). If we can
+verify the bytes are correct on any machine, hardware integration becomes a
+deployment concern, not a development concern.
 
 ## Architecture for Testability
 
@@ -64,15 +66,16 @@ The authoritative test: compare the exact 48,000-byte buffer.
 var update = flag.Bool("update", false, "update golden files")
 
 func TestClockWidget(t *testing.T) {
+    profile := &inkwell.Waveshare7in5V2 // or any profile
     frame := image.NewPaletted(
-        image.Rect(0, 0, 800, 480),
+        image.Rect(0, 0, profile.Width, profile.Height),
         color.Palette{color.White, color.Black},
     )
 
     widget := NewClockWidget(fixedTime("14:30:00"))
     widget.Render(frame)
 
-    buf := PackImage(frame)
+    buf := PackImage(profile, frame)
     golden := filepath.Join("testdata", t.Name()+".bin")
 
     if *update {
@@ -130,7 +133,7 @@ Verify the exact SPI commands sent during init, display, and sleep.
 ```go
 func TestInitSequence(t *testing.T) {
     mock := &MockHardware{}
-    epd := NewEPD(mock)
+    epd := NewEPD(mock, &inkwell.Waveshare7in5V2)
     epd.Init(InitFull)
 
     expected := []Call{
@@ -297,7 +300,7 @@ func TestRealDisplay(t *testing.T) {
         t.Skip("skipping hardware test in short mode")
     }
 
-    epd := NewEPD(NewSPIHardware())
+    epd := NewEPD(NewSPIHardware(), &inkwell.Waveshare7in5V2)
     defer epd.Close()
 
     epd.Init(InitFull)
