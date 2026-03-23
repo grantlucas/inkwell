@@ -88,22 +88,45 @@ func (d *EPD) Display(buffer []byte) error {
 }
 
 // DisplayPartial updates a rectangular region of the display without
-// redrawing the full screen. X is aligned down to a byte boundary (multiple
-// of 8) and width is aligned up. The buffer contains the packed pixel data
-// for the partial region only. Sends VCOM partial settings, enters partial
-// mode, sets the window coordinates, sends data, and triggers refresh.
+// redrawing the full screen. The region's X is aligned down to a byte
+// boundary (multiple of 8) and width is aligned up. The buffer contains
+// the packed pixel data for the partial region only.
 // Returns an error if the profile doesn't support partial refresh.
-func (d *EPD) DisplayPartial(buffer []byte, x, y, w, h int) error {
+func (d *EPD) DisplayPartial(buffer []byte, region Region) error {
 	if !d.profile.Capabilities.PartialRefresh {
 		return fmt.Errorf("display %s does not support partial refresh", d.profile.Name)
 	}
 
+	if err := d.sendPartialWindow(region); err != nil {
+		return err
+	}
+
+	// Send partial buffer data
+	if err := d.hw.SendCommand(d.profile.NewBufferCmd); err != nil {
+		return err
+	}
+	if err := d.hw.SendData(buffer); err != nil {
+		return err
+	}
+
+	// Trigger refresh and wait
+	if err := d.hw.SendCommand(d.profile.RefreshCmd); err != nil {
+		return err
+	}
+	d.hw.ReadBusy()
+
+	return nil
+}
+
+// sendPartialWindow configures the display controller for a partial update:
+// sets VCOM interval, enters partial mode, and defines the update window.
+func (d *EPD) sendPartialWindow(region Region) error {
 	// Align x down and width up to byte boundaries (multiples of 8)
-	alignedX := (x / 8) * 8
-	alignedW := ((w + (x - alignedX) + 7) / 8) * 8
+	alignedX := (region.X / 8) * 8
+	alignedW := ((region.W + (region.X - alignedX) + 7) / 8) * 8
 
 	xEnd := alignedX + alignedW - 1
-	yEnd := y + h - 1
+	yEnd := region.Y + region.H - 1
 
 	// Set VCOM interval for partial mode
 	if err := d.hw.SendCommand(0x50); err != nil {
@@ -125,29 +148,11 @@ func (d *EPD) DisplayPartial(buffer []byte, x, y, w, h int) error {
 	windowData := []byte{
 		byte(alignedX >> 8), byte(alignedX & 0xFF), // X start
 		byte(xEnd >> 8), byte(xEnd & 0xFF), // X end
-		byte(y >> 8), byte(y & 0xFF), // Y start
+		byte(region.Y >> 8), byte(region.Y & 0xFF), // Y start
 		byte(yEnd >> 8), byte(yEnd & 0xFF), // Y end
 		0x01, // Scan inside partial window
 	}
-	if err := d.hw.SendData(windowData); err != nil {
-		return err
-	}
-
-	// Send partial buffer data
-	if err := d.hw.SendCommand(d.profile.NewBufferCmd); err != nil {
-		return err
-	}
-	if err := d.hw.SendData(buffer); err != nil {
-		return err
-	}
-
-	// Trigger refresh and wait
-	if err := d.hw.SendCommand(d.profile.RefreshCmd); err != nil {
-		return err
-	}
-	d.hw.ReadBusy()
-
-	return nil
+	return d.hw.SendData(windowData)
 }
 
 // Clear sets the entire display to white by sending an all-0xFF buffer
@@ -183,12 +188,12 @@ func (d *EPD) execSequence(seq []Command) error {
 		if err := d.hw.SendCommand(cmd.Reg); err != nil {
 			return err
 		}
-		if cmd.Data != nil {
-			if err := d.hw.SendData(cmd.Data); err != nil {
-				return err
-			}
-		} else {
+		if cmd.Data == nil {
 			d.hw.ReadBusy()
+			continue
+		}
+		if err := d.hw.SendData(cmd.Data); err != nil {
+			return err
 		}
 	}
 	return nil

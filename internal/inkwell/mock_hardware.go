@@ -62,3 +62,15 @@ func (m *MockHardware) Commands() []byte {
 	}
 	return cmds
 }
+
+// DataCalls returns the data payloads in order, filtering out non-data calls.
+// Useful for asserting buffer contents without manually scanning the call log.
+func (m *MockHardware) DataCalls() [][]byte {
+	var data [][]byte
+	for _, c := range m.Calls {
+		if c.Type == "data" {
+			data = append(data, c.Data)
+		}
+	}
+	return data
+}

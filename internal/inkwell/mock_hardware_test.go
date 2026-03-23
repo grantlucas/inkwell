@@ -113,3 +113,22 @@ func TestMockHardwareCommands(t *testing.T) {
 		t.Errorf("Commands() = %v, want %v", got, want)
 	}
 }
+
+func TestMockHardwareDataCalls(t *testing.T) {
+	m := &MockHardware{}
+	m.SendCommand(0x10)
+	m.SendData([]byte{0xAA, 0xBB})
+	m.SendCommand(0x13)
+	m.SendData([]byte{0xCC})
+
+	got := m.DataCalls()
+	if len(got) != 2 {
+		t.Fatalf("DataCalls() length = %d, want 2", len(got))
+	}
+	if !bytes.Equal(got[0], []byte{0xAA, 0xBB}) {
+		t.Errorf("DataCalls()[0] = %v, want [0xAA, 0xBB]", got[0])
+	}
+	if !bytes.Equal(got[1], []byte{0xCC}) {
+		t.Errorf("DataCalls()[1] = %v, want [0xCC]", got[1])
+	}
+}

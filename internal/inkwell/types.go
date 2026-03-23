@@ -56,6 +56,12 @@ const (
 	Init4Gray
 )
 
+// Region describes a rectangular area on the display for partial updates.
+type Region struct {
+	X, Y int // Top-left corner (X will be byte-aligned by the driver)
+	W, H int // Width and height in pixels
+}
+
 // String returns the name of the InitMode.
 func (m InitMode) String() string {
 	switch m {
