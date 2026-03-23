@@ -278,7 +278,7 @@ tests
 
 - [x] **Interface**: All five methods defined per Go Implementation Guide
 - [x] **Docs**: Godoc comments on interface and each method
-- [ ] **Commit**: Interface committed
+- [x] **Commit**: Interface committed
 
 ---
 
@@ -306,13 +306,13 @@ dependencies in tests.
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Tests for recording SendCommand, SendData, ReadBusy, Reset
+- [x] **TDD**: Tests for recording SendCommand, SendData, ReadBusy, Reset
   written first
-- [ ] **TDD**: Test for BusyCount simulation written first
-- [ ] **TDD**: Test for Commands() helper written first
-- [ ] **Verification**: MockHardware satisfies `Hardware` interface
+- [x] **TDD**: Test for BusyCount simulation written first
+- [x] **TDD**: Test for Commands() helper written first
+- [x] **Verification**: MockHardware satisfies `Hardware` interface
   (compile-time check)
-- [ ] **Coverage**: 100%
+- [x] **Coverage**: 100%
 - [ ] **Commit**: Mock committed after green tests
 
 ---
