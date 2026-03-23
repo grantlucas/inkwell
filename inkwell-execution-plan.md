@@ -313,7 +313,7 @@ dependencies in tests.
 - [x] **Verification**: MockHardware satisfies `Hardware` interface
   (compile-time check)
 - [x] **Coverage**: 100%
-- [ ] **Commit**: Mock committed after green tests
+- [x] **Commit**: Mock committed after green tests
 
 ---
 
@@ -342,12 +342,12 @@ exact call sequences
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Test with a 3-command sequence (with data, without data,
+- [x] **TDD**: Test with a 3-command sequence (with data, without data,
   with data) written first
-- [ ] **TDD**: Test error propagation (SendCommand fails mid-sequence)
+- [x] **TDD**: Test error propagation (SendCommand fails mid-sequence)
   written first
-- [ ] **Busy Wait**: Commands with `nil` Data trigger `ReadBusy()` call
-- [ ] **Coverage**: 100%
+- [x] **Busy Wait**: Commands with `nil` Data trigger `ReadBusy()` call
+- [x] **Coverage**: 100%
 - [ ] **Commit**: Committed after green tests
 
 ---
