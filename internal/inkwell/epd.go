@@ -87,6 +87,69 @@ func (d *EPD) Display(buffer []byte) error {
 	return nil
 }
 
+// DisplayPartial updates a rectangular region of the display without
+// redrawing the full screen. X is aligned down to a byte boundary (multiple
+// of 8) and width is aligned up. The buffer contains the packed pixel data
+// for the partial region only. Sends VCOM partial settings, enters partial
+// mode, sets the window coordinates, sends data, and triggers refresh.
+// Returns an error if the profile doesn't support partial refresh.
+func (d *EPD) DisplayPartial(buffer []byte, x, y, w, h int) error {
+	if !d.profile.Capabilities.PartialRefresh {
+		return fmt.Errorf("display %s does not support partial refresh", d.profile.Name)
+	}
+
+	// Align x down and width up to byte boundaries (multiples of 8)
+	alignedX := (x / 8) * 8
+	alignedW := ((w + (x - alignedX) + 7) / 8) * 8
+
+	xEnd := alignedX + alignedW - 1
+	yEnd := y + h - 1
+
+	// Set VCOM interval for partial mode
+	if err := d.hw.SendCommand(0x50); err != nil {
+		return err
+	}
+	if err := d.hw.SendData(d.profile.PartialVCOM); err != nil {
+		return err
+	}
+
+	// Enter partial mode
+	if err := d.hw.SendCommand(d.profile.PartialEnterCmd); err != nil {
+		return err
+	}
+
+	// Set partial window coordinates (9 bytes)
+	if err := d.hw.SendCommand(d.profile.PartialWindowCmd); err != nil {
+		return err
+	}
+	windowData := []byte{
+		byte(alignedX >> 8), byte(alignedX & 0xFF), // X start
+		byte(xEnd >> 8), byte(xEnd & 0xFF), // X end
+		byte(y >> 8), byte(y & 0xFF), // Y start
+		byte(yEnd >> 8), byte(yEnd & 0xFF), // Y end
+		0x01, // Scan inside partial window
+	}
+	if err := d.hw.SendData(windowData); err != nil {
+		return err
+	}
+
+	// Send partial buffer data
+	if err := d.hw.SendCommand(d.profile.NewBufferCmd); err != nil {
+		return err
+	}
+	if err := d.hw.SendData(buffer); err != nil {
+		return err
+	}
+
+	// Trigger refresh and wait
+	if err := d.hw.SendCommand(d.profile.RefreshCmd); err != nil {
+		return err
+	}
+	d.hw.ReadBusy()
+
+	return nil
+}
+
 // Clear sets the entire display to white by sending an all-0xFF buffer
 // through the normal Display path (which handles inversion automatically).
 func (d *EPD) Clear() error {

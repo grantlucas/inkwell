@@ -443,7 +443,7 @@ contents; Sleep verified against profile sequence
 - [x] **TDD**: Test Sleep sends profile.SleepSequence commands
 - [x] **TDD**: Test Close calls Sleep then hw.Close
 - [x] **Coverage**: 100%
-- [ ] **Commit**: Committed after green tests
+- [x] **Commit**: Committed after green tests
 
 ---
 
@@ -472,11 +472,11 @@ unsupported mode tested; command sequence verified
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Test byte-alignment of X coordinates (e.g., 13 → 8)
-- [ ] **TDD**: Test partial window command byte encoding
-- [ ] **TDD**: Test command sequence matches docs/04 partial refresh
-- [ ] **TDD**: Test error when profile lacks partial support
-- [ ] **Coverage**: 100%
+- [x] **TDD**: Test byte-alignment of X coordinates (e.g., 13 → 8)
+- [x] **TDD**: Test partial window command byte encoding
+- [x] **TDD**: Test command sequence matches docs/04 partial refresh
+- [x] **TDD**: Test error when profile lacks partial support
+- [x] **Coverage**: 100%
 - [ ] **Commit**: Committed after green tests
 
 ---

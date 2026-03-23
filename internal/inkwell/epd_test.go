@@ -512,3 +512,227 @@ func TestDisplayBufferSizeValidation(t *testing.T) {
 		t.Fatal("expected error for wrong buffer size")
 	}
 }
+
+func TestDisplayPartialByteAlignmentOfX(t *testing.T) {
+	m := &MockHardware{}
+	p := &DisplayProfile{
+		Name:             "test",
+		Width:            800,
+		Height:           480,
+		Color:            BW,
+		NewBufferCmd:     0x13,
+		RefreshCmd:       0x12,
+		PartialWindowCmd: 0x90,
+		PartialEnterCmd:  0x91,
+		PartialVCOM:      []byte{0xA9, 0x07},
+		Capabilities:     Capabilities{PartialRefresh: true},
+	}
+	epd := NewEPD(m, p)
+
+	// x=13 aligns down to 8, w=20 + offset(5) = 25 aligns up to 32
+	// Partial region: 32/8 * 16 = 64 bytes
+	buf := make([]byte, 4*16) // (32/8)*16 = 64
+	err := epd.DisplayPartial(buf, 13, 0, 20, 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Find the partial window command data (9 bytes)
+	var windowData []byte
+	for i, c := range m.Calls {
+		if c.Type == "command" && c.Data[0] == 0x90 {
+			// Next call should be the window data
+			if i+1 < len(m.Calls) && m.Calls[i+1].Type == "data" {
+				windowData = m.Calls[i+1].Data
+			}
+			break
+		}
+	}
+
+	if windowData == nil {
+		t.Fatal("partial window data not found")
+	}
+	if len(windowData) != 9 {
+		t.Fatalf("window data length = %d, want 9", len(windowData))
+	}
+
+	// Xstart = 8 (aligned from 13), encoded as 2 bytes: 0x00, 0x08
+	if windowData[0] != 0x00 || windowData[1] != 0x08 {
+		t.Errorf("Xstart = [%#x, %#x], want [0x00, 0x08]", windowData[0], windowData[1])
+	}
+
+	// Xend = 8 + 32 - 1 = 39, encoded as 2 bytes: 0x00, 0x27
+	if windowData[2] != 0x00 || windowData[3] != 0x27 {
+		t.Errorf("Xend = [%#x, %#x], want [0x00, 0x27]", windowData[2], windowData[3])
+	}
+}
+
+func TestDisplayPartialCommandSequence(t *testing.T) {
+	m := &MockHardware{}
+	p := &DisplayProfile{
+		Name:             "test",
+		Width:            800,
+		Height:           480,
+		Color:            BW,
+		NewBufferCmd:     0x13,
+		RefreshCmd:       0x12,
+		PartialWindowCmd: 0x90,
+		PartialEnterCmd:  0x91,
+		PartialVCOM:      []byte{0xA9, 0x07},
+		Capabilities:     Capabilities{PartialRefresh: true},
+	}
+	epd := NewEPD(m, p)
+
+	// 16x16 region at (0,0), buffer = 16/8 * 16 = 32 bytes
+	buf := make([]byte, 32)
+	if err := epd.DisplayPartial(buf, 0, 0, 16, 16); err != nil {
+		t.Fatal(err)
+	}
+
+	// Expected command sequence: 0x50 (VCOM), 0x91 (partial enter), 0x90 (window), 0x13 (data), 0x12 (refresh)
+	cmds := m.Commands()
+	wantCmds := []byte{0x50, 0x91, 0x90, 0x13, 0x12}
+	if !bytes.Equal(cmds, wantCmds) {
+		t.Errorf("commands = %#v, want %#v", cmds, wantCmds)
+	}
+}
+
+func TestDisplayPartialUnsupportedProfile(t *testing.T) {
+	m := &MockHardware{}
+	p := &DisplayProfile{
+		Name:         "no-partial",
+		Width:        16,
+		Height:       16,
+		Color:        BW,
+		Capabilities: Capabilities{PartialRefresh: false},
+	}
+	epd := NewEPD(m, p)
+
+	err := epd.DisplayPartial([]byte{0x00}, 0, 0, 8, 1)
+	if err == nil {
+		t.Fatal("expected error for unsupported partial refresh")
+	}
+}
+
+func TestDisplayPartialErrorPaths(t *testing.T) {
+	p := &DisplayProfile{
+		Name:             "test",
+		Width:            800,
+		Height:           480,
+		Color:            BW,
+		NewBufferCmd:     0x13,
+		RefreshCmd:       0x12,
+		PartialWindowCmd: 0x90,
+		PartialEnterCmd:  0x91,
+		PartialVCOM:      []byte{0xA9, 0x07},
+		Capabilities:     Capabilities{PartialRefresh: true},
+	}
+	buf := make([]byte, 32) // 16/8 * 16
+
+	// Error on 1st SendCommand (VCOM)
+	eh1 := &errorHardware{failOnCall: 1}
+	if err := NewEPD(eh1, p).DisplayPartial(buf, 0, 0, 16, 16); err == nil {
+		t.Error("expected error on VCOM SendCommand")
+	}
+
+	// Error on 1st SendData (VCOM data)
+	ed1 := &errorDataHardware{}
+	if err := NewEPD(ed1, p).DisplayPartial(buf, 0, 0, 16, 16); err == nil {
+		t.Error("expected error on VCOM SendData")
+	}
+
+	// Error on 2nd SendCommand (partial enter)
+	eh2 := &errorHardware{failOnCall: 2}
+	if err := NewEPD(eh2, p).DisplayPartial(buf, 0, 0, 16, 16); err == nil {
+		t.Error("expected error on partial enter SendCommand")
+	}
+
+	// Error on 3rd SendCommand (partial window)
+	eh3 := &errorHardware{failOnCall: 3}
+	if err := NewEPD(eh3, p).DisplayPartial(buf, 0, 0, 16, 16); err == nil {
+		t.Error("expected error on partial window SendCommand")
+	}
+
+	// Error on 2nd SendData (window data)
+	ed2 := &errorDataNthHardware{failOnCall: 2}
+	if err := NewEPD(ed2, p).DisplayPartial(buf, 0, 0, 16, 16); err == nil {
+		t.Error("expected error on window SendData")
+	}
+
+	// Error on 4th SendCommand (NewBufferCmd)
+	eh4 := &errorHardware{failOnCall: 4}
+	if err := NewEPD(eh4, p).DisplayPartial(buf, 0, 0, 16, 16); err == nil {
+		t.Error("expected error on NewBufferCmd SendCommand")
+	}
+
+	// Error on 3rd SendData (buffer data)
+	ed3 := &errorDataNthHardware{failOnCall: 3}
+	if err := NewEPD(ed3, p).DisplayPartial(buf, 0, 0, 16, 16); err == nil {
+		t.Error("expected error on buffer SendData")
+	}
+
+	// Error on 5th SendCommand (RefreshCmd)
+	eh5 := &errorHardware{failOnCall: 5}
+	if err := NewEPD(eh5, p).DisplayPartial(buf, 0, 0, 16, 16); err == nil {
+		t.Error("expected error on RefreshCmd SendCommand")
+	}
+}
+
+func TestDisplayPartialWindowEncoding(t *testing.T) {
+	m := &MockHardware{}
+	p := &DisplayProfile{
+		Name:             "test",
+		Width:            800,
+		Height:           480,
+		Color:            BW,
+		NewBufferCmd:     0x13,
+		RefreshCmd:       0x12,
+		PartialWindowCmd: 0x90,
+		PartialEnterCmd:  0x91,
+		PartialVCOM:      []byte{0xA9, 0x07},
+		Capabilities:     Capabilities{PartialRefresh: true},
+	}
+	epd := NewEPD(m, p)
+
+	// Region at x=256, y=100, w=32, h=50
+	buf := make([]byte, (32/8)*50) // 200 bytes
+	if err := epd.DisplayPartial(buf, 256, 100, 32, 50); err != nil {
+		t.Fatal(err)
+	}
+
+	// Find window data
+	var windowData []byte
+	for i, c := range m.Calls {
+		if c.Type == "command" && c.Data[0] == 0x90 {
+			if i+1 < len(m.Calls) && m.Calls[i+1].Type == "data" {
+				windowData = m.Calls[i+1].Data
+			}
+			break
+		}
+	}
+
+	if len(windowData) != 9 {
+		t.Fatalf("window data length = %d, want 9", len(windowData))
+	}
+
+	// Xstart=256: 0x01, 0x00
+	if windowData[0] != 0x01 || windowData[1] != 0x00 {
+		t.Errorf("Xstart = [%#x, %#x], want [0x01, 0x00]", windowData[0], windowData[1])
+	}
+	// Xend=256+32-1=287: 0x01, 0x1F
+	if windowData[2] != 0x01 || windowData[3] != 0x1F {
+		t.Errorf("Xend = [%#x, %#x], want [0x01, 0x1F]", windowData[2], windowData[3])
+	}
+	// Ystart=100: 0x00, 0x64
+	if windowData[4] != 0x00 || windowData[5] != 0x64 {
+		t.Errorf("Ystart = [%#x, %#x], want [0x00, 0x64]", windowData[4], windowData[5])
+	}
+	// Yend=100+50-1=149: 0x00, 0x95
+	if windowData[6] != 0x00 || windowData[7] != 0x95 {
+		t.Errorf("Yend = [%#x, %#x], want [0x00, 0x95]", windowData[6], windowData[7])
+	}
+	// Scan direction
+	if windowData[8] != 0x01 {
+		t.Errorf("scan = %#x, want 0x01", windowData[8])
+	}
+}
