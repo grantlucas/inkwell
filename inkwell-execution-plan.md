@@ -505,14 +505,14 @@ in docs/04
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Test all-white image produces all-zero buffer
-- [ ] **TDD**: Test all-black image produces all-0xFF buffer
-- [ ] **TDD**: Test single black pixel at (0,0) sets MSB of byte 0
-- [ ] **TDD**: Test single black pixel at (7,0) sets LSB of byte 0
-- [ ] **TDD**: Test checkerboard pattern produces expected bytes
-- [ ] **TDD**: Test buffer length equals `profile.BufferSize()`
-- [ ] **Coverage**: 100%
-- [ ] **Commit**: Committed after green tests
+- [x] **TDD**: Test all-white image produces all-zero buffer
+- [x] **TDD**: Test all-black image produces all-0xFF buffer
+- [x] **TDD**: Test single black pixel at (0,0) sets MSB of byte 0
+- [x] **TDD**: Test single black pixel at (7,0) sets LSB of byte 0
+- [x] **TDD**: Test checkerboard pattern produces expected bytes
+- [x] **TDD**: Test buffer length equals `profile.BufferSize()`
+- [x] **Coverage**: 100%
+- [x] **Commit**: Committed after green tests
 
 ---
 
@@ -537,12 +537,12 @@ splitting.
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Test all-white image produces expected buffer
-- [ ] **TDD**: Test all-black image produces expected buffer
-- [ ] **TDD**: Test mixed gray levels pack correctly (4 pixels → 1 byte)
-- [ ] **TDD**: Test buffer length equals `profile.BufferSize()` for Gray4
-- [ ] **Coverage**: 100%
-- [ ] **Commit**: Committed after green tests
+- [x] **TDD**: Test all-white image produces expected buffer
+- [x] **TDD**: Test all-black image produces expected buffer
+- [x] **TDD**: Test mixed gray levels pack correctly (4 pixels → 1 byte)
+- [x] **TDD**: Test buffer length equals `profile.BufferSize()` for Gray4
+- [x] **Coverage**: 100%
+- [x] **Commit**: Committed after green tests
 
 ---
 
@@ -567,11 +567,11 @@ equals original
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Round-trip test — packBW then UnpackBuffer produces original
+- [x] **TDD**: Round-trip test — packBW then UnpackBuffer produces original
   image
-- [ ] **TDD**: Test with known buffer produces expected pixel values
-- [ ] **Coverage**: 100%
-- [ ] **Commit**: Committed after green tests
+- [x] **TDD**: Test with known buffer produces expected pixel values
+- [x] **Coverage**: 100%
+- [x] **Commit**: Committed after green tests
 
 ---
 
@@ -1141,9 +1141,9 @@ Copy this to track completion session by session:
 
 ### Milestone 2: Rendering Pipeline
 
-- [ ] **4.1** — packBW
-- [ ] **4.2** — packGray4
-- [ ] **4.3** — UnpackBuffer
+- [x] **4.1** — packBW
+- [x] **4.2** — packGray4
+- [x] **4.3** — UnpackBuffer
 
 ### Milestone 3: Image Backend + Web Preview
 
