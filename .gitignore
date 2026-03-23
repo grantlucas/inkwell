@@ -1,0 +1,9 @@
+# Binaries
+/inkwell
+*.exe
+
+# Test binary
+*.test
+
+# OS files
+.DS_Store
