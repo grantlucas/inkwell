@@ -477,7 +477,7 @@ unsupported mode tested; command sequence verified
 - [x] **TDD**: Test command sequence matches docs/04 partial refresh
 - [x] **TDD**: Test error when profile lacks partial support
 - [x] **Coverage**: 100%
-- [ ] **Commit**: Committed after green tests
+- [x] **Commit**: Committed after green tests
 
 ---
 
