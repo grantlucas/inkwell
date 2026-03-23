@@ -25,10 +25,11 @@ jobs:
         run: go vet ./...
 
       - name: Test
-        run: go test -race -coverprofile=coverage.out ./...
+        run: go test -race ./...
 
-      - name: Check coverage
+      - name: Check coverage (internal packages)
         run: |
+          go test -coverprofile=coverage.out ./internal/...
           COVERAGE=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $3}' | tr -d '%')
           echo "Total coverage: ${COVERAGE}%"
           if (( $(echo "$COVERAGE < 100" | bc -l) )); then
