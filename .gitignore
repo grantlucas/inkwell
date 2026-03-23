@@ -7,3 +7,6 @@
 
 # OS files
 .DS_Store
+
+# Test coverage
+coverage.out
