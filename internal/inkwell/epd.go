@@ -47,6 +47,46 @@ func (d *EPD) Init(mode InitMode) error {
 	return d.execSequence(seq)
 }
 
+// Display sends a full frame buffer to the display and triggers a refresh.
+// The old buffer is sent inverted (XOR with 0xFF) per the display protocol,
+// then the new buffer is sent as-is. After refresh, waits for the display
+// to finish updating. Returns an error if the buffer size doesn't match
+// the profile's expected BufferSize().
+func (d *EPD) Display(buffer []byte) error {
+	expected := d.profile.BufferSize()
+	if len(buffer) != expected {
+		return fmt.Errorf("buffer size %d does not match expected %d", len(buffer), expected)
+	}
+
+	// Send old buffer (inverted)
+	inverted := make([]byte, len(buffer))
+	for i, b := range buffer {
+		inverted[i] = ^b
+	}
+	if err := d.hw.SendCommand(d.profile.OldBufferCmd); err != nil {
+		return err
+	}
+	if err := d.hw.SendData(inverted); err != nil {
+		return err
+	}
+
+	// Send new buffer
+	if err := d.hw.SendCommand(d.profile.NewBufferCmd); err != nil {
+		return err
+	}
+	if err := d.hw.SendData(buffer); err != nil {
+		return err
+	}
+
+	// Trigger refresh and wait
+	if err := d.hw.SendCommand(d.profile.RefreshCmd); err != nil {
+		return err
+	}
+	d.hw.ReadBusy()
+
+	return nil
+}
+
 // execSequence sends a series of commands to the display. Commands with a
 // non-nil Data payload send command + data. Commands with nil Data send
 // just the command byte and then wait for the display to become idle

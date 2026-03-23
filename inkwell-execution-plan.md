@@ -380,7 +380,7 @@ command sequence; unsupported mode returns descriptive error
 - [x] **TDD**: Test Init4Gray sends reset + profile.Init4Gray commands
 - [x] **TDD**: Test unsupported mode (nil sequence) returns error
 - [x] **Coverage**: 100%
-- [ ] **Commit**: Committed after green tests
+- [x] **Commit**: Committed after green tests
 
 ---
 
@@ -408,12 +408,12 @@ byte-by-byte; wrong-size buffer rejected
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Test command sequence (old cmd, data, new cmd, data, refresh,
+- [x] **TDD**: Test command sequence (old cmd, data, new cmd, data, refresh,
   busy) written first
-- [ ] **TDD**: Test buffer inversion (each byte is `^b`) written first
-- [ ] **TDD**: Test buffer size validation (wrong size returns error)
+- [x] **TDD**: Test buffer inversion (each byte is `^b`) written first
+- [x] **TDD**: Test buffer size validation (wrong size returns error)
   written first
-- [ ] **Coverage**: 100%
+- [x] **Coverage**: 100%
 - [ ] **Commit**: Committed after green tests
 
 ---

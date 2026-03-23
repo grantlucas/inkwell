@@ -234,3 +234,182 @@ type errorResetHardware struct {
 func (e *errorResetHardware) Reset() error {
 	return errors.New("reset failed")
 }
+
+func TestDisplayCommandSequence(t *testing.T) {
+	m := &MockHardware{}
+	p := &DisplayProfile{
+		Name:         "test",
+		Width:        16,
+		Height:       16,
+		Color:        BW,
+		OldBufferCmd: 0x10,
+		NewBufferCmd: 0x13,
+		RefreshCmd:   0x12,
+	}
+	epd := NewEPD(m, p)
+
+	bufSize := p.BufferSize() // 16*16/8 = 32
+	buf := make([]byte, bufSize)
+	for i := range buf {
+		buf[i] = 0xAA
+	}
+
+	if err := epd.Display(buf); err != nil {
+		t.Fatal(err)
+	}
+
+	// Expected: command(0x10), data(inverted), command(0x13), data(original), command(0x12), busy
+	cmds := m.Commands()
+	wantCmds := []byte{0x10, 0x13, 0x12}
+	if !bytes.Equal(cmds, wantCmds) {
+		t.Errorf("commands = %#v, want %#v", cmds, wantCmds)
+	}
+}
+
+func TestDisplayBufferInversion(t *testing.T) {
+	m := &MockHardware{}
+	p := &DisplayProfile{
+		Name:         "test",
+		Width:        16,
+		Height:       16,
+		Color:        BW,
+		OldBufferCmd: 0x10,
+		NewBufferCmd: 0x13,
+		RefreshCmd:   0x12,
+	}
+	epd := NewEPD(m, p)
+
+	buf := make([]byte, p.BufferSize())
+	for i := range buf {
+		buf[i] = 0xAA // 10101010
+	}
+
+	if err := epd.Display(buf); err != nil {
+		t.Fatal(err)
+	}
+
+	// Find the first data call (old buffer, should be inverted)
+	var oldData, newData []byte
+	dataIdx := 0
+	for _, c := range m.Calls {
+		if c.Type == "data" {
+			if dataIdx == 0 {
+				oldData = c.Data
+			} else {
+				newData = c.Data
+			}
+			dataIdx++
+		}
+	}
+
+	// Old buffer should be inverted: ^0xAA = 0x55
+	for i, b := range oldData {
+		if b != 0x55 {
+			t.Errorf("old buffer[%d] = %#x, want 0x55", i, b)
+			break
+		}
+	}
+
+	// New buffer should be original
+	for i, b := range newData {
+		if b != 0xAA {
+			t.Errorf("new buffer[%d] = %#x, want 0xAA", i, b)
+			break
+		}
+	}
+}
+
+func TestDisplaySendCommandErrors(t *testing.T) {
+	p := &DisplayProfile{
+		Name:         "test",
+		Width:        16,
+		Height:       16,
+		Color:        BW,
+		OldBufferCmd: 0x10,
+		NewBufferCmd: 0x13,
+		RefreshCmd:   0x12,
+	}
+	buf := make([]byte, p.BufferSize())
+
+	// Error on 1st SendCommand (OldBufferCmd)
+	eh1 := &errorHardware{failOnCall: 1}
+	epd1 := NewEPD(eh1, p)
+	if err := epd1.Display(buf); err == nil {
+		t.Error("expected error on OldBufferCmd SendCommand")
+	}
+
+	// Error on 2nd SendCommand (NewBufferCmd)
+	eh2 := &errorHardware{failOnCall: 2}
+	epd2 := NewEPD(eh2, p)
+	if err := epd2.Display(buf); err == nil {
+		t.Error("expected error on NewBufferCmd SendCommand")
+	}
+
+	// Error on 3rd SendCommand (RefreshCmd)
+	eh3 := &errorHardware{failOnCall: 3}
+	epd3 := NewEPD(eh3, p)
+	if err := epd3.Display(buf); err == nil {
+		t.Error("expected error on RefreshCmd SendCommand")
+	}
+}
+
+func TestDisplaySendDataErrors(t *testing.T) {
+	p := &DisplayProfile{
+		Name:         "test",
+		Width:        16,
+		Height:       16,
+		Color:        BW,
+		OldBufferCmd: 0x10,
+		NewBufferCmd: 0x13,
+		RefreshCmd:   0x12,
+	}
+	buf := make([]byte, p.BufferSize())
+
+	// Error on first SendData (old buffer)
+	eh := &errorDataHardware{}
+	epd := NewEPD(eh, p)
+	if err := epd.Display(buf); err == nil {
+		t.Error("expected error on old buffer SendData")
+	}
+
+	// Error on second SendData (new buffer) — need a mock that fails on 2nd call
+	eh2 := &errorDataNthHardware{failOnCall: 2}
+	epd2 := NewEPD(eh2, p)
+	if err := epd2.Display(buf); err == nil {
+		t.Error("expected error on new buffer SendData")
+	}
+}
+
+type errorDataNthHardware struct {
+	MockHardware
+	failOnCall int
+	callCount  int
+}
+
+func (e *errorDataNthHardware) SendData(data []byte) error {
+	e.callCount++
+	if e.callCount == e.failOnCall {
+		return errors.New("SPI data write failed")
+	}
+	return e.MockHardware.SendData(data)
+}
+
+func TestDisplayBufferSizeValidation(t *testing.T) {
+	m := &MockHardware{}
+	p := &DisplayProfile{
+		Name:         "test",
+		Width:        16,
+		Height:       16,
+		Color:        BW,
+		OldBufferCmd: 0x10,
+		NewBufferCmd: 0x13,
+		RefreshCmd:   0x12,
+	}
+	epd := NewEPD(m, p)
+
+	// Wrong size buffer
+	err := epd.Display([]byte{0x00, 0x01})
+	if err == nil {
+		t.Fatal("expected error for wrong buffer size")
+	}
+}
