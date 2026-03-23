@@ -178,7 +178,7 @@ ad-hoc file placement.
 
 - [x] **Structure**: `go mod init`, directories created, `main.go` compiles
 - [x] **Verification**: `go build ./...` exits 0
-- [ ] **Commit**: Initial scaffold committed
+- [x] **Commit**: Initial scaffold committed
 
 ---
 
@@ -212,7 +212,7 @@ representations
   `InitMode.String()`
 - [x] **Types**: All four types defined with godoc comments
 - [x] **Coverage**: `go test -cover` reports 100% for this file
-- [ ] **Commit**: Types committed after green tests
+- [x] **Commit**: Types committed after green tests
 
 ---
 
@@ -243,12 +243,12 @@ color depths; profile lookup tested
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Tests for `BufferSize()` across all `ColorDepth` values
+- [x] **TDD**: Tests for `BufferSize()` across all `ColorDepth` values
   written first
-- [ ] **TDD**: Tests for `Profiles` map lookup (hit and miss) written first
-- [ ] **Profile Data**: Init sequences match docs/05-spi-command-reference.md
+- [x] **TDD**: Tests for `Profiles` map lookup (hit and miss) written first
+- [x] **Profile Data**: Init sequences match docs/05-spi-command-reference.md
   exactly
-- [ ] **Coverage**: 100% on profile package
+- [x] **Coverage**: 100% on profile package
 - [ ] **Commit**: Profile committed after green tests
 
 ---
