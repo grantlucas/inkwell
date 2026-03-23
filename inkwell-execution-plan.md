@@ -176,8 +176,8 @@ ad-hoc file placement.
 
 **Acceptance Criteria**:
 
-- [ ] **Structure**: `go mod init`, directories created, `main.go` compiles
-- [ ] **Verification**: `go build ./...` exits 0
+- [x] **Structure**: `go mod init`, directories created, `main.go` compiles
+- [x] **Verification**: `go build ./...` exits 0
 - [ ] **Commit**: Initial scaffold committed
 
 ---
@@ -208,10 +208,10 @@ representations
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Tests written first for `ColorDepth.String()`,
+- [x] **TDD**: Tests written first for `ColorDepth.String()`,
   `InitMode.String()`
-- [ ] **Types**: All four types defined with godoc comments
-- [ ] **Coverage**: `go test -cover` reports 100% for this file
+- [x] **Types**: All four types defined with godoc comments
+- [x] **Coverage**: `go test -cover` reports 100% for this file
 - [ ] **Commit**: Types committed after green tests
 
 ---
