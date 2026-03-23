@@ -249,7 +249,7 @@ color depths; profile lookup tested
 - [x] **Profile Data**: Init sequences match docs/05-spi-command-reference.md
   exactly
 - [x] **Coverage**: 100% on profile package
-- [ ] **Commit**: Profile committed after green tests
+- [x] **Commit**: Profile committed after green tests
 
 ---
 
@@ -276,8 +276,8 @@ tests
 
 **Acceptance Criteria**:
 
-- [ ] **Interface**: All five methods defined per Go Implementation Guide
-- [ ] **Docs**: Godoc comments on interface and each method
+- [x] **Interface**: All five methods defined per Go Implementation Guide
+- [x] **Docs**: Godoc comments on interface and each method
 - [ ] **Commit**: Interface committed
 
 ---
