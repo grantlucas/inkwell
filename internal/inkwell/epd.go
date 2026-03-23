@@ -87,6 +87,30 @@ func (d *EPD) Display(buffer []byte) error {
 	return nil
 }
 
+// Clear sets the entire display to white by sending an all-0xFF buffer
+// through the normal Display path (which handles inversion automatically).
+func (d *EPD) Clear() error {
+	buf := make([]byte, d.profile.BufferSize())
+	for i := range buf {
+		buf[i] = 0xFF
+	}
+	return d.Display(buf)
+}
+
+// Sleep puts the display into deep sleep mode by executing the profile's
+// sleep sequence (VCOM setting, power off, deep sleep command).
+func (d *EPD) Sleep() error {
+	return d.execSequence(d.profile.SleepSequence)
+}
+
+// Close puts the display to sleep and then releases hardware resources.
+func (d *EPD) Close() error {
+	if err := d.Sleep(); err != nil {
+		return err
+	}
+	return d.hw.Close()
+}
+
 // execSequence sends a series of commands to the display. Commands with a
 // non-nil Data payload send command + data. Commands with nil Data send
 // just the command byte and then wait for the display to become idle

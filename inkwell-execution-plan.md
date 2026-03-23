@@ -414,7 +414,7 @@ byte-by-byte; wrong-size buffer rejected
 - [x] **TDD**: Test buffer size validation (wrong size returns error)
   written first
 - [x] **Coverage**: 100%
-- [ ] **Commit**: Committed after green tests
+- [x] **Commit**: Committed after green tests
 
 ---
 
@@ -439,10 +439,10 @@ contents; Sleep verified against profile sequence
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Test Clear sends 0xFF old buffer and 0x00 new buffer
-- [ ] **TDD**: Test Sleep sends profile.SleepSequence commands
-- [ ] **TDD**: Test Close calls Sleep then hw.Close
-- [ ] **Coverage**: 100%
+- [x] **TDD**: Test Clear sends 0xFF old buffer and 0x00 new buffer
+- [x] **TDD**: Test Sleep sends profile.SleepSequence commands
+- [x] **TDD**: Test Close calls Sleep then hw.Close
+- [x] **Coverage**: 100%
 - [ ] **Commit**: Committed after green tests
 
 ---

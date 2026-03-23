@@ -394,6 +394,105 @@ func (e *errorDataNthHardware) SendData(data []byte) error {
 	return e.MockHardware.SendData(data)
 }
 
+func TestClearSendsWhiteBuffers(t *testing.T) {
+	m := &MockHardware{}
+	p := &DisplayProfile{
+		Name:         "test",
+		Width:        16,
+		Height:       16,
+		Color:        BW,
+		OldBufferCmd: 0x10,
+		NewBufferCmd: 0x13,
+		RefreshCmd:   0x12,
+	}
+	epd := NewEPD(m, p)
+
+	if err := epd.Clear(); err != nil {
+		t.Fatal(err)
+	}
+
+	cmds := m.Commands()
+	wantCmds := []byte{0x10, 0x13, 0x12}
+	if !bytes.Equal(cmds, wantCmds) {
+		t.Errorf("commands = %#v, want %#v", cmds, wantCmds)
+	}
+
+	// Old buffer should be 0x00 (inverted 0xFF = 0x00)
+	// New buffer should be 0xFF (white)
+	dataIdx := 0
+	for _, c := range m.Calls {
+		if c.Type == "data" {
+			if dataIdx == 0 {
+				// Old buffer: Clear passes 0xFF, which gets inverted to 0x00
+				for i, b := range c.Data {
+					if b != 0x00 {
+						t.Errorf("old buffer[%d] = %#x, want 0x00", i, b)
+						break
+					}
+				}
+			} else {
+				// New buffer: 0xFF (white)
+				for i, b := range c.Data {
+					if b != 0xFF {
+						t.Errorf("new buffer[%d] = %#x, want 0xFF", i, b)
+						break
+					}
+				}
+			}
+			dataIdx++
+		}
+	}
+}
+
+func TestSleepSendsProfileSleepSequence(t *testing.T) {
+	m := &MockHardware{}
+	epd := NewEPD(m, &Waveshare7in5V2)
+
+	if err := epd.Sleep(); err != nil {
+		t.Fatal(err)
+	}
+
+	cmds := m.Commands()
+	// Sleep sequence: 0x50 (VCOM), 0x02 (power off), 0x07 (deep sleep)
+	wantCmds := []byte{0x50, 0x02, 0x07}
+	if !bytes.Equal(cmds, wantCmds) {
+		t.Errorf("commands = %#v, want %#v", cmds, wantCmds)
+	}
+}
+
+func TestCloseSleepsThenCloses(t *testing.T) {
+	m := &MockHardware{}
+	epd := NewEPD(m, &Waveshare7in5V2)
+
+	if err := epd.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Last call should be close
+	last := m.Calls[len(m.Calls)-1]
+	if last.Type != "close" {
+		t.Errorf("last call = %q, want close", last.Type)
+	}
+
+	// Should have sleep commands before close
+	cmds := m.Commands()
+	wantCmds := []byte{0x50, 0x02, 0x07}
+	if !bytes.Equal(cmds, wantCmds) {
+		t.Errorf("commands = %#v, want %#v", cmds, wantCmds)
+	}
+}
+
+func TestClosePropagatesSleepError(t *testing.T) {
+	// Use errorHardware that fails on first SendCommand (Sleep's first cmd)
+	eh := &errorHardware{failOnCall: 1}
+	epd := NewEPD(eh, &Waveshare7in5V2)
+
+	err := epd.Close()
+	if err == nil {
+		t.Fatal("expected error from Sleep during Close")
+	}
+}
+
 func TestDisplayBufferSizeValidation(t *testing.T) {
 	m := &MockHardware{}
 	p := &DisplayProfile{
