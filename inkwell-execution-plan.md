@@ -348,7 +348,7 @@ exact call sequences
   written first
 - [x] **Busy Wait**: Commands with `nil` Data trigger `ReadBusy()` call
 - [x] **Coverage**: 100%
-- [ ] **Commit**: Committed after green tests
+- [x] **Commit**: Committed after green tests
 
 ---
 
@@ -374,12 +374,12 @@ command sequence; unsupported mode returns descriptive error
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Test InitFull sends reset + profile.InitFull commands
-- [ ] **TDD**: Test InitFast sends reset + profile.InitFast commands
-- [ ] **TDD**: Test InitPartial sends reset + profile.InitPartial commands
-- [ ] **TDD**: Test Init4Gray sends reset + profile.Init4Gray commands
-- [ ] **TDD**: Test unsupported mode (nil sequence) returns error
-- [ ] **Coverage**: 100%
+- [x] **TDD**: Test InitFull sends reset + profile.InitFull commands
+- [x] **TDD**: Test InitFast sends reset + profile.InitFast commands
+- [x] **TDD**: Test InitPartial sends reset + profile.InitPartial commands
+- [x] **TDD**: Test Init4Gray sends reset + profile.Init4Gray commands
+- [x] **TDD**: Test unsupported mode (nil sequence) returns error
+- [x] **Coverage**: 100%
 - [ ] **Commit**: Committed after green tests
 
 ---

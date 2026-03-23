@@ -120,3 +120,117 @@ func TestExecSequenceSendDataError(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 }
+
+func TestInitFullSendsResetThenProfileCommands(t *testing.T) {
+	m := &MockHardware{}
+	epd := NewEPD(m, &Waveshare7in5V2)
+
+	if err := epd.Init(InitFull); err != nil {
+		t.Fatal(err)
+	}
+
+	// First call should be reset
+	if m.Calls[0].Type != "reset" {
+		t.Errorf("first call = %q, want reset", m.Calls[0].Type)
+	}
+
+	// Command bytes after reset should match InitFull sequence
+	cmds := m.Commands()
+	wantCmds := []byte{0x06, 0x01, 0x04, 0x00, 0x61, 0x15, 0x50, 0x60}
+	if !bytes.Equal(cmds, wantCmds) {
+		t.Errorf("commands = %#v, want %#v", cmds, wantCmds)
+	}
+}
+
+func TestInitFastSendsCorrectSequence(t *testing.T) {
+	m := &MockHardware{}
+	epd := NewEPD(m, &Waveshare7in5V2)
+
+	if err := epd.Init(InitFast); err != nil {
+		t.Fatal(err)
+	}
+
+	if m.Calls[0].Type != "reset" {
+		t.Errorf("first call = %q, want reset", m.Calls[0].Type)
+	}
+
+	cmds := m.Commands()
+	wantCmds := []byte{0x00, 0x50, 0x04, 0x06, 0xE0, 0xE5}
+	if !bytes.Equal(cmds, wantCmds) {
+		t.Errorf("commands = %#v, want %#v", cmds, wantCmds)
+	}
+}
+
+func TestInitPartialSendsCorrectSequence(t *testing.T) {
+	m := &MockHardware{}
+	epd := NewEPD(m, &Waveshare7in5V2)
+
+	if err := epd.Init(InitPartial); err != nil {
+		t.Fatal(err)
+	}
+
+	if m.Calls[0].Type != "reset" {
+		t.Errorf("first call = %q, want reset", m.Calls[0].Type)
+	}
+
+	cmds := m.Commands()
+	wantCmds := []byte{0x00, 0x04, 0xE0, 0xE5}
+	if !bytes.Equal(cmds, wantCmds) {
+		t.Errorf("commands = %#v, want %#v", cmds, wantCmds)
+	}
+}
+
+func TestInit4GraySendsCorrectSequence(t *testing.T) {
+	m := &MockHardware{}
+	epd := NewEPD(m, &Waveshare7in5V2)
+
+	if err := epd.Init(Init4Gray); err != nil {
+		t.Fatal(err)
+	}
+
+	if m.Calls[0].Type != "reset" {
+		t.Errorf("first call = %q, want reset", m.Calls[0].Type)
+	}
+
+	cmds := m.Commands()
+	wantCmds := []byte{0x00, 0x50, 0x04, 0x06, 0xE0, 0xE5}
+	if !bytes.Equal(cmds, wantCmds) {
+		t.Errorf("commands = %#v, want %#v", cmds, wantCmds)
+	}
+}
+
+func TestInitUnsupportedModeReturnsError(t *testing.T) {
+	m := &MockHardware{}
+	// Profile with no InitFast sequence
+	p := &DisplayProfile{
+		Name:     "limited",
+		Width:    8,
+		Height:   8,
+		Color:    BW,
+		InitFull: []Command{{0x00, []byte{0x1F}}},
+	}
+	epd := NewEPD(m, p)
+
+	err := epd.Init(InitFast)
+	if err == nil {
+		t.Fatal("expected error for unsupported mode")
+	}
+}
+
+func TestInitResetError(t *testing.T) {
+	eh := &errorResetHardware{}
+	epd := NewEPD(eh, &Waveshare7in5V2)
+
+	err := epd.Init(InitFull)
+	if err == nil {
+		t.Fatal("expected error from Reset")
+	}
+}
+
+type errorResetHardware struct {
+	MockHardware
+}
+
+func (e *errorResetHardware) Reset() error {
+	return errors.New("reset failed")
+}
