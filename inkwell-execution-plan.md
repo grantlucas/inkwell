@@ -599,12 +599,12 @@ sequence and verifying PNG output
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Test that a full Display sequence (old cmd, data, new cmd,
+- [x] **TDD**: Test that a full Display sequence (old cmd, data, new cmd,
   data, refresh) produces a PNG file
-- [ ] **TDD**: Test PNG pixel values match the sent buffer
-- [ ] **TDD**: Test sequential calls produce numbered files
-- [ ] **Coverage**: 100%
-- [ ] **Commit**: Committed after green tests
+- [x] **TDD**: Test PNG pixel values match the sent buffer
+- [x] **TDD**: Test sequential calls produce numbered files
+- [x] **Coverage**: 100%
+- [x] **Commit**: Committed after green tests
 
 ---
 
@@ -1147,7 +1147,7 @@ Copy this to track completion session by session:
 
 ### Milestone 3: Image Backend + Web Preview
 
-- [ ] **5.1** — imageBackend (PNG output)
+- [x] **5.1** — imageBackend (PNG output)
 - [ ] **6.1** — webPreview backend
 - [ ] **6.2** — SSE auto-refresh
 
