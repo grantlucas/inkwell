@@ -56,6 +56,9 @@ func (b *ImageBackend) Reset() error { return nil }
 func (b *ImageBackend) Close() error { return nil }
 
 func (b *ImageBackend) writePNG() error {
+	if expected := b.profile.BufferSize(); len(b.capturedBuf) != expected {
+		return fmt.Errorf("image backend: buffer size %d does not match expected %d", len(b.capturedBuf), expected)
+	}
 	img := UnpackBuffer(b.profile, b.capturedBuf)
 	name := fmt.Sprintf("frame_%03d.png", b.seqNum)
 	b.seqNum++
