@@ -39,15 +39,15 @@ func (wp *WebPreview) SendCommand(cmd byte) error {
 	if wp.profile == nil {
 		return fmt.Errorf("web preview: nil display profile")
 	}
+	wp.mu.Lock()
+	defer wp.mu.Unlock()
+
 	wp.lastCmd = cmd
 	if cmd == wp.profile.RefreshCmd && wp.captured != nil {
 		if expected := wp.profile.BufferSize(); len(wp.captured) != expected {
 			return fmt.Errorf("web preview: buffer size %d does not match expected %d", len(wp.captured), expected)
 		}
-		img := UnpackBuffer(wp.profile, wp.captured)
-		wp.mu.Lock()
-		wp.current = img
-		wp.mu.Unlock()
+		wp.current = UnpackBuffer(wp.profile, wp.captured)
 	}
 	return nil
 }
@@ -57,6 +57,9 @@ func (wp *WebPreview) SendData(data []byte) error {
 	if wp.profile == nil {
 		return fmt.Errorf("web preview: nil display profile")
 	}
+	wp.mu.Lock()
+	defer wp.mu.Unlock()
+
 	if wp.lastCmd == wp.profile.NewBufferCmd {
 		wp.captured = make([]byte, len(data))
 		copy(wp.captured, data)
