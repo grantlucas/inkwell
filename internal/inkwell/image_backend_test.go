@@ -94,13 +94,21 @@ func TestImageBackend_SequentialFilenames(t *testing.T) {
 
 func TestImageBackend_WriteErrorOnBadDir(t *testing.T) {
 	p := imageTestProfile()
-	backend := NewImageBackend(p, "/nonexistent/dir")
+	badPath := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(badPath, []byte("x"), 0o600); err != nil {
+		t.Fatalf("create sentinel file: %v", err)
+	}
+	backend := NewImageBackend(p, badPath)
 
 	buf := make([]byte, p.BufferSize())
 
 	// Set up captured buffer via NewBufferCmd + SendData
-	_ = backend.SendCommand(p.NewBufferCmd)
-	_ = backend.SendData(buf)
+	if err := backend.SendCommand(p.NewBufferCmd); err != nil {
+		t.Fatalf("SendCommand(NewBufferCmd): %v", err)
+	}
+	if err := backend.SendData(buf); err != nil {
+		t.Fatalf("SendData: %v", err)
+	}
 
 	// RefreshCmd should return an error since the directory doesn't exist
 	err := backend.SendCommand(p.RefreshCmd)
