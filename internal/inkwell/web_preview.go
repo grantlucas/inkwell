@@ -47,7 +47,9 @@ func (wp *WebPreview) Frame() *image.Paletted {
 }
 
 // SendCommand tracks the last command sent. On RefreshCmd, unpacks the
-// captured buffer into the current frame.
+// captured buffer into the current frame. Important: wp.current must only be
+// replaced (not mutated in place) so that ServeHTTP can safely read the
+// pointer under RLock without a data race on the underlying pixel data.
 func (wp *WebPreview) SendCommand(cmd byte) error {
 	if wp.profile == nil {
 		return fmt.Errorf("web preview: nil display profile")
@@ -143,7 +145,7 @@ func scaleImage(src *image.Paletted, factor int) *image.Paletted {
 		for x := srcB.Min.X; x < srcB.Max.X; x++ {
 			ci := src.ColorIndexAt(x, y)
 			if ci == 0 {
-				continue // already white
+				continue // index 0 is white; dst.Pix is zero-initialized
 			}
 			for dy := 0; dy < factor; dy++ {
 				for dx := 0; dx < factor; dx++ {
