@@ -100,6 +100,10 @@ func TestWebPreview_ScaleParameter(t *testing.T) {
 func TestWebPreview_NoFrameReturns204(t *testing.T) {
 	wp := NewWebPreview(imageTestProfile())
 
+	if frame := wp.Frame(); frame != nil {
+		t.Errorf("Frame before display: got %v, want nil", frame)
+	}
+
 	req := httptest.NewRequest(http.MethodGet, "/frame.png", nil)
 	rec := httptest.NewRecorder()
 	wp.ServeHTTP(rec, req)

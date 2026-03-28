@@ -29,11 +29,21 @@ func NewWebPreview(profile *DisplayProfile) *WebPreview {
 	return &WebPreview{profile: profile, encodePNG: png.Encode}
 }
 
-// Frame returns the latest display frame, or nil if no frame has been rendered.
+// Frame returns a copy of the latest display frame, or nil if no frame has
+// been rendered. The returned image is safe to read and modify without
+// affecting the internal state.
 func (wp *WebPreview) Frame() *image.Paletted {
 	wp.mu.RLock()
 	defer wp.mu.RUnlock()
-	return wp.current
+	if wp.current == nil {
+		return nil
+	}
+	frame := image.NewPaletted(
+		wp.current.Rect,
+		append(wp.current.Palette[:0:0], wp.current.Palette...),
+	)
+	copy(frame.Pix, wp.current.Pix)
+	return frame
 }
 
 // SendCommand tracks the last command sent. On RefreshCmd, unpacks the
