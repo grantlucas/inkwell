@@ -30,6 +30,9 @@ func NewImageBackend(profile *DisplayProfile, outputDir string) *ImageBackend {
 // SendCommand tracks the last command sent. On RefreshCmd, writes a PNG
 // from the captured buffer.
 func (b *ImageBackend) SendCommand(cmd byte) error {
+	if b.profile == nil {
+		return fmt.Errorf("image backend: nil display profile")
+	}
 	b.lastCmd = cmd
 	if cmd == b.profile.RefreshCmd && b.capturedBuf != nil {
 		return b.writePNG()
@@ -39,6 +42,9 @@ func (b *ImageBackend) SendCommand(cmd byte) error {
 
 // SendData captures the data payload when the previous command was NewBufferCmd.
 func (b *ImageBackend) SendData(data []byte) error {
+	if b.profile == nil {
+		return fmt.Errorf("image backend: nil display profile")
+	}
 	if b.lastCmd == b.profile.NewBufferCmd {
 		b.capturedBuf = make([]byte, len(data))
 		copy(b.capturedBuf, data)
