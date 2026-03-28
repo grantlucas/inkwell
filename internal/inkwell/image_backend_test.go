@@ -117,6 +117,31 @@ func TestImageBackend_WriteErrorOnBadDir(t *testing.T) {
 	}
 }
 
+func TestImageBackend_NilProfileReturnsError(t *testing.T) {
+	backend := NewImageBackend(nil, t.TempDir())
+
+	if err := backend.SendCommand(0x12); err == nil {
+		t.Error("SendCommand with nil profile: expected error, got nil")
+	}
+	if err := backend.SendData([]byte{0x00}); err == nil {
+		t.Error("SendData with nil profile: expected error, got nil")
+	}
+}
+
+func TestImageBackend_BufferSizeMismatchReturnsError(t *testing.T) {
+	p := imageTestProfile()
+	backend := NewImageBackend(p, t.TempDir())
+
+	// Capture a buffer that's the wrong size
+	_ = backend.SendCommand(p.NewBufferCmd)
+	_ = backend.SendData([]byte{0x00}) // 1 byte, expected 32
+
+	err := backend.SendCommand(p.RefreshCmd)
+	if err == nil {
+		t.Fatal("expected buffer size mismatch error, got nil")
+	}
+}
+
 func TestImageBackend_ReadBusyResetClose(t *testing.T) {
 	p := imageTestProfile()
 	backend := NewImageBackend(p, t.TempDir())
