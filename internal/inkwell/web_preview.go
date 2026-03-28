@@ -85,6 +85,11 @@ func (wp *WebPreview) Close() error { return nil }
 // ServeHTTP serves the current display frame as a PNG image.
 // Supports an optional ?scale=N query parameter (1–10) for nearest-neighbor upscaling.
 func (wp *WebPreview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	wp.mu.RLock()
 	frame := wp.current
 	wp.mu.RUnlock()

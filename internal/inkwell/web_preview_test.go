@@ -155,6 +155,24 @@ func TestWebPreview_InvalidScaleReturns400(t *testing.T) {
 	}
 }
 
+func TestWebPreview_NonGetMethodReturns405(t *testing.T) {
+	p := imageTestProfile()
+	wp := NewWebPreview(p)
+
+	buf := make([]byte, p.BufferSize())
+	sendDisplaySequence(t, wp, p, buf)
+
+	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete} {
+		req := httptest.NewRequest(method, "/frame.png", nil)
+		rec := httptest.NewRecorder()
+		wp.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Errorf("%s: status = %d, want %d", method, rec.Code, http.StatusMethodNotAllowed)
+		}
+	}
+}
+
 func TestWebPreview_NonBWProfileReturnsError(t *testing.T) {
 	p := &DisplayProfile{
 		Name:         "gray-test",
