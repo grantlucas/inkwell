@@ -133,8 +133,12 @@ func TestImageBackend_BufferSizeMismatchReturnsError(t *testing.T) {
 	backend := NewImageBackend(p, t.TempDir())
 
 	// Capture a buffer that's the wrong size
-	_ = backend.SendCommand(p.NewBufferCmd)
-	_ = backend.SendData([]byte{0x00}) // 1 byte, expected 32
+	if err := backend.SendCommand(p.NewBufferCmd); err != nil {
+		t.Fatalf("SendCommand(NewBufferCmd): %v", err)
+	}
+	if err := backend.SendData([]byte{0x00}); err != nil { // 1 byte, expected 32
+		t.Fatalf("SendData: %v", err)
+	}
 
 	err := backend.SendCommand(p.RefreshCmd)
 	if err == nil {
