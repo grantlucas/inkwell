@@ -67,13 +67,22 @@ func (b *ImageBackend) writePNG() error {
 	}
 	img := UnpackBuffer(b.profile, b.capturedBuf)
 	name := fmt.Sprintf("frame_%03d.png", b.seqNum)
-	b.seqNum++
 
-	f, err := os.Create(filepath.Join(b.outputDir, name))
+	path := filepath.Join(b.outputDir, name)
+	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
-	return png.Encode(f, img)
+	if err := png.Encode(f, img); err != nil {
+		f.Close()
+		os.Remove(path)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(path)
+		return err
+	}
+	b.seqNum++
+	return nil
 }
