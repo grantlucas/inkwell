@@ -632,10 +632,10 @@ HTTP handler tested with `httptest`
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Test buffer capture from Hardware calls
-- [ ] **TDD**: Test `/frame.png` returns valid PNG with correct dimensions
-- [ ] **TDD**: Test `?scale=3` returns upscaled image
-- [ ] **Coverage**: 100%
+- [x] **TDD**: Test buffer capture from Hardware calls
+- [x] **TDD**: Test `/frame.png` returns valid PNG with correct dimensions
+- [x] **TDD**: Test `?scale=3` returns upscaled image
+- [x] **Coverage**: 100%
 - [ ] **Commit**: Committed after green tests
 
 ---
