@@ -71,17 +71,17 @@ func (b *ImageBackend) writePNG() error {
 	path := filepath.Join(b.outputDir, name)
 	f, err := os.Create(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("image backend: create %s: %w", path, err)
 	}
 
 	if err := png.Encode(f, img); err != nil {
 		f.Close()
 		os.Remove(path)
-		return err
+		return fmt.Errorf("image backend: encode %s: %w", path, err)
 	}
 	if err := f.Close(); err != nil {
 		os.Remove(path)
-		return err
+		return fmt.Errorf("image backend: close %s: %w", path, err)
 	}
 	b.seqNum++
 	return nil
