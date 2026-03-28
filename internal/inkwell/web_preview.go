@@ -47,6 +47,9 @@ func (wp *WebPreview) SendCommand(cmd byte) error {
 
 	wp.lastCmd = cmd
 	if cmd == wp.profile.RefreshCmd && wp.captured != nil {
+		if wp.profile.Color != BW {
+			return fmt.Errorf("web preview: unsupported color depth %v; only BW is currently supported", wp.profile.Color)
+		}
 		if expected := wp.profile.BufferSize(); len(wp.captured) != expected {
 			return fmt.Errorf("web preview: buffer size %d does not match expected %d", len(wp.captured), expected)
 		}

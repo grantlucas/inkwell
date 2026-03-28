@@ -155,6 +155,32 @@ func TestWebPreview_InvalidScaleReturns400(t *testing.T) {
 	}
 }
 
+func TestWebPreview_NonBWProfileReturnsError(t *testing.T) {
+	p := &DisplayProfile{
+		Name:         "gray-test",
+		Width:        16,
+		Height:       16,
+		Color:        Gray4,
+		OldBufferCmd: 0x10,
+		NewBufferCmd: 0x13,
+		RefreshCmd:   0x12,
+	}
+	wp := NewWebPreview(p)
+
+	buf := make([]byte, p.BufferSize())
+	if err := wp.SendCommand(p.NewBufferCmd); err != nil {
+		t.Fatalf("SendCommand(NewBufferCmd): %v", err)
+	}
+	if err := wp.SendData(buf); err != nil {
+		t.Fatalf("SendData: %v", err)
+	}
+
+	err := wp.SendCommand(p.RefreshCmd)
+	if err == nil {
+		t.Fatal("expected unsupported color depth error, got nil")
+	}
+}
+
 func TestWebPreview_EncodeErrorReturns500(t *testing.T) {
 	p := imageTestProfile()
 	wp := NewWebPreview(p)
