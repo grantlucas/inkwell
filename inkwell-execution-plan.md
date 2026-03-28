@@ -632,11 +632,11 @@ HTTP handler tested with `httptest`
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Test buffer capture from Hardware calls
-- [ ] **TDD**: Test `/frame.png` returns valid PNG with correct dimensions
-- [ ] **TDD**: Test `?scale=3` returns upscaled image
-- [ ] **Coverage**: 100%
-- [ ] **Commit**: Committed after green tests
+- [x] **TDD**: Test buffer capture from Hardware calls
+- [x] **TDD**: Test `/frame.png` returns valid PNG with correct dimensions
+- [x] **TDD**: Test `?scale=3` returns upscaled image
+- [x] **Coverage**: 100%
+- [x] **Commit**: Committed after green tests
 
 ---
 
@@ -1128,16 +1128,16 @@ Copy this to track completion session by session:
 
 ### Milestone 1: Core Foundation
 
-- [ ] **1.1** — Go module scaffold
-- [ ] **1.2** — Core types (Command, ColorDepth, Capabilities, InitMode)
-- [ ] **1.3** — DisplayProfile + Waveshare 7.5" V2 profile
-- [ ] **2.1** — Hardware interface
-- [ ] **2.2** — MockHardware
-- [ ] **3.1** — execSequence
-- [ ] **3.2** — Init (all modes)
-- [ ] **3.3** — Display (full refresh)
-- [ ] **3.4** — Clear + Sleep
-- [ ] **3.5** — DisplayPartial
+- [x] **1.1** — Go module scaffold
+- [x] **1.2** — Core types (Command, ColorDepth, Capabilities, InitMode)
+- [x] **1.3** — DisplayProfile + Waveshare 7.5" V2 profile
+- [x] **2.1** — Hardware interface
+- [x] **2.2** — MockHardware
+- [x] **3.1** — execSequence
+- [x] **3.2** — Init (all modes)
+- [x] **3.3** — Display (full refresh)
+- [x] **3.4** — Clear + Sleep
+- [x] **3.5** — DisplayPartial
 
 ### Milestone 2: Rendering Pipeline
 
@@ -1148,7 +1148,7 @@ Copy this to track completion session by session:
 ### Milestone 3: Image Backend + Web Preview
 
 - [x] **5.1** — imageBackend (PNG output)
-- [ ] **6.1** — webPreview backend
+- [x] **6.1** — webPreview backend
 - [ ] **6.2** — SSE auto-refresh
 
 ### Milestone 4: Widget System
