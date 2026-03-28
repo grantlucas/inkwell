@@ -110,10 +110,10 @@ func TestImageBackend_WriteErrorOnBadDir(t *testing.T) {
 		t.Fatalf("SendData: %v", err)
 	}
 
-	// RefreshCmd should return an error since the directory doesn't exist
+	// RefreshCmd should return an error since output path is a file, not a directory
 	err := backend.SendCommand(p.RefreshCmd)
 	if err == nil {
-		t.Fatal("expected error writing to nonexistent directory, got nil")
+		t.Fatal("expected error writing to non-directory output path, got nil")
 	}
 }
 
