@@ -1,7 +1,10 @@
 package inkwell
 
 import (
+	"errors"
+	"image"
 	"image/png"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -149,6 +152,25 @@ func TestWebPreview_InvalidScaleReturns400(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("scale=%s: status = %d, want %d", scale, rec.Code, http.StatusBadRequest)
 		}
+	}
+}
+
+func TestWebPreview_EncodeErrorReturns500(t *testing.T) {
+	p := imageTestProfile()
+	wp := NewWebPreview(p)
+	wp.encodePNG = func(w io.Writer, m image.Image) error {
+		return errors.New("encode failed")
+	}
+
+	buf := make([]byte, p.BufferSize())
+	sendDisplaySequence(t, wp, p, buf)
+
+	req := httptest.NewRequest(http.MethodGet, "/frame.png", nil)
+	rec := httptest.NewRecorder()
+	wp.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
 }
 

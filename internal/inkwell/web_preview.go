@@ -1,9 +1,11 @@
 package inkwell
 
 import (
+	"bytes"
 	"fmt"
 	"image"
 	"image/png"
+	"io"
 	"net/http"
 	"strconv"
 	"sync"
@@ -12,18 +14,19 @@ import (
 // WebPreview is a Hardware implementation that serves the current display
 // frame over HTTP. Useful for live browser-based preview during development.
 type WebPreview struct {
-	profile  *DisplayProfile
-	lastCmd  byte
-	captured []byte
-	mu       sync.RWMutex
-	current  *image.Paletted
+	profile   *DisplayProfile
+	lastCmd   byte
+	captured  []byte
+	mu        sync.RWMutex
+	current   *image.Paletted
+	encodePNG func(w io.Writer, m image.Image) error
 }
 
 var _ Hardware = (*WebPreview)(nil)
 
 // NewWebPreview creates a WebPreview for the given display profile.
 func NewWebPreview(profile *DisplayProfile) *WebPreview {
-	return &WebPreview{profile: profile}
+	return &WebPreview{profile: profile, encodePNG: png.Encode}
 }
 
 // Frame returns the latest display frame, or nil if no frame has been rendered.
@@ -103,8 +106,14 @@ func (wp *WebPreview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		img = scaleImage(frame, scale)
 	}
 
+	var buf bytes.Buffer
+	if err := wp.encodePNG(&buf, img); err != nil {
+		http.Error(w, "failed to encode PNG", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "image/png")
-	png.Encode(w, img)
+	w.Write(buf.Bytes())
 }
 
 // scaleImage performs nearest-neighbor upscaling of a paletted image.
