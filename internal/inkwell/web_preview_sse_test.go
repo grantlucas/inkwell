@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -127,6 +128,30 @@ func TestWebPreview_SSEEndpointHeaders(t *testing.T) {
 	}
 }
 
+// syncRecorder wraps httptest.ResponseRecorder with a mutex for thread-safe body access.
+type syncRecorder struct {
+	*httptest.ResponseRecorder
+	mu sync.Mutex
+}
+
+func (s *syncRecorder) Write(b []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ResponseRecorder.Write(b)
+}
+
+func (s *syncRecorder) bodyLen() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.Body.Len()
+}
+
+func (s *syncRecorder) bodyString() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.Body.String()
+}
+
 func TestWebPreview_SSEEndpointSendsData(t *testing.T) {
 	p := imageTestProfile()
 	wp := NewWebPreview(p)
@@ -136,7 +161,7 @@ func TestWebPreview_SSEEndpointSendsData(t *testing.T) {
 	// Start SSE handler in a goroutine
 	ctx, cancel := context.WithCancel(context.Background())
 	req := httptest.NewRequest(http.MethodGet, "/events", nil).WithContext(ctx)
-	rec := httptest.NewRecorder()
+	rec := &syncRecorder{ResponseRecorder: httptest.NewRecorder()}
 
 	done := make(chan struct{})
 	go func() {
@@ -153,13 +178,13 @@ func TestWebPreview_SSEEndpointSendsData(t *testing.T) {
 	sendDisplaySequence(t, wp, p, buf)
 
 	// Wait for handler to write
-	waitFor(t, time.Second, func() bool { return rec.Body.Len() > 0 },
+	waitFor(t, time.Second, func() bool { return rec.bodyLen() > 0 },
 		"timed out waiting for SSE handler to write")
 
 	cancel()
 	<-done
 
-	body := rec.Body.String()
+	body := rec.bodyString()
 	if !strings.Contains(body, "data: refresh") {
 		t.Errorf("SSE body = %q, want to contain 'data: refresh'", body)
 	}
