@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "inkwell",
+  "project_id": "3ad08f81-f5da-4873-a4ca-87b37b89ea1b"
+}
