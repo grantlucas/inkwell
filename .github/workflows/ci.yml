@@ -19,23 +19,13 @@ jobs:
           go-version-file: go.mod
 
       - name: Verify dependencies
-        run: go mod verify
+        run: make verify
 
       - name: Vet
-        run: go vet ./...
+        run: make vet
 
-      - name: Test
-        run: go test -race ./...
-
-      - name: Check coverage (internal packages)
-        run: |
-          go test -coverprofile=coverage.out ./internal/...
-          COVERAGE=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $3}' | tr -d '%')
-          echo "Total coverage: ${COVERAGE}%"
-          if (( $(echo "$COVERAGE < 100" | bc -l) )); then
-            echo "Coverage is below 100% ($COVERAGE%)"
-            exit 1
-          fi
+      - name: Test with coverage
+        run: make coverage
 
   build:
     name: Cross-compile (linux/arm64)
@@ -49,4 +39,4 @@ jobs:
           go-version-file: go.mod
 
       - name: Build for Raspberry Pi
-        run: GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...
+        run: make build-pi
