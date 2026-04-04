@@ -31,7 +31,7 @@ func (c *Compositor) AddWidget(w Widget) {
 }
 
 // Render creates a new frame, calls each widget's Render in order, and returns
-// the composited frame. The frame uses a BW palette: index 0 = white, index 1 = black.
+// the composited frame. The palette is determined by the display profile's color depth.
 func (c *Compositor) Render() (*image.Paletted, error) {
 	if c.profile == nil {
 		return nil, fmt.Errorf("compositor profile is nil")
@@ -40,7 +40,13 @@ func (c *Compositor) Render() (*image.Paletted, error) {
 		return nil, fmt.Errorf("invalid display dimensions: %dx%d", c.profile.Width, c.profile.Height)
 	}
 
-	palette := color.Palette{color.White, color.Black}
+	var palette color.Palette
+	switch c.profile.Color {
+	case BW:
+		palette = color.Palette{color.White, color.Black}
+	default:
+		return nil, fmt.Errorf("unsupported color depth: %v", c.profile.Color)
+	}
 	frame := image.NewPaletted(
 		image.Rect(0, 0, c.profile.Width, c.profile.Height),
 		palette,
