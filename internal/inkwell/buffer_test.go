@@ -11,8 +11,8 @@ import (
 // solidImage returns a uniform image of the given color at the given size.
 func solidImage(w, h int, c color.Color) image.Image {
 	img := image.NewGray(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			img.Set(x, y, c)
 		}
 	}
@@ -103,8 +103,8 @@ func TestPackBW_Checkerboard(t *testing.T) {
 	img := image.NewGray(image.Rect(0, 0, 16, 16))
 	// Checkerboard: black on even columns, white on odd columns
 	// Each byte: bits 7,5,3,1 set → 0b10101010 = 0xAA
-	for y := 0; y < 16; y++ {
-		for x := 0; x < 16; x++ {
+	for y := range 16 {
+		for x := range 16 {
 			if x%2 == 0 {
 				img.Set(x, y, color.Black)
 			} else {
@@ -216,8 +216,8 @@ func TestUnpackBuffer_RoundTrip(t *testing.T) {
 	p := bwTestProfile()
 	// Create a non-trivial input image
 	orig := image.NewGray(image.Rect(0, 0, 16, 16))
-	for y := 0; y < 16; y++ {
-		for x := 0; x < 16; x++ {
+	for y := range 16 {
+		for x := range 16 {
 			if (x+y)%3 == 0 {
 				orig.Set(x, y, color.Black)
 			} else {
@@ -230,8 +230,8 @@ func TestUnpackBuffer_RoundTrip(t *testing.T) {
 		t.Fatalf("PackImage: %v", err)
 	}
 	got := UnpackBuffer(p, buf)
-	for y := 0; y < 16; y++ {
-		for x := 0; x < 16; x++ {
+	for y := range 16 {
+		for x := range 16 {
 			origGray := color.GrayModel.Convert(orig.At(x, y)).(color.Gray)
 			gotGray := color.GrayModel.Convert(got.At(x, y)).(color.Gray)
 			origBlack := origGray.Y < 128

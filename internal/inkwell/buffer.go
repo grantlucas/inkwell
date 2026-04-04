@@ -25,8 +25,8 @@ func packBW(profile *DisplayProfile, img image.Image) []byte {
 	buf := make([]byte, profile.BufferSize())
 	w := profile.Width
 	h := profile.Height
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			g := color.GrayModel.Convert(img.At(x, y)).(color.Gray)
 			if g.Y < 128 { // dark → black → bit = 1
 				idx := (y*w + x) / 8
@@ -44,8 +44,8 @@ func packGray4(profile *DisplayProfile, img image.Image) []byte {
 	buf := make([]byte, profile.BufferSize())
 	w := profile.Width
 	h := profile.Height
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			g := color.GrayModel.Convert(img.At(x, y)).(color.Gray)
 			var level byte
 			switch {
@@ -72,8 +72,8 @@ func UnpackBuffer(profile *DisplayProfile, buf []byte) *image.Paletted {
 	img := image.NewPaletted(image.Rect(0, 0, profile.Width, profile.Height), palette)
 	w := profile.Width
 	h := profile.Height
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			idx := (y*w + x) / 8
 			bit := uint(7 - (x % 8))
 			if buf[idx]>>bit&1 == 1 {
