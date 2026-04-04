@@ -168,6 +168,10 @@ func TestWebPreview_SSEEndpointSendsData(t *testing.T) {
 		mux.ServeHTTP(rec, req)
 		close(done)
 	}()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
 
 	// Wait for handler to subscribe
 	waitFor(t, time.Second, func() bool { return wp.subscriberCount() > 0 },
