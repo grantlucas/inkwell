@@ -158,6 +158,14 @@ func (wp *WebPreview) Unsubscribe(ch chan struct{}) {
 	delete(wp.subscribers, ch)
 }
 
+// subscriberCount returns the number of active subscribers. Exported only for
+// test synchronization.
+func (wp *WebPreview) subscriberCount() int {
+	wp.mu.RLock()
+	defer wp.mu.RUnlock()
+	return len(wp.subscribers)
+}
+
 // notifyLocked sends a non-blocking signal to all subscribers. Must be called
 // while wp.mu is held.
 func (wp *WebPreview) notifyLocked() {

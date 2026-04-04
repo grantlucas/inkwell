@@ -144,15 +144,17 @@ func TestWebPreview_SSEEndpointSendsData(t *testing.T) {
 		close(done)
 	}()
 
-	// Give handler time to subscribe
-	time.Sleep(50 * time.Millisecond)
+	// Wait for handler to subscribe
+	waitFor(t, time.Second, func() bool { return wp.subscriberCount() > 0 },
+		"timed out waiting for SSE handler to subscribe")
 
 	// Trigger a refresh
 	buf := make([]byte, p.BufferSize())
 	sendDisplaySequence(t, wp, p, buf)
 
-	// Give handler time to write
-	time.Sleep(50 * time.Millisecond)
+	// Wait for handler to write
+	waitFor(t, time.Second, func() bool { return rec.Body.Len() > 0 },
+		"timed out waiting for SSE handler to write")
 
 	cancel()
 	<-done
@@ -188,6 +190,19 @@ type bareWriter struct {
 func (w *bareWriter) Header() http.Header         { return w.header }
 func (w *bareWriter) WriteHeader(code int)         { w.code = code }
 func (w *bareWriter) Write(b []byte) (int, error)  { return w.body.Write(b) }
+
+// waitFor polls condition until it returns true or timeout elapses.
+func waitFor(t *testing.T, timeout time.Duration, condition func() bool, msg string) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if condition() {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal(msg)
+}
 
 func TestWebPreview_MuxRoutesFramePNG(t *testing.T) {
 	p := imageTestProfile()
