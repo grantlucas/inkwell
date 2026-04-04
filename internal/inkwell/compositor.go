@@ -26,7 +26,11 @@ func NewCompositor(profile *DisplayProfile) *Compositor {
 }
 
 // AddWidget adds a widget to the compositor's render list.
+// Nil widgets are silently ignored.
 func (c *Compositor) AddWidget(w Widget) {
+	if w == nil {
+		return
+	}
 	c.widgets = append(c.widgets, w)
 }
 

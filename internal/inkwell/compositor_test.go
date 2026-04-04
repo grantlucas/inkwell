@@ -32,6 +32,20 @@ func (w *errorWidget) Bounds() image.Rectangle { return w.bounds }
 
 func (w *errorWidget) Render(_ *image.Paletted) error { return w.err }
 
+func TestCompositor_AddWidget_Nil(t *testing.T) {
+	comp := NewCompositor(imageTestProfile())
+	comp.AddWidget(nil)
+
+	frame, err := comp.Render()
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	// Nil widget should have been ignored — frame should be all white
+	if ci := frame.ColorIndexAt(0, 0); ci != 0 {
+		t.Errorf("pixel (0,0): got index %d, want 0 (white)", ci)
+	}
+}
+
 func TestCompositor_ZeroWidgets(t *testing.T) {
 	p := imageTestProfile()
 	comp := NewCompositor(p)
