@@ -14,19 +14,24 @@ import (
 // WebPreview is a Hardware implementation that serves the current display
 // frame over HTTP. Useful for live browser-based preview during development.
 type WebPreview struct {
-	profile   *DisplayProfile
-	lastCmd   byte
-	captured  []byte
-	mu        sync.RWMutex
-	current   *image.Paletted
-	encodePNG func(w io.Writer, m image.Image) error
+	profile     *DisplayProfile
+	lastCmd     byte
+	captured    []byte
+	mu          sync.RWMutex
+	current     *image.Paletted
+	encodePNG   func(w io.Writer, m image.Image) error
+	subscribers map[chan struct{}]struct{}
 }
 
 var _ Hardware = (*WebPreview)(nil)
 
 // NewWebPreview creates a WebPreview for the given display profile.
 func NewWebPreview(profile *DisplayProfile) *WebPreview {
-	return &WebPreview{profile: profile, encodePNG: png.Encode}
+	return &WebPreview{
+		profile:     profile,
+		encodePNG:   png.Encode,
+		subscribers: make(map[chan struct{}]struct{}),
+	}
 }
 
 // Frame returns a copy of the latest display frame, or nil if no frame has
@@ -66,6 +71,7 @@ func (wp *WebPreview) SendCommand(cmd byte) error {
 			return fmt.Errorf("web preview: buffer size %d does not match expected %d", len(wp.captured), expected)
 		}
 		wp.current = UnpackBuffer(wp.profile, wp.captured)
+		wp.notifyLocked()
 	}
 	return nil
 }
@@ -134,6 +140,91 @@ func (wp *WebPreview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "image/png")
 	w.Write(buf.Bytes())
+}
+
+// Subscribe registers a channel that receives a notification on each frame refresh.
+func (wp *WebPreview) Subscribe() chan struct{} {
+	wp.mu.Lock()
+	defer wp.mu.Unlock()
+	ch := make(chan struct{}, 1)
+	wp.subscribers[ch] = struct{}{}
+	return ch
+}
+
+// Unsubscribe removes a previously registered subscriber channel.
+func (wp *WebPreview) Unsubscribe(ch chan struct{}) {
+	wp.mu.Lock()
+	defer wp.mu.Unlock()
+	delete(wp.subscribers, ch)
+}
+
+// subscriberCount returns the number of active subscribers. Exported only for
+// test synchronization.
+func (wp *WebPreview) subscriberCount() int {
+	wp.mu.RLock()
+	defer wp.mu.RUnlock()
+	return len(wp.subscribers)
+}
+
+// notifyLocked sends a non-blocking signal to all subscribers. Must be called
+// while wp.mu is held.
+func (wp *WebPreview) notifyLocked() {
+	for ch := range wp.subscribers {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// Mux returns an http.ServeMux with routes for the preview UI, frame PNG, and SSE events.
+func (wp *WebPreview) Mux() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /", wp.serveHTML)
+	mux.HandleFunc("GET /frame.png", wp.ServeHTTP)
+	mux.HandleFunc("GET /events", wp.serveSSE)
+	return mux
+}
+
+func (wp *WebPreview) serveHTML(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, htmlPage)
+}
+
+const htmlPage = `<!DOCTYPE html>
+<html><head><title>Inkwell Preview</title></head>
+<body style="background:#333;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0">
+<img id="frame" src="/frame.png?scale=2" style="image-rendering:pixelated">
+<script>
+new EventSource("/events").onmessage = function() {
+  document.getElementById("frame").src = "/frame.png?scale=2&t=" + Date.now();
+};
+</script>
+</body></html>`
+
+func (wp *WebPreview) serveSSE(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	ch := wp.Subscribe()
+	defer wp.Unsubscribe(ch)
+
+	for {
+		select {
+		case <-ch:
+			fmt.Fprint(w, "data: refresh\n\n")
+			flusher.Flush()
+		case <-r.Context().Done():
+			return
+		}
+	}
 }
 
 // scaleImage performs nearest-neighbor upscaling of a paletted image.
