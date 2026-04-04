@@ -1,6 +1,7 @@
 package inkwell
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 )
@@ -32,6 +33,13 @@ func (c *Compositor) AddWidget(w Widget) {
 // Render creates a new frame, calls each widget's Render in order, and returns
 // the composited frame. The frame uses a BW palette: index 0 = white, index 1 = black.
 func (c *Compositor) Render() (*image.Paletted, error) {
+	if c.profile == nil {
+		return nil, fmt.Errorf("compositor profile is nil")
+	}
+	if c.profile.Width <= 0 || c.profile.Height <= 0 {
+		return nil, fmt.Errorf("invalid display dimensions: %dx%d", c.profile.Width, c.profile.Height)
+	}
+
 	palette := color.Palette{color.White, color.Black}
 	frame := image.NewPaletted(
 		image.Rect(0, 0, c.profile.Width, c.profile.Height),
