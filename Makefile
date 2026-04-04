@@ -1,4 +1,4 @@
-.PHONY: all test vet coverage build build-pi verify fix lint ci help
+.PHONY: all test vet coverage build build-pi verify fix lint ci clean help
 
 # Default target
 all: ci
@@ -40,6 +40,10 @@ fix:
 lint:
 	markdownlint '**/*.md'
 
+# Remove build artifacts
+clean:
+	rm -f /tmp/coverage.out
+
 # Full CI pipeline (mirrors GitHub Actions)
 ci: verify vet coverage build-pi
 
@@ -54,4 +58,5 @@ help:
 	@echo "  make fix        - Run go fix to modernize code"
 	@echo "  make lint       - Lint markdown files"
 	@echo "  make ci         - Full CI pipeline (verify, vet, test, coverage, build-pi)"
+	@echo "  make clean      - Remove build artifacts"
 	@echo "  make help       - Show this help"
