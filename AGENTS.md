@@ -6,6 +6,10 @@
   (red-green-refactor loop).
 - After tests go green, **commit immediately** to checkpoint progress before
   moving on to the next task.
+- Run `go fix ./...` frequently during development to modernize code
+  (e.g., `interface{}` → `any`, if/else → `min`/`max`, loop
+  modernization). Run it **before creating any pull request**. Use
+  `go fix -diff ./...` first to preview changes when unsure.
 
 ## Execution Plan
 
@@ -40,7 +44,7 @@ bd close <id>         # Complete work
 **MANDATORY WORKFLOW:**
 
 1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
+2. **Run quality gates** (if code changed) - Tests, linters, `go fix ./...`, builds
 3. **Update issue status** - Close finished work, update in-progress items
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
