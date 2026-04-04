@@ -64,6 +64,10 @@ func TestCompositor_ZeroWidgets(t *testing.T) {
 	if r != 0xFFFF || g != 0xFFFF || b != 0xFFFF {
 		t.Errorf("palette[0] = (%d,%d,%d), want white", r, g, b)
 	}
+	r, g, b, _ = frame.Palette[1].RGBA()
+	if r != 0 || g != 0 || b != 0 {
+		t.Errorf("palette[1] = (%d,%d,%d), want black", r, g, b)
+	}
 }
 
 func TestCompositor_OneWidget(t *testing.T) {
