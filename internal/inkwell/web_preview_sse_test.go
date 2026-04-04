@@ -185,9 +185,6 @@ func TestWebPreview_SSEEndpointSendsData(t *testing.T) {
 	waitFor(t, time.Second, func() bool { return rec.bodyLen() > 0 },
 		"timed out waiting for SSE handler to write")
 
-	cancel()
-	<-done
-
 	body := rec.bodyString()
 	if !strings.Contains(body, "data: refresh") {
 		t.Errorf("SSE body = %q, want to contain 'data: refresh'", body)
