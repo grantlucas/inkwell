@@ -24,10 +24,7 @@ jobs:
       - name: Vet
         run: make vet
 
-      - name: Test
-        run: make test
-
-      - name: Check coverage (internal packages)
+      - name: Test with coverage
         run: make coverage
 
   build:

@@ -3,20 +3,19 @@
 # Default target
 all: ci
 
-# Run all tests with race detection
+# Run all tests with race detection and generate coverage profile
 test:
-	go test -race ./...
+	go test -race -coverprofile=/tmp/coverage.out ./internal/...
 
 # Run go vet
 vet:
 	go vet ./...
 
-# Check 100% coverage on internal packages
-coverage:
-	@go test -coverprofile=/tmp/coverage.out ./internal/...
+# Check 100% coverage on internal packages (requires test to run first)
+coverage: test
 	@COVERAGE=$$(go tool cover -func=/tmp/coverage.out | grep '^total:' | awk '{print $$3}' | tr -d '%'); \
 	echo "Total coverage: $${COVERAGE}%"; \
-	if [ "$$(echo "$${COVERAGE} < 100" | bc -l)" -eq 1 ]; then \
+	if awk "BEGIN {exit !($${COVERAGE} < 100)}"; then \
 		echo "Coverage is below 100% ($${COVERAGE}%)"; \
 		exit 1; \
 	fi
@@ -42,13 +41,13 @@ lint:
 	markdownlint '**/*.md'
 
 # Full CI pipeline (mirrors GitHub Actions)
-ci: verify vet test coverage build-pi
+ci: verify vet coverage build-pi
 
 help:
 	@echo "Available targets:"
-	@echo "  make test       - Run all tests with race detection"
+	@echo "  make test       - Run all tests with race detection and coverage profile"
 	@echo "  make vet        - Run go vet"
-	@echo "  make coverage   - Check 100% coverage on internal packages"
+	@echo "  make coverage   - Run tests and check 100% coverage on internal packages"
 	@echo "  make build      - Build for host platform"
 	@echo "  make build-pi   - Cross-compile for Raspberry Pi (linux/arm64)"
 	@echo "  make verify     - Verify module dependencies"
