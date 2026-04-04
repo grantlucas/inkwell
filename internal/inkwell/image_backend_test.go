@@ -81,7 +81,7 @@ func TestImageBackend_SequentialFilenames(t *testing.T) {
 	buf := make([]byte, p.BufferSize())
 
 	// Three display cycles
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		sendDisplaySequence(t, backend, p, buf)
 	}
 

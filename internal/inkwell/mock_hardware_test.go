@@ -74,7 +74,7 @@ func TestMockHardwareBusyCount(t *testing.T) {
 	m := &MockHardware{BusyCount: 3}
 
 	// First 3 reads should return false (busy)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if m.ReadBusy() {
 			t.Errorf("ReadBusy() call %d = true, want false (busy)", i)
 		}
