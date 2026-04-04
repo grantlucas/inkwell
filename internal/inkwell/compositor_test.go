@@ -135,6 +135,36 @@ func TestCompositor_TwoWidgets(t *testing.T) {
 	}
 }
 
+func TestCompositor_NilProfile(t *testing.T) {
+	comp := NewCompositor(nil)
+	_, err := comp.Render()
+	if err == nil {
+		t.Fatal("expected error for nil profile, got nil")
+	}
+}
+
+func TestCompositor_InvalidDimensions(t *testing.T) {
+	comp := NewCompositor(&DisplayProfile{Width: 0, Height: 10, Color: BW})
+	_, err := comp.Render()
+	if err == nil {
+		t.Fatal("expected error for zero width, got nil")
+	}
+
+	comp = NewCompositor(&DisplayProfile{Width: 10, Height: -1, Color: BW})
+	_, err = comp.Render()
+	if err == nil {
+		t.Fatal("expected error for negative height, got nil")
+	}
+}
+
+func TestCompositor_UnsupportedColorDepth(t *testing.T) {
+	comp := NewCompositor(&DisplayProfile{Width: 16, Height: 16, Color: Color7})
+	_, err := comp.Render()
+	if err == nil {
+		t.Fatal("expected error for unsupported color depth, got nil")
+	}
+}
+
 func TestCompositor_ErrorPropagation(t *testing.T) {
 	p := imageTestProfile()
 	comp := NewCompositor(p)
