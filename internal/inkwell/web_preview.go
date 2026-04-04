@@ -230,8 +230,8 @@ func scaleImage(src *image.Paletted, factor int) *image.Paletted {
 			if ci == 0 {
 				continue // index 0 is white; dst.Pix is zero-initialized
 			}
-			for dy := 0; dy < factor; dy++ {
-				for dx := 0; dx < factor; dx++ {
+			for dy := range factor {
+				for dx := range factor {
 					dst.SetColorIndex(x*factor+dx, y*factor+dy, ci)
 				}
 			}
