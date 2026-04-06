@@ -758,12 +758,12 @@ font rendering is deterministic
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Golden file test with fixed time "14:30" written first
-- [ ] **TDD**: Test Bounds() returns configured rectangle
-- [ ] **TDD**: Test Render draws non-blank output in bounds
-- [ ] **TDD**: Test with different time values produces different output
-- [ ] **Coverage**: 100%
-- [ ] **Commit**: Committed after green tests
+- [x] **TDD**: Golden file test with fixed time "14:30" written first
+- [x] **TDD**: Test Bounds() returns configured rectangle
+- [x] **TDD**: Test Render draws non-blank output in bounds
+- [x] **TDD**: Test with different time values produces different output
+- [x] **Coverage**: 100%
+- [x] **Commit**: Committed after green tests
 
 ---
 
@@ -1155,7 +1155,7 @@ Copy this to track completion session by session:
 
 - [x] **7.1** — Widget interface + Compositor
 - [ ] **7.2** — Golden file test helpers
-- [ ] **7.3** — ClockWidget
+- [x] **7.3** — ClockWidget
 
 ### Milestone 5: Production Ready
 
