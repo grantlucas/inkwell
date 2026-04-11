@@ -30,6 +30,16 @@ backend: preview
 	}
 }
 
+func TestNewApp_NilConfig(t *testing.T) {
+	_, err := NewApp(nil)
+	if err == nil {
+		t.Fatal("expected error for nil config")
+	}
+	if !strings.Contains(err.Error(), "config is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestNewApp_UnknownProfile(t *testing.T) {
 	cfg := &Config{Display: "nonexistent", Backend: "preview"}
 	_, err := NewApp(cfg)

@@ -38,6 +38,10 @@ func WithInterval(d time.Duration) AppOption {
 // the hardware backend (unless overridden via WithHardware), and wires up the
 // EPD and compositor.
 func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config is required")
+	}
+
 	o := &appOptions{
 		interval: 60 * time.Second,
 	}
