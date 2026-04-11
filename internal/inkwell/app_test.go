@@ -129,10 +129,13 @@ func (e *brokenWidget) Bounds() image.Rectangle      { return e.bounds }
 func (e *brokenWidget) Render(*image.Paletted) error { return fmt.Errorf("widget broke") }
 
 func TestRun_WidgetRenderError(t *testing.T) {
-	cfg, _ := LoadConfig(strings.NewReader(`
+	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2
 backend: preview
 `))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
 
 	mock := &MockHardware{}
 	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
@@ -197,10 +200,13 @@ func TestCreateBackend_Unsupported(t *testing.T) {
 }
 
 func TestNewApp_DefaultBackendPreview(t *testing.T) {
-	cfg, _ := LoadConfig(strings.NewReader(`
+	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2
 backend: preview
 `))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
 	app, err := NewApp(cfg)
 	if err != nil {
 		t.Fatalf("NewApp: %v", err)
@@ -211,10 +217,13 @@ backend: preview
 }
 
 func TestRun_MultipleRenderCycles(t *testing.T) {
-	cfg, _ := LoadConfig(strings.NewReader(`
+	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2
 backend: preview
 `))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
 
 	mock := &MockHardware{}
 	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
@@ -244,11 +253,14 @@ backend: preview
 
 func TestNewApp_UnsupportedBackendNoOverride(t *testing.T) {
 	// "spi" passes config validation but createBackend doesn't support it yet
-	cfg, _ := LoadConfig(strings.NewReader(`
+	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2
 backend: spi
 `))
-	_, err := NewApp(cfg)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	_, err = NewApp(cfg)
 	if err == nil {
 		t.Fatal("expected error for unsupported backend")
 	}
@@ -263,10 +275,13 @@ type resetFailHardware struct{ MockHardware }
 func (e *resetFailHardware) Reset() error { return fmt.Errorf("hardware reset failed") }
 
 func TestRun_InitError(t *testing.T) {
-	cfg, _ := LoadConfig(strings.NewReader(`
+	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2
 backend: preview
 `))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
 
 	mock := &resetFailHardware{}
 	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
@@ -298,10 +313,13 @@ func (d *displayErrorHardware) SendCommand(cmd byte) error {
 }
 
 func TestRun_DisplayError(t *testing.T) {
-	cfg, _ := LoadConfig(strings.NewReader(`
+	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2
 backend: preview
 `))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
 
 	mock := &displayErrorHardware{failOnRefresh: true}
 	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
@@ -319,12 +337,15 @@ backend: preview
 }
 
 func TestNewApp_DefaultBackendImage(t *testing.T) {
-	cfg, _ := LoadConfig(strings.NewReader(`
+	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2
 backend: image
 image:
   output_dir: /tmp/inkwell-test
 `))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
 	app, err := NewApp(cfg)
 	if err != nil {
 		t.Fatalf("NewApp: %v", err)
