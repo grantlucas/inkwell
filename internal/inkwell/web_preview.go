@@ -177,8 +177,8 @@ func (wp *WebPreview) notifyLocked() {
 	}
 }
 
-// Mux returns an http.ServeMux with routes for the preview UI, frame PNG, and SSE events.
-func (wp *WebPreview) Mux() *http.ServeMux {
+// Handler returns an http.Handler with routes for the preview UI, frame PNG, and SSE events.
+func (wp *WebPreview) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", wp.serveHTML)
 	mux.HandleFunc("GET /frame.png", wp.ServeHTTP)

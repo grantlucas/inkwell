@@ -74,7 +74,7 @@ func TestWebPreview_HTMLPageEndpoint(t *testing.T) {
 	p := imageTestProfile()
 	wp := NewWebPreview(p)
 
-	mux := wp.Mux()
+	mux := wp.Handler()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -104,7 +104,7 @@ func TestWebPreview_SSEEndpointHeaders(t *testing.T) {
 	p := imageTestProfile()
 	wp := NewWebPreview(p)
 
-	mux := wp.Mux()
+	mux := wp.Handler()
 
 	// Use a context with cancel to end the SSE connection
 	ctx, cancel := context.WithCancel(context.Background())
@@ -156,7 +156,7 @@ func TestWebPreview_SSEEndpointSendsData(t *testing.T) {
 	p := imageTestProfile()
 	wp := NewWebPreview(p)
 
-	mux := wp.Mux()
+	mux := wp.Handler()
 
 	// Start SSE handler in a goroutine
 	ctx, cancel := context.WithCancel(context.Background())
@@ -237,7 +237,7 @@ func TestWebPreview_MuxRoutesFramePNG(t *testing.T) {
 	buf := make([]byte, p.BufferSize())
 	sendDisplaySequence(t, wp, p, buf)
 
-	mux := wp.Mux()
+	mux := wp.Handler()
 	req := httptest.NewRequest(http.MethodGet, "/frame.png", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)

@@ -13,7 +13,7 @@ import (
 // HTTPServer is implemented by Hardware backends that also serve HTTP.
 // App.Run starts an http.Server when the backend satisfies this interface.
 type HTTPServer interface {
-	Mux() *http.ServeMux
+	Handler() http.Handler
 }
 
 // App wires together config, backend, EPD, and compositor into a running
@@ -138,7 +138,7 @@ func (a *App) Run(ctx context.Context) error {
 		}
 		a.listener = ln
 
-		srv := &http.Server{Handler: hs.Mux()}
+		srv := &http.Server{Handler: hs.Handler()}
 		done := make(chan struct{})
 		ch := make(chan error, 1)
 		go func() {
