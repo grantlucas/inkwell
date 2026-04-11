@@ -118,6 +118,19 @@ backend: preview
 	if !hasRefresh {
 		t.Error("expected at least one refresh command (0x12)")
 	}
+
+	// Verify full framebuffer is transmitted in a single SendData call
+	expectedSize := Waveshare7in5V2.BufferSize()
+	hasFullFrame := false
+	for _, c := range calls {
+		if c.Type == "data" && len(c.Data) == expectedSize {
+			hasFullFrame = true
+			break
+		}
+	}
+	if !hasFullFrame {
+		t.Errorf("expected at least one SendData call with full framebuffer size %d", expectedSize)
+	}
 }
 
 // brokenWidget is a Widget that always returns an error on Render.
