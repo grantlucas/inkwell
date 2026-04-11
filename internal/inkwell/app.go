@@ -2,18 +2,32 @@ package inkwell
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
+	"net/http"
+	"sync"
 	"time"
 )
+
+// HTTPServer is implemented by Hardware backends that also serve HTTP.
+// App.Run starts an http.Server when the backend satisfies this interface.
+type HTTPServer interface {
+	Handler() http.Handler
+}
 
 // App wires together config, backend, EPD, and compositor into a running
 // application. Use NewApp to construct, then Run to start the render loop.
 type App struct {
-	hw       Hardware
-	epd      *EPD
-	comp     *Compositor
-	profile  *DisplayProfile
-	interval time.Duration
+	hw         Hardware
+	epd        *EPD
+	comp       *Compositor
+	profile    *DisplayProfile
+	interval   time.Duration
+	listenAddr      string
+	listener        net.Listener
+	ready           chan struct{}
+	shutdownTimeout time.Duration
 }
 
 // AppOption configures optional App parameters.
@@ -70,21 +84,80 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 	comp := NewCompositor(profile)
 
 	return &App{
-		hw:       hw,
-		epd:      epd,
-		comp:     comp,
-		profile:  profile,
-		interval: o.interval,
+		hw:         hw,
+		epd:        epd,
+		comp:       comp,
+		profile:    profile,
+		interval:   o.interval,
+		listenAddr:      fmt.Sprintf(":%d", cfg.Preview.Port),
+		ready:           make(chan struct{}),
+		shutdownTimeout: 5 * time.Second,
 	}, nil
 }
 
+// Ready returns a channel that is closed once the app is fully started
+// (including the HTTP server listener, if any).
+func (a *App) Ready() <-chan struct{} { return a.ready }
+
+// Addr returns the listener address when the hardware backend serves HTTP,
+// or nil otherwise. Only valid after Ready is closed.
+func (a *App) Addr() net.Addr {
+	if a.listener != nil {
+		return a.listener.Addr()
+	}
+	return nil
+}
+
 // Run initializes the display, enters the render loop, and shuts down when
-// ctx is cancelled. The loop: compose → pack → display → sleep.
+// ctx is cancelled. The loop: compose → pack → display → sleep. When the
+// hardware backend implements HTTPServer, an HTTP server is started
+// concurrently.
 func (a *App) Run(ctx context.Context) error {
+	var closeReady sync.Once
+	signalReady := func() {
+		closeReady.Do(func() {
+			if a.ready != nil {
+				close(a.ready)
+			}
+		})
+	}
+	defer signalReady()
+
 	if err := a.epd.Init(InitFull); err != nil {
 		a.epd.Close()
 		return fmt.Errorf("init display: %w", err)
 	}
+
+	// Start HTTP server if the backend supports it.
+	var serverErr <-chan error
+	if hs, ok := a.hw.(HTTPServer); ok {
+		ln, err := net.Listen("tcp", a.listenAddr)
+		if err != nil {
+			a.epd.Close()
+			return fmt.Errorf("listen: %w", err)
+		}
+		a.listener = ln
+
+		srv := &http.Server{Handler: hs.Handler()}
+		done := make(chan struct{})
+		ch := make(chan error, 1)
+		go func() {
+			defer close(done)
+			if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				ch <- err
+			}
+		}()
+		serverErr = ch
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), a.shutdownTimeout)
+			defer cancel()
+			if err := srv.Shutdown(shutdownCtx); err != nil {
+				_ = srv.Close()
+			}
+			<-done
+		}()
+	}
+	signalReady()
 
 	ticker := time.NewTicker(a.interval)
 	defer ticker.Stop()
@@ -110,6 +183,9 @@ func (a *App) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return a.epd.Close()
+		case err := <-serverErr:
+			a.epd.Close()
+			return fmt.Errorf("preview server: %w", err)
 		case <-ticker.C:
 		}
 	}

@@ -4,11 +4,185 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"net"
+	"net/http"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 )
+
+// Compile-time assertion: WebPreview satisfies HTTPServer.
+var _ HTTPServer = (*WebPreview)(nil)
+
+func TestRun_StartsHTTPServer(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Preview.Port = 0
+	wp := NewWebPreview(&Waveshare7in5V2)
+
+	app, err := NewApp(cfg, WithHardware(wp), WithInterval(10*time.Millisecond))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- app.Run(ctx) }()
+
+	<-app.Ready()
+	addr := app.Addr()
+	if addr == nil {
+		t.Fatal("expected non-nil addr")
+	}
+
+	resp, err := http.Get(fmt.Sprintf("http://%s/", addr))
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	cancel()
+	if err := <-errCh; err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+}
+
+func TestReady_ClosedWithoutHTTPServer(t *testing.T) {
+	cfg := DefaultConfig()
+	mock := &MockHardware{}
+	app, err := NewApp(cfg, WithHardware(mock), WithInterval(10*time.Millisecond))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	go app.Run(ctx)
+
+	select {
+	case <-app.Ready():
+		// good
+	case <-time.After(time.Second):
+		t.Fatal("Ready() not closed in time")
+	}
+
+	if app.Addr() != nil {
+		t.Fatal("expected nil Addr for non-HTTPServer hardware")
+	}
+}
+
+func TestRun_ServerShutdownOnCancel(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Preview.Port = 0
+	wp := NewWebPreview(&Waveshare7in5V2)
+
+	app, err := NewApp(cfg, WithHardware(wp), WithInterval(10*time.Millisecond))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- app.Run(ctx) }()
+
+	<-app.Ready()
+	addr := app.Addr().String()
+
+	cancel()
+	if err := <-errCh; err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// Server should be shut down — connection refused.
+	_, err = http.Get("http://" + addr + "/")
+	if err == nil {
+		t.Fatal("expected connection refused after shutdown")
+	}
+}
+
+func TestRun_ListenError(t *testing.T) {
+	// Occupy a port so the app's Listen fails.
+	ln, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatalf("pre-listen: %v", err)
+	}
+	defer ln.Close()
+	port := ln.Addr().(*net.TCPAddr).Port
+
+	cfg := DefaultConfig()
+	cfg.Preview.Port = port
+	wp := NewWebPreview(&Waveshare7in5V2)
+
+	app, err := NewApp(cfg, WithHardware(wp), WithInterval(10*time.Millisecond))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	err = app.Run(context.Background())
+	if err == nil {
+		t.Fatal("expected listen error")
+	}
+	if !strings.Contains(err.Error(), "listen") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRun_ServerCrashAbortsLoop(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Preview.Port = 0
+	wp := NewWebPreview(&Waveshare7in5V2)
+
+	app, err := NewApp(cfg, WithHardware(wp), WithInterval(time.Hour))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- app.Run(context.Background()) }()
+
+	<-app.Ready()
+	// Force Serve to return an error by closing the listener externally.
+	app.listener.Close()
+
+	err = <-errCh
+	if err == nil {
+		t.Fatal("expected server error")
+	}
+	if !strings.Contains(err.Error(), "preview server") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestNewApp_DefaultListenAddr(t *testing.T) {
+	cfg := DefaultConfig()
+	mock := &MockHardware{}
+	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if app.listenAddr != ":8080" {
+		t.Errorf("listenAddr = %q, want %q", app.listenAddr, ":8080")
+	}
+}
+
+func TestNewApp_CustomPort(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Preview.Port = 3000
+	mock := &MockHardware{}
+	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if app.listenAddr != ":3000" {
+		t.Errorf("listenAddr = %q, want %q", app.listenAddr, ":3000")
+	}
+}
 
 func TestNewApp_ValidConfig(t *testing.T) {
 	cfg, err := LoadConfig(strings.NewReader(`
@@ -378,6 +552,41 @@ func TestRun_PackImageError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "pack image") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRun_ShutdownTimeoutFallsBackToClose(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Preview.Port = 0
+	wp := NewWebPreview(&Waveshare7in5V2)
+
+	app, err := NewApp(cfg, WithHardware(wp), WithInterval(10*time.Millisecond))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	// Force shutdown to time out immediately so Close() fallback is exercised.
+	app.shutdownTimeout = time.Nanosecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- app.Run(ctx) }()
+
+	<-app.Ready()
+
+	// Open a long-lived SSE connection to keep the server busy during shutdown.
+	addr := app.Addr().String()
+	sseCtx, sseCancel := context.WithCancel(context.Background())
+	defer sseCancel()
+	req, _ := http.NewRequestWithContext(sseCtx, "GET", "http://"+addr+"/events", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /events: %v", err)
+	}
+	defer resp.Body.Close()
+
+	cancel()
+	if err := <-errCh; err != nil {
+		t.Fatalf("Run: %v", err)
 	}
 }
 
