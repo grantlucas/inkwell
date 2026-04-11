@@ -555,6 +555,41 @@ func TestRun_PackImageError(t *testing.T) {
 	}
 }
 
+func TestRun_ShutdownTimeoutFallsBackToClose(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Preview.Port = 0
+	wp := NewWebPreview(&Waveshare7in5V2)
+
+	app, err := NewApp(cfg, WithHardware(wp), WithInterval(10*time.Millisecond))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	// Force shutdown to time out immediately so Close() fallback is exercised.
+	app.shutdownTimeout = time.Nanosecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- app.Run(ctx) }()
+
+	<-app.Ready()
+
+	// Open a long-lived SSE connection to keep the server busy during shutdown.
+	addr := app.Addr().String()
+	sseCtx, sseCancel := context.WithCancel(context.Background())
+	defer sseCancel()
+	req, _ := http.NewRequestWithContext(sseCtx, "GET", "http://"+addr+"/events", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /events: %v", err)
+	}
+	defer resp.Body.Close()
+
+	cancel()
+	if err := <-errCh; err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+}
+
 func TestNewApp_DefaultBackendImage(t *testing.T) {
 	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2

@@ -24,9 +24,10 @@ type App struct {
 	comp       *Compositor
 	profile    *DisplayProfile
 	interval   time.Duration
-	listenAddr string
-	listener   net.Listener
-	ready      chan struct{}
+	listenAddr      string
+	listener        net.Listener
+	ready           chan struct{}
+	shutdownTimeout time.Duration
 }
 
 // AppOption configures optional App parameters.
@@ -88,8 +89,9 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 		comp:       comp,
 		profile:    profile,
 		interval:   o.interval,
-		listenAddr: fmt.Sprintf(":%d", cfg.Preview.Port),
-		ready:      make(chan struct{}),
+		listenAddr:      fmt.Sprintf(":%d", cfg.Preview.Port),
+		ready:           make(chan struct{}),
+		shutdownTimeout: 5 * time.Second,
 	}, nil
 }
 
@@ -147,7 +149,11 @@ func (a *App) Run(ctx context.Context) error {
 		}()
 		serverErr = ch
 		defer func() {
-			srv.Close()
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), a.shutdownTimeout)
+			defer cancel()
+			if err := srv.Shutdown(shutdownCtx); err != nil {
+				_ = srv.Close()
+			}
 			<-done
 		}()
 	}
