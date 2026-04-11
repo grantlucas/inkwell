@@ -349,6 +349,38 @@ backend: preview
 	}
 }
 
+func TestRun_PackImageError(t *testing.T) {
+	mock := &MockHardware{}
+	// BW profile for compositor (Render succeeds), Color7 profile for PackImage (fails).
+	bwProfile := DisplayProfile{
+		Width:    16,
+		Height:   16,
+		Color:    BW,
+		InitFull: []Command{{0x00, nil}},
+	}
+	color7Profile := DisplayProfile{
+		Width:    16,
+		Height:   16,
+		Color:    Color7,
+		InitFull: []Command{{0x00, nil}},
+	}
+	app := &App{
+		hw:       mock,
+		epd:      NewEPD(mock, &bwProfile),
+		comp:     NewCompositor(&bwProfile),
+		profile:  &color7Profile,
+		interval: time.Millisecond,
+	}
+
+	err := app.Run(context.Background())
+	if err == nil {
+		t.Fatal("expected pack image error")
+	}
+	if !strings.Contains(err.Error(), "pack image") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestNewApp_DefaultBackendImage(t *testing.T) {
 	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2
