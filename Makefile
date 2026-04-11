@@ -1,4 +1,4 @@
-.PHONY: all test vet coverage build build-pi verify fix lint ci clean help
+.PHONY: all test vet coverage build build-pi run verify fix lint ci clean help
 
 # Default target
 all: ci
@@ -23,6 +23,10 @@ coverage: test
 # Build for the host platform
 build:
 	go build ./...
+
+# Run locally with the preview backend (uses inkwell.yaml, or pass CONFIG=<path>)
+run: build
+	go run ./cmd/inkwell $(CONFIG)
 
 # Cross-compile for Raspberry Pi (linux/arm64)
 build-pi:
@@ -54,6 +58,7 @@ help:
 	@echo "  make coverage   - Run tests and check 100% coverage on internal packages"
 	@echo "  make build      - Build for host platform"
 	@echo "  make build-pi   - Cross-compile for Raspberry Pi (linux/arm64)"
+	@echo "  make run        - Run locally (uses inkwell.yaml, or CONFIG=path make run)"
 	@echo "  make verify     - Verify module dependencies"
 	@echo "  make fix        - Run go fix to modernize code"
 	@echo "  make lint       - Lint markdown files"
