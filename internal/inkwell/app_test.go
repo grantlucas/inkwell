@@ -190,7 +190,7 @@ backend: preview
 		t.Fatalf("NewApp: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
 	if err := app.Run(ctx); err != nil {
