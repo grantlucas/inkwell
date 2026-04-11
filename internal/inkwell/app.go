@@ -92,10 +92,11 @@ func (a *App) Run(ctx context.Context) error {
 			return fmt.Errorf("render: %w", err)
 		}
 
-		// PackImage cannot fail here: the compositor already validated the
-		// color depth during Render, and PackImage supports all color depths
-		// that the compositor accepts.
-		buf, _ := PackImage(a.profile, frame)
+		buf, err := PackImage(a.profile, frame)
+		if err != nil {
+			a.epd.Close()
+			return fmt.Errorf("pack image: %w", err)
+		}
 
 		if err := a.epd.Display(buf); err != nil {
 			a.epd.Close()
