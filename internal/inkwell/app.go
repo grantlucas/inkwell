@@ -82,6 +82,7 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 // ctx is cancelled. The loop: compose → pack → display → sleep.
 func (a *App) Run(ctx context.Context) error {
 	if err := a.epd.Init(InitFull); err != nil {
+		a.epd.Close()
 		return fmt.Errorf("init display: %w", err)
 	}
 
