@@ -40,6 +40,28 @@ func TestNewApp_NilConfig(t *testing.T) {
 	}
 }
 
+func TestNewApp_ZeroInterval(t *testing.T) {
+	cfg := &Config{Display: "waveshare_7in5_v2", Backend: "preview"}
+	_, err := NewApp(cfg, WithInterval(0))
+	if err == nil {
+		t.Fatal("expected error for zero interval")
+	}
+	if !strings.Contains(err.Error(), "interval must be positive") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestNewApp_NegativeInterval(t *testing.T) {
+	cfg := &Config{Display: "waveshare_7in5_v2", Backend: "preview"}
+	_, err := NewApp(cfg, WithInterval(-time.Second))
+	if err == nil {
+		t.Fatal("expected error for negative interval")
+	}
+	if !strings.Contains(err.Error(), "interval must be positive") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestNewApp_UnknownProfile(t *testing.T) {
 	cfg := &Config{Display: "nonexistent", Backend: "preview"}
 	_, err := NewApp(cfg)

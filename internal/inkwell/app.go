@@ -48,6 +48,9 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 	for _, fn := range opts {
 		fn(o)
 	}
+	if o.interval <= 0 {
+		return nil, fmt.Errorf("interval must be positive")
+	}
 
 	profile, ok := Profiles[cfg.Display]
 	if !ok {
