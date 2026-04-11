@@ -1,0 +1,4 @@
+display: waveshare_7in5_v2
+backend: preview
+preview:
+  port: 8080
