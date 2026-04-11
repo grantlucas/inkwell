@@ -1,4 +1,4 @@
-module github.com/granthale/inkwell
+module github.com/grantlucas/inkwell
 
 go 1.25.0
 

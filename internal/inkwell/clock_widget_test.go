@@ -12,15 +12,6 @@ func fixedClock(t time.Time) func() time.Time {
 	return func() time.Time { return t }
 }
 
-func clockTestProfile() *DisplayProfile {
-	return &DisplayProfile{
-		Name:   "clock-test",
-		Width:  200,
-		Height: 100,
-		Color:  BW,
-	}
-}
-
 func TestClockWidget_BoundsReturnsConfiguredRect(t *testing.T) {
 	bounds := image.Rect(10, 20, 110, 60)
 	w := NewClockWidget(bounds, fixedClock(time.Time{}))

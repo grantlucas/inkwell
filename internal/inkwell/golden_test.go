@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -36,15 +37,29 @@ type spyT struct {
 	fataled bool
 }
 
-func (s *spyT) Helper() {}
+func (s *spyT) Helper()      {}
 func (s *spyT) Name() string { return s.T.Name() }
 func (s *spyT) Errorf(_ string, _ ...any) {
 	s.errored = true
 }
 func (s *spyT) Fatalf(_ string, _ ...any) {
 	s.fataled = true
-	// The implementation uses `return` after every Fatalf call, so we don't
-	// need runtime.Goexit() here.
+	runtime.Goexit()
+}
+
+// runSpy executes fn with a spyT in a separate goroutine so that
+// runtime.Goexit (from spyT.Fatalf) terminates that goroutine rather than
+// the test runner's goroutine.
+func runSpy(t *testing.T, fn func(s *spyT)) *spyT {
+	t.Helper()
+	spy := &spyT{T: t}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		fn(spy)
+	}()
+	<-done
+	return spy
 }
 
 func TestAssertGoldenBuffer_Match(t *testing.T) {
@@ -69,8 +84,9 @@ func TestAssertGoldenBuffer_Mismatch(t *testing.T) {
 		t.Fatalf("setup: %v", err)
 	}
 
-	spy := &spyT{T: t}
-	AssertGoldenBuffer(spy, []byte{0x11, 0x22})
+	spy := runSpy(t, func(s *spyT) {
+		AssertGoldenBuffer(s, []byte{0x11, 0x22})
+	})
 	if !spy.errored {
 		t.Error("expected mismatch error, but none was reported")
 	}
@@ -99,8 +115,9 @@ func TestAssertGoldenBuffer_Update(t *testing.T) {
 func TestAssertGoldenBuffer_MissingFile(t *testing.T) {
 	goldenFixDir(t) // empty dir — no golden file present
 
-	spy := &spyT{T: t}
-	AssertGoldenBuffer(spy, []byte{0x01})
+	spy := runSpy(t, func(s *spyT) {
+		AssertGoldenBuffer(s, []byte{0x01})
+	})
 	if !spy.fataled {
 		t.Error("expected fatal on missing file, but none occurred")
 	}
@@ -148,8 +165,9 @@ func TestAssertGoldenPNG_Mismatch(t *testing.T) {
 		color.Palette{color.White, color.Black})
 	different.SetColorIndex(0, 0, 1)
 
-	spy := &spyT{T: t}
-	AssertGoldenPNG(spy, different)
+	spy := runSpy(t, func(s *spyT) {
+		AssertGoldenPNG(s, different)
+	})
 	if !spy.errored {
 		t.Error("expected mismatch error, but none was reported")
 	}
@@ -178,8 +196,8 @@ func TestAssertGoldenPNG_Update(t *testing.T) {
 		t.Fatalf("decode golden PNG: %v", err)
 	}
 	// Verify pixels round-trip.
-	for y := 0; y < 2; y++ {
-		for x := 0; x < 2; x++ {
+	for y := range 2 {
+		for x := range 2 {
 			gr, gg, gb, _ := decoded.At(x, y).RGBA()
 			wr, wg, wb, _ := img.At(x, y).RGBA()
 			if gr != wr || gg != wg || gb != wb {
@@ -195,8 +213,9 @@ func TestAssertGoldenPNG_MissingFile(t *testing.T) {
 	img := image.NewPaletted(image.Rect(0, 0, 2, 2),
 		color.Palette{color.White, color.Black})
 
-	spy := &spyT{T: t}
-	AssertGoldenPNG(spy, img)
+	spy := runSpy(t, func(s *spyT) {
+		AssertGoldenPNG(s, img)
+	})
 	if !spy.fataled {
 		t.Error("expected fatal on missing file, but none occurred")
 	}
@@ -219,8 +238,9 @@ func TestAssertGoldenBuffer_UpdateMkdirError(t *testing.T) {
 	*Update = true
 	defer func() { *Update = oldUpdate }()
 
-	spy := &spyT{T: t}
-	AssertGoldenBuffer(spy, []byte{0x01})
+	spy := runSpy(t, func(s *spyT) {
+		AssertGoldenBuffer(s, []byte{0x01})
+	})
 	if !spy.fataled {
 		t.Error("expected fatal on MkdirAll error, but none occurred")
 	}
@@ -240,8 +260,9 @@ func TestAssertGoldenBuffer_UpdateWriteError(t *testing.T) {
 	*Update = true
 	defer func() { *Update = oldUpdate }()
 
-	spy := &spyT{T: t}
-	AssertGoldenBuffer(spy, []byte{0x01})
+	spy := runSpy(t, func(s *spyT) {
+		AssertGoldenBuffer(s, []byte{0x01})
+	})
 	if !spy.fataled {
 		t.Error("expected fatal on WriteFile error, but none occurred")
 	}
@@ -264,8 +285,9 @@ func TestAssertGoldenPNG_UpdateMkdirError(t *testing.T) {
 	img := image.NewPaletted(image.Rect(0, 0, 2, 2),
 		color.Palette{color.White, color.Black})
 
-	spy := &spyT{T: t}
-	AssertGoldenPNG(spy, img)
+	spy := runSpy(t, func(s *spyT) {
+		AssertGoldenPNG(s, img)
+	})
 	if !spy.fataled {
 		t.Error("expected fatal on MkdirAll error, but none occurred")
 	}
@@ -288,8 +310,9 @@ func TestAssertGoldenPNG_UpdateCreateError(t *testing.T) {
 	img := image.NewPaletted(image.Rect(0, 0, 2, 2),
 		color.Palette{color.White, color.Black})
 
-	spy := &spyT{T: t}
-	AssertGoldenPNG(spy, img)
+	spy := runSpy(t, func(s *spyT) {
+		AssertGoldenPNG(s, img)
+	})
 	if !spy.fataled {
 		t.Error("expected fatal on Create error, but none occurred")
 	}
@@ -311,8 +334,9 @@ func TestAssertGoldenPNG_UpdateEncodeError(t *testing.T) {
 	img := image.NewPaletted(image.Rect(0, 0, 2, 2),
 		color.Palette{color.White, color.Black})
 
-	spy := &spyT{T: t}
-	AssertGoldenPNG(spy, img)
+	spy := runSpy(t, func(s *spyT) {
+		AssertGoldenPNG(s, img)
+	})
 	if !spy.fataled {
 		t.Error("expected fatal on encode error, but none occurred")
 	}
@@ -341,8 +365,9 @@ func TestAssertGoldenPNG_CompareEncodeError(t *testing.T) {
 	}
 	defer func() { goldenEncodePNG = oldEncode }()
 
-	spy := &spyT{T: t}
-	AssertGoldenPNG(spy, img)
+	spy := runSpy(t, func(s *spyT) {
+		AssertGoldenPNG(s, img)
+	})
 	if !spy.fataled {
 		t.Error("expected fatal on encode error during comparison, but none occurred")
 	}
