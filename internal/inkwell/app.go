@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -110,6 +111,16 @@ func (a *App) Addr() net.Addr {
 // hardware backend implements HTTPServer, an HTTP server is started
 // concurrently.
 func (a *App) Run(ctx context.Context) error {
+	var closeReady sync.Once
+	signalReady := func() {
+		closeReady.Do(func() {
+			if a.ready != nil {
+				close(a.ready)
+			}
+		})
+	}
+	defer signalReady()
+
 	if err := a.epd.Init(InitFull); err != nil {
 		a.epd.Close()
 		return fmt.Errorf("init display: %w", err)
@@ -140,9 +151,7 @@ func (a *App) Run(ctx context.Context) error {
 			<-done
 		}()
 	}
-	if a.ready != nil {
-		close(a.ready)
-	}
+	signalReady()
 
 	ticker := time.NewTicker(a.interval)
 	defer ticker.Stop()
