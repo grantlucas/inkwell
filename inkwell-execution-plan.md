@@ -661,12 +661,12 @@ subscribe/unsubscribe race-condition safe
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Test SSE endpoint sends event on buffer update
-- [ ] **TDD**: Test HTML page endpoint returns valid HTML with EventSource JS
-- [ ] **TDD**: Test multiple subscribers receive events
-- [ ] **TDD**: Test unsubscribe on client disconnect
-- [ ] **Coverage**: 100%
-- [ ] **Commit**: Committed after green tests
+- [x] **TDD**: Test SSE endpoint sends event on buffer update
+- [x] **TDD**: Test HTML page endpoint returns valid HTML with EventSource JS
+- [x] **TDD**: Test multiple subscribers receive events
+- [x] **TDD**: Test unsubscribe on client disconnect
+- [x] **Coverage**: 100%
+- [x] **Commit**: Committed after green tests
 
 ---
 
@@ -696,12 +696,12 @@ that draw known patterns
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Test compositor with zero widgets produces blank frame
-- [ ] **TDD**: Test compositor with one stub widget renders in correct bounds
-- [ ] **TDD**: Test compositor with two non-overlapping widgets renders both
-- [ ] **TDD**: Test widget render error propagates
-- [ ] **Coverage**: 100%
-- [ ] **Commit**: Committed after green tests
+- [x] **TDD**: Test compositor with zero widgets produces blank frame
+- [x] **TDD**: Test compositor with one stub widget renders in correct bounds
+- [x] **TDD**: Test compositor with two non-overlapping widgets renders both
+- [x] **TDD**: Test widget render error propagates
+- [x] **Coverage**: 100%
+- [x] **Commit**: Committed after green tests
 
 ---
 
@@ -758,12 +758,12 @@ font rendering is deterministic
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Golden file test with fixed time "14:30" written first
-- [ ] **TDD**: Test Bounds() returns configured rectangle
-- [ ] **TDD**: Test Render draws non-blank output in bounds
-- [ ] **TDD**: Test with different time values produces different output
-- [ ] **Coverage**: 100%
-- [ ] **Commit**: Committed after green tests
+- [x] **TDD**: Golden file test with fixed time "14:30" written first
+- [x] **TDD**: Test Bounds() returns configured rectangle
+- [x] **TDD**: Test Render draws non-blank output in bounds
+- [x] **TDD**: Test with different time values produces different output
+- [x] **Coverage**: 100%
+- [x] **Commit**: Committed after green tests
 
 ---
 
@@ -789,9 +789,9 @@ so he can catch regressions immediately, avoiding broken main branch.
 
 **Acceptance Criteria**:
 
-- [ ] **Pipeline**: Test, vet, and cross-compile jobs defined
-- [ ] **Verification**: Pipeline passes on push
-- [ ] **Commit**: CI config committed
+- [x] **Pipeline**: Test, vet, and cross-compile jobs defined
+- [x] **Verification**: Pipeline passes on push
+- [x] **Commit**: CI config committed
 
 ---
 
@@ -814,9 +814,9 @@ he can maintain the TDD discipline, avoiding coverage erosion over time.
 
 **Acceptance Criteria**:
 
-- [ ] **CI**: Coverage step added to workflow
-- [ ] **Threshold**: Fails if below 100% on testable packages
-- [ ] **Commit**: Committed
+- [x] **CI**: Coverage step added to workflow
+- [x] **Threshold**: Fails if below 100% on testable packages
+- [x] **Commit**: Committed
 
 ---
 
@@ -880,11 +880,11 @@ without recompiling, avoiding hardcoded settings.
 
 **Acceptance Criteria**:
 
-- [ ] **TDD**: Test valid config parses correctly
-- [ ] **TDD**: Test unknown display profile returns error
-- [ ] **TDD**: Test defaults applied for missing fields
-- [ ] **Coverage**: 100%
-- [ ] **Commit**: Committed after green tests
+- [x] **TDD**: Test valid config parses correctly
+- [x] **TDD**: Test unknown display profile returns error
+- [x] **TDD**: Test defaults applied for missing fields
+- [x] **Coverage**: 100%
+- [x] **Commit**: Committed after green tests
 
 ---
 
@@ -1149,18 +1149,18 @@ Copy this to track completion session by session:
 
 - [x] **5.1** — imageBackend (PNG output)
 - [x] **6.1** — webPreview backend
-- [ ] **6.2** — SSE auto-refresh
+- [x] **6.2** — SSE auto-refresh
 
 ### Milestone 4: Widget System
 
-- [ ] **7.1** — Widget interface + Compositor
+- [x] **7.1** — Widget interface + Compositor
 - [ ] **7.2** — Golden file test helpers
-- [ ] **7.3** — ClockWidget
+- [x] **7.3** — ClockWidget
 
 ### Milestone 5: Production Ready
 
-- [ ] **8.1** — GitHub Actions CI
-- [ ] **8.2** — Coverage enforcement
+- [x] **8.1** — GitHub Actions CI
+- [x] **8.2** — Coverage enforcement
 - [ ] **9.1** — spiHardware (periph.io)
-- [ ] **10.1** — Config loading (YAML)
+- [x] **10.1** — Config loading (YAML)
 - [ ] **10.2** — Main entry point + wiring
