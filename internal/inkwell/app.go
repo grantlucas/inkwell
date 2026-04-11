@@ -85,6 +85,9 @@ func (a *App) Run(ctx context.Context) error {
 		return fmt.Errorf("init display: %w", err)
 	}
 
+	ticker := time.NewTicker(a.interval)
+	defer ticker.Stop()
+
 	for {
 		frame, err := a.comp.Render()
 		if err != nil {
@@ -106,7 +109,7 @@ func (a *App) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return a.epd.Close()
-		case <-time.After(a.interval):
+		case <-ticker.C:
 		}
 	}
 }
