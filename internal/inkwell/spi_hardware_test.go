@@ -298,82 +298,60 @@ func TestNewSPIHardware_MissingGPIOPins(t *testing.T) {
 	}
 }
 
-func TestSPIHardware_SendCommand_DCPinError(t *testing.T) {
-	record := &spitest.Record{}
-	conn, err := record.Connect(0, 0, 8)
-	if err != nil {
-		t.Fatalf("Connect: %v", err)
-	}
-
+func TestSPIHardware_DCPinError(t *testing.T) {
 	dcErr := errors.New("dc fail")
-	hw, err := NewSPIHardware(
-		WithSPIConn(conn),
-		WithGPIOPins(
-			&gpiotest.Pin{N: "RST"},
-			&failOutPin{Pin: gpiotest.Pin{N: "DC"}, err: dcErr},
-			&gpiotest.Pin{N: "BUSY"},
-			&gpiotest.Pin{N: "PWR"},
-		),
-	)
-	if err != nil {
-		t.Fatalf("NewSPIHardware: %v", err)
-	}
+	hw := newHardwareWithFailPin(t, "DC", dcErr)
 
-	if err := hw.SendCommand(0x01); !errors.Is(err, dcErr) {
-		t.Errorf("SendCommand error = %v, want %v", err, dcErr)
-	}
-}
+	t.Run("SendCommand", func(t *testing.T) {
+		if err := hw.SendCommand(0x01); !errors.Is(err, dcErr) {
+			t.Errorf("error = %v, want %v", err, dcErr)
+		}
+	})
 
-func TestSPIHardware_SendData_DCPinError(t *testing.T) {
-	record := &spitest.Record{}
-	conn, err := record.Connect(0, 0, 8)
-	if err != nil {
-		t.Fatalf("Connect: %v", err)
-	}
-
-	dcErr := errors.New("dc fail")
-	hw, err := NewSPIHardware(
-		WithSPIConn(conn),
-		WithGPIOPins(
-			&gpiotest.Pin{N: "RST"},
-			&failOutPin{Pin: gpiotest.Pin{N: "DC"}, err: dcErr},
-			&gpiotest.Pin{N: "BUSY"},
-			&gpiotest.Pin{N: "PWR"},
-		),
-	)
-	if err != nil {
-		t.Fatalf("NewSPIHardware: %v", err)
-	}
-
-	if err := hw.SendData([]byte{0x01}); !errors.Is(err, dcErr) {
-		t.Errorf("SendData error = %v, want %v", err, dcErr)
-	}
+	t.Run("SendData", func(t *testing.T) {
+		if err := hw.SendData([]byte{0x01}); !errors.Is(err, dcErr) {
+			t.Errorf("error = %v, want %v", err, dcErr)
+		}
+	})
 }
 
 func TestSPIHardware_Reset_RstPinError(t *testing.T) {
-	record := &spitest.Record{}
-	conn, err := record.Connect(0, 0, 8)
-	if err != nil {
-		t.Fatalf("Connect: %v", err)
-	}
-
 	rstErr := errors.New("rst fail")
-	hw, err := NewSPIHardware(
-		WithSPIConn(conn),
-		WithGPIOPins(
-			&failOutPin{Pin: gpiotest.Pin{N: "RST"}, err: rstErr},
-			&gpiotest.Pin{N: "DC"},
-			&gpiotest.Pin{N: "BUSY"},
-			&gpiotest.Pin{N: "PWR"},
-		),
-	)
-	if err != nil {
-		t.Fatalf("NewSPIHardware: %v", err)
-	}
+	hw := newHardwareWithFailPin(t, "RST", rstErr)
 
 	if err := hw.Reset(); !errors.Is(err, rstErr) {
 		t.Errorf("Reset error = %v, want %v", err, rstErr)
 	}
+}
+
+// newHardwareWithFailPin creates an spiHardware with a failOutPin on the named pin.
+func newHardwareWithFailPin(t *testing.T, pinName string, pinErr error) *spiHardware {
+	t.Helper()
+	record := &spitest.Record{}
+	conn, err := record.Connect(0, 0, 8)
+	if err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+
+	rst := gpio.PinIO(&gpiotest.Pin{N: "RST"})
+	dc := gpio.PinIO(&gpiotest.Pin{N: "DC"})
+	busy := gpio.PinIO(&gpiotest.Pin{N: "BUSY"})
+	pwr := gpio.PinIO(&gpiotest.Pin{N: "PWR"})
+
+	switch pinName {
+	case "RST":
+		rst = &failOutPin{Pin: gpiotest.Pin{N: "RST"}, err: pinErr}
+	case "DC":
+		dc = &failOutPin{Pin: gpiotest.Pin{N: "DC"}, err: pinErr}
+	case "PWR":
+		pwr = &failOutPin{Pin: gpiotest.Pin{N: "PWR"}, err: pinErr}
+	}
+
+	hw, err := NewSPIHardware(WithSPIConn(conn), WithGPIOPins(rst, dc, busy, pwr))
+	if err != nil {
+		t.Fatalf("NewSPIHardware: %v", err)
+	}
+	return hw
 }
 
 // failPortCloser is an spi.PortCloser that records Close() calls and can fail.
@@ -390,55 +368,39 @@ func (f *failPortCloser) LimitSpeed(_ physic.Frequency) error {
 	return nil
 }
 
-func TestSPIHardware_Reset_SecondOutError(t *testing.T) {
-	record := &spitest.Record{}
-	conn, err := record.Connect(0, 0, 8)
-	if err != nil {
-		t.Fatalf("Connect: %v", err)
-	}
+func TestSPIHardware_Reset_NthOutError(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		failN int
+	}{
+		{"second_out_low", 2},
+		{"third_out_high", 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			record := &spitest.Record{}
+			conn, err := record.Connect(0, 0, 8)
+			if err != nil {
+				t.Fatalf("Connect: %v", err)
+			}
 
-	rstErr := errors.New("rst low fail")
-	hw, err := NewSPIHardware(
-		WithSPIConn(conn),
-		WithGPIOPins(
-			&failAfterNPin{Pin: gpiotest.Pin{N: "RST"}, err: rstErr, n: 2},
-			&gpiotest.Pin{N: "DC"},
-			&gpiotest.Pin{N: "BUSY"},
-			&gpiotest.Pin{N: "PWR"},
-		),
-	)
-	if err != nil {
-		t.Fatalf("NewSPIHardware: %v", err)
-	}
+			rstErr := errors.New("rst fail")
+			hw, err := NewSPIHardware(
+				WithSPIConn(conn),
+				WithGPIOPins(
+					&failAfterNPin{Pin: gpiotest.Pin{N: "RST"}, err: rstErr, n: tc.failN},
+					&gpiotest.Pin{N: "DC"},
+					&gpiotest.Pin{N: "BUSY"},
+					&gpiotest.Pin{N: "PWR"},
+				),
+			)
+			if err != nil {
+				t.Fatalf("NewSPIHardware: %v", err)
+			}
 
-	if err := hw.Reset(); !errors.Is(err, rstErr) {
-		t.Errorf("Reset error = %v, want %v", err, rstErr)
-	}
-}
-
-func TestSPIHardware_Reset_ThirdOutError(t *testing.T) {
-	record := &spitest.Record{}
-	conn, err := record.Connect(0, 0, 8)
-	if err != nil {
-		t.Fatalf("Connect: %v", err)
-	}
-
-	rstErr := errors.New("rst high2 fail")
-	hw, err := NewSPIHardware(
-		WithSPIConn(conn),
-		WithGPIOPins(
-			&failAfterNPin{Pin: gpiotest.Pin{N: "RST"}, err: rstErr, n: 3},
-			&gpiotest.Pin{N: "DC"},
-			&gpiotest.Pin{N: "BUSY"},
-			&gpiotest.Pin{N: "PWR"},
-		),
-	)
-	if err != nil {
-		t.Fatalf("NewSPIHardware: %v", err)
-	}
-
-	if err := hw.Reset(); !errors.Is(err, rstErr) {
-		t.Errorf("Reset error = %v, want %v", err, rstErr)
+			if err := hw.Reset(); !errors.Is(err, rstErr) {
+				t.Errorf("Reset error = %v, want %v", err, rstErr)
+			}
+		})
 	}
 }
 

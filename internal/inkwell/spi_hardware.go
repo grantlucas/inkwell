@@ -56,14 +56,21 @@ func NewSPIHardware(opts ...SPIOption) (*spiHardware, error) {
 		}
 	}
 
-	if h.spiConn == nil {
-		return nil, fmt.Errorf("spi connection is required")
-	}
-	if h.rstPin == nil || h.dcPin == nil || h.busyPin == nil || h.pwrPin == nil {
-		return nil, fmt.Errorf("all GPIO pins (rst, dc, busy, pwr) are required")
+	if err := h.validate(); err != nil {
+		return nil, err
 	}
 
 	return h, nil
+}
+
+func (h *spiHardware) validate() error {
+	if h.spiConn == nil {
+		return fmt.Errorf("spi connection is required")
+	}
+	if h.rstPin == nil || h.dcPin == nil || h.busyPin == nil || h.pwrPin == nil {
+		return fmt.Errorf("all GPIO pins (rst, dc, busy, pwr) are required")
+	}
+	return nil
 }
 
 // initRealHardware opens the real SPI bus and GPIO pins via periph.io.
