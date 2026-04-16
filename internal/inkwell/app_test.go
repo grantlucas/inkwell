@@ -438,24 +438,6 @@ backend: preview
 	}
 }
 
-func TestNewApp_UnsupportedBackendNoOverride(t *testing.T) {
-	// "spi" passes config validation but createBackend doesn't support it yet
-	cfg, err := LoadConfig(strings.NewReader(`
-display: waveshare_7in5_v2
-backend: spi
-`))
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	_, err = NewApp(cfg)
-	if err == nil {
-		t.Fatal("expected error for unsupported backend")
-	}
-	if !strings.Contains(err.Error(), "unsupported backend") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 // resetFailHardware is a mock that fails on Reset (used to test Init error path).
 type resetFailHardware struct{ MockHardware }
 
@@ -575,8 +557,7 @@ func TestRun_ShutdownTimeoutFallsBackToClose(t *testing.T) {
 
 	// Open a long-lived SSE connection to keep the server busy during shutdown.
 	addr := app.Addr().String()
-	sseCtx, sseCancel := context.WithCancel(context.Background())
-	defer sseCancel()
+	sseCtx := t.Context()
 	req, _ := http.NewRequestWithContext(sseCtx, "GET", "http://"+addr+"/events", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
