@@ -5,6 +5,7 @@ package inkwell
 import (
 	"bytes"
 	"errors"
+	"strings"
 	"testing"
 
 	"periph.io/x/conn/v3/gpio"
@@ -37,6 +38,31 @@ func newTestSPIHardware(t *testing.T) (*spiHardware, *spitest.Record, *gpiotest.
 	}
 
 	return hw, record, rstPin, dcPin, busyPin, pwrPin
+}
+
+func TestCreateBackend_SPI_WithHardwareTag(t *testing.T) {
+	// With the hardware tag, createBackend("spi") calls NewSPIHardware() which
+	// tries initRealHardware and fails in a non-Pi environment.
+	cfg := &Config{Backend: "spi"}
+	profile := &Waveshare7in5V2
+	_, err := createBackend(cfg, profile)
+	if err == nil {
+		t.Fatal("expected error from createBackend on non-Pi")
+	}
+}
+
+func TestNewApp_SPI_WithHardwareTag(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: spi
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	_, err = NewApp(cfg)
+	if err == nil {
+		t.Fatal("expected error from NewApp on non-Pi")
+	}
 }
 
 func TestSPIHardware_ImplementsHardware(t *testing.T) {

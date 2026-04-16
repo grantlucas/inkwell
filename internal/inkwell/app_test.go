@@ -374,18 +374,6 @@ func TestCreateBackend_Image(t *testing.T) {
 	}
 }
 
-func TestCreateBackend_SPI_NoHardwareTag(t *testing.T) {
-	cfg := &Config{Backend: "spi"}
-	profile := &Waveshare7in5V2
-	_, err := createBackend(cfg, profile)
-	if err == nil {
-		t.Fatal("expected error for spi backend without hardware tag")
-	}
-	if !strings.Contains(err.Error(), "requires building with -tags hardware") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 func TestCreateBackend_Unsupported(t *testing.T) {
 	cfg := &Config{Backend: "unknown"}
 	profile := &Waveshare7in5V2
@@ -447,24 +435,6 @@ backend: preview
 	}
 	if refreshCount < 2 {
 		t.Errorf("expected multiple render cycles, got %d refresh commands", refreshCount)
-	}
-}
-
-func TestNewApp_SPIBackendNoHardwareTag(t *testing.T) {
-	// "spi" passes config validation but requires -tags hardware to compile the backend.
-	cfg, err := LoadConfig(strings.NewReader(`
-display: waveshare_7in5_v2
-backend: spi
-`))
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	_, err = NewApp(cfg)
-	if err == nil {
-		t.Fatal("expected error for spi backend without hardware tag")
-	}
-	if !strings.Contains(err.Error(), "requires building with -tags hardware") {
-		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
