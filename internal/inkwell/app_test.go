@@ -587,8 +587,7 @@ func TestRun_ShutdownTimeoutFallsBackToClose(t *testing.T) {
 
 	// Open a long-lived SSE connection to keep the server busy during shutdown.
 	addr := app.Addr().String()
-	sseCtx, sseCancel := context.WithCancel(context.Background())
-	defer sseCancel()
+	sseCtx := t.Context()
 	req, _ := http.NewRequestWithContext(sseCtx, "GET", "http://"+addr+"/events", nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
