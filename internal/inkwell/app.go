@@ -191,6 +191,12 @@ func (a *App) Run(ctx context.Context) error {
 	}
 }
 
+// createSPIBackendFn creates the SPI hardware backend. Overridden by
+// spi_backend_hardware.go when built with -tags hardware.
+var createSPIBackendFn = func(_ *Config, _ *DisplayProfile) (Hardware, error) {
+	return nil, fmt.Errorf("spi backend requires building with -tags hardware")
+}
+
 // createBackend creates a Hardware backend based on config.
 func createBackend(cfg *Config, profile *DisplayProfile) (Hardware, error) {
 	switch cfg.Backend {
@@ -198,6 +204,8 @@ func createBackend(cfg *Config, profile *DisplayProfile) (Hardware, error) {
 		return NewWebPreview(profile), nil
 	case "image":
 		return NewImageBackend(profile, cfg.Image.OutputDir), nil
+	case "spi":
+		return createSPIBackendFn(cfg, profile)
 	default:
 		return nil, fmt.Errorf("unsupported backend: %q", cfg.Backend)
 	}
