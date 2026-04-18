@@ -4,20 +4,14 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-)
 
-// Widget renders content into a sub-region of the display frame.
-type Widget interface {
-	// Bounds returns the rectangle this widget occupies on the display.
-	Bounds() image.Rectangle
-	// Render draws the widget's content into the given frame.
-	Render(frame *image.Paletted) error
-}
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+)
 
 // Compositor collects widgets and renders them into a single display frame.
 type Compositor struct {
 	profile *DisplayProfile
-	widgets []Widget
+	widgets []widget.Widget
 }
 
 // NewCompositor creates a Compositor for the given display profile.
@@ -27,7 +21,7 @@ func NewCompositor(profile *DisplayProfile) *Compositor {
 
 // AddWidget adds a widget to the compositor's render list.
 // Nil widgets are silently ignored.
-func (c *Compositor) AddWidget(w Widget) {
+func (c *Compositor) AddWidget(w widget.Widget) {
 	if w == nil {
 		return
 	}

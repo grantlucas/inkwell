@@ -1,4 +1,4 @@
-package inkwell
+package clock
 
 import (
 	"image"
@@ -9,29 +9,34 @@ import (
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
 	"golang.org/x/image/math/fixed"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
-// ClockWidget renders the current time as "HH:MM" into a region of the frame.
-type ClockWidget struct {
+// Compile-time interface check.
+var _ widget.Widget = (*Widget)(nil)
+
+// Widget renders the current time as "HH:MM" into a region of the frame.
+type Widget struct {
 	bounds image.Rectangle
 	now    func() time.Time
 }
 
-// NewClockWidget creates a ClockWidget that renders into bounds. The now
+// New creates a clock Widget that renders into bounds. The now
 // function is called each Render to determine the displayed time; pass
 // time.Now for live output or a fixed function for deterministic tests.
-func NewClockWidget(bounds image.Rectangle, now func() time.Time) *ClockWidget {
-	return &ClockWidget{bounds: bounds, now: now}
+func New(bounds image.Rectangle, now func() time.Time) *Widget {
+	return &Widget{bounds: bounds, now: now}
 }
 
 // Bounds returns the rectangle this widget occupies on the display.
-func (w *ClockWidget) Bounds() image.Rectangle {
+func (w *Widget) Bounds() image.Rectangle {
 	return w.bounds
 }
 
 // Render draws the current time as "HH:MM" into frame using the 7×13
 // basicfont. Text is black on white, centred vertically within the bounds.
-func (w *ClockWidget) Render(frame *image.Paletted) error {
+func (w *Widget) Render(frame *image.Paletted) error {
 	text := w.now().Format("15:04")
 
 	face := basicfont.Face7x13

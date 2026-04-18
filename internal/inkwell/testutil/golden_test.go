@@ -1,4 +1,4 @@
-package inkwell
+package testutil
 
 import (
 	"bytes"
@@ -13,13 +13,13 @@ import (
 	"testing"
 )
 
-// goldenFixDir overrides goldenDir for test isolation and restores it on cleanup.
+// goldenFixDir overrides GoldenDir for test isolation and restores it on cleanup.
 func goldenFixDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	old := goldenDir
-	goldenDir = dir
-	t.Cleanup(func() { goldenDir = old })
+	old := GoldenDir
+	GoldenDir = dir
+	t.Cleanup(func() { GoldenDir = old })
 	return dir
 }
 
@@ -224,15 +224,15 @@ func TestAssertGoldenPNG_MissingFile(t *testing.T) {
 // --- error-path tests for 100% coverage ---
 
 func TestAssertGoldenBuffer_UpdateMkdirError(t *testing.T) {
-	// Point goldenDir at a path that cannot be created (a file blocks it).
+	// Point GoldenDir at a path that cannot be created (a file blocks it).
 	base := t.TempDir()
 	blocker := filepath.Join(base, "blocker")
 	if err := os.WriteFile(blocker, []byte{}, 0o644); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
-	old := goldenDir
-	goldenDir = filepath.Join(blocker, "subdir") // blocker is a file, not a dir
-	defer func() { goldenDir = old }()
+	old := GoldenDir
+	GoldenDir = filepath.Join(blocker, "subdir") // blocker is a file, not a dir
+	defer func() { GoldenDir = old }()
 
 	oldUpdate := *Update
 	*Update = true
@@ -274,9 +274,9 @@ func TestAssertGoldenPNG_UpdateMkdirError(t *testing.T) {
 	if err := os.WriteFile(blocker, []byte{}, 0o644); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
-	old := goldenDir
-	goldenDir = filepath.Join(blocker, "subdir")
-	defer func() { goldenDir = old }()
+	old := GoldenDir
+	GoldenDir = filepath.Join(blocker, "subdir")
+	defer func() { GoldenDir = old }()
 
 	oldUpdate := *Update
 	*Update = true
@@ -325,11 +325,11 @@ func TestAssertGoldenPNG_UpdateEncodeError(t *testing.T) {
 	*Update = true
 	defer func() { *Update = oldUpdate }()
 
-	oldEncode := goldenEncodePNG
-	goldenEncodePNG = func(_ io.Writer, _ image.Image) error {
+	oldEncode := GoldenEncodePNG
+	GoldenEncodePNG = func(_ io.Writer, _ image.Image) error {
 		return os.ErrInvalid
 	}
-	defer func() { goldenEncodePNG = oldEncode }()
+	defer func() { GoldenEncodePNG = oldEncode }()
 
 	img := image.NewPaletted(image.Rect(0, 0, 2, 2),
 		color.Palette{color.White, color.Black})
@@ -359,11 +359,11 @@ func TestAssertGoldenPNG_CompareEncodeError(t *testing.T) {
 	}
 	f.Close()
 
-	oldEncode := goldenEncodePNG
-	goldenEncodePNG = func(_ io.Writer, _ image.Image) error {
+	oldEncode := GoldenEncodePNG
+	GoldenEncodePNG = func(_ io.Writer, _ image.Image) error {
 		return os.ErrInvalid
 	}
-	defer func() { goldenEncodePNG = oldEncode }()
+	defer func() { GoldenEncodePNG = oldEncode }()
 
 	spy := runSpy(t, func(s *spyT) {
 		AssertGoldenPNG(s, img)
