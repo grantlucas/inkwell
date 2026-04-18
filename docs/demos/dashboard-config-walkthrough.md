@@ -81,7 +81,7 @@ The dashboard config is read from `inkwell.yaml` and the clock widget is instant
 ![Web preview showing the clock widget centered on the 800x480 display](docs/demos/dashboard-config-walkthrough-preview-page.png)
 ```
 
-![Web preview showing the clock widget centered on the 800x480 display](dcd4eb5d-2026-04-18.png)
+![Web preview showing the clock widget centered on the 800x480 display](dashboard-config-walkthrough/dcd4eb5d-2026-04-18.png)
 
 The raw frame PNG is also available at `/frame.png?scale=2` for pixel-level inspection. This is exactly what would be sent to the e-ink hardware:
 
@@ -89,7 +89,7 @@ The raw frame PNG is also available at `/frame.png?scale=2` for pixel-level insp
 ![Raw 2x frame PNG — the actual display buffer rendered from YAML config](docs/demos/dashboard-config-walkthrough-frame-2x.png)
 ```
 
-![Raw 2x frame PNG — the actual display buffer rendered from YAML config](922562bc-2026-04-18.png)
+![Raw 2x frame PNG — the actual display buffer rendered from YAML config](dashboard-config-walkthrough/922562bc-2026-04-18.png)
 
 ## Step 4: Change the Layout — Just Edit YAML
 
@@ -121,7 +121,7 @@ The clock moved to the top-right corner and now shows 12-hour format — just by
 ![Clock repositioned to top-right with 12-hour format via YAML change](docs/demos/dashboard-config-walkthrough-top-right.png)
 ```
 
-![Clock repositioned to top-right with 12-hour format via YAML change](451505dc-2026-04-18.png)
+![Clock repositioned to top-right with 12-hour format via YAML change](dashboard-config-walkthrough/451505dc-2026-04-18.png)
 
 ## Step 5: How It Works Under the Hood
 
