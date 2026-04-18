@@ -32,9 +32,13 @@ func (d *Dashboard) CurrentScreen() *Screen {
 	if len(d.screens) == 0 {
 		return nil
 	}
-	if d.rotateInterval > 0 && d.now().Sub(d.lastRotation) >= d.rotateInterval {
-		d.current = (d.current + 1) % len(d.screens)
-		d.lastRotation = d.now()
+	if d.rotateInterval > 0 {
+		now := d.now()
+		if elapsed := now.Sub(d.lastRotation); elapsed >= d.rotateInterval {
+			steps := int(elapsed / d.rotateInterval)
+			d.current = (d.current + steps) % len(d.screens)
+			d.lastRotation = d.lastRotation.Add(time.Duration(steps) * d.rotateInterval)
+		}
 	}
 	return d.screens[d.current]
 }

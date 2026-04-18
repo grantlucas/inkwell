@@ -66,6 +66,23 @@ func TestDashboard_RotatesAfterInterval(t *testing.T) {
 	}
 }
 
+func TestDashboard_SkipsMultipleIntervals(t *testing.T) {
+	s1 := NewScreen("first", nil)
+	s2 := NewScreen("second", nil)
+	s3 := NewScreen("third", nil)
+
+	now := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	clock := func() time.Time { return now }
+
+	d := NewDashboard([]*Screen{s1, s2, s3}, 5*time.Minute, clock)
+
+	// Advance 12 minutes in one jump — should skip 2 intervals (land on third).
+	now = now.Add(12 * time.Minute)
+	if got := d.CurrentScreen(); got != s3 {
+		t.Errorf("after 12m jump = %q, want third", got.Name)
+	}
+}
+
 func TestDashboard_ZeroIntervalNeverRotates(t *testing.T) {
 	s1 := NewScreen("first", nil)
 	s2 := NewScreen("second", nil)
