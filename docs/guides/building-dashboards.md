@@ -110,21 +110,67 @@ func (w *Widget) Render(frame *image.Paletted) error {
 }
 ```
 
-### Adding it to the compositor
+### Registering with the widget factory
 
-Widgets are registered with the compositor, which renders them in order:
+Each widget package exports a `Factory` function so it can be
+instantiated from YAML config. The factory receives bounds, a config
+map, and injectable dependencies:
+
+<!-- markdownlint-disable MD013 -->
 
 ```go
-comp := NewCompositor(profile)
-comp.AddWidget(label.New(image.Rect(0, 0, 800, 30), "Hello from Inkwell"))
-comp.AddWidget(clock.New(image.Rect(650, 0, 800, 30), time.Now))
+func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
+    text, _ := config["text"].(string)
+    return New(bounds, text), nil
+}
 ```
 
-## Laying Out a Dashboard
+<!-- markdownlint-enable MD013 -->
 
-You position widgets by specifying pixel coordinates with
-`image.Rect(left, top, right, bottom)`. The origin `(0, 0)` is the
-top-left corner of the display.
+Register it in `internal/inkwell/widgets/registry.go`:
+
+```go
+r.Register("label", label.Factory)
+```
+
+## Configuring Dashboards in YAML
+
+Dashboards, screens, and widget layouts are defined in `inkwell.yaml`.
+You don't need to write Go code to arrange widgets — just edit the
+config.
+
+### Concepts
+
+- **Widget** — a Go implementation that renders content (code)
+- **Screen** — a named layout of widgets with positions (YAML)
+- **Dashboard** — a collection of screens, optionally rotating (YAML)
+
+### Example config
+
+```yaml
+dashboard:
+  rotate_interval: 5m  # optional, omit for single-screen
+  screens:
+    - name: main
+      widgets:
+        - type: clock
+          bounds: [650, 0, 800, 50]
+          config:
+            format: "15:04"
+        - type: label
+          bounds: [0, 0, 650, 50]
+          config:
+            text: "My Dashboard"
+    - name: detail
+      widgets:
+        - type: clock
+          bounds: [0, 0, 200, 50]
+```
+
+### Bounds format
+
+`bounds` is `[x0, y0, x1, y1]` matching Go's `image.Rect()`. The
+origin `(0, 0)` is the top-left corner of the display.
 
 ### Planning your layout
 
@@ -144,20 +190,27 @@ three-panel dashboard:
 (0,480)                       (550)      (800,480)
 ```
 
-Translated to code:
+Translated to YAML:
 
-```go
-// Title bar — full width, 50px tall
-comp.AddWidget(label.New(image.Rect(0, 0, 650, 50), "My Dashboard"))
-
-// Clock — top right
-comp.AddWidget(clock.New(image.Rect(650, 0, 800, 50), time.Now))
-
-// Main content area
-comp.AddWidget(weather.New(image.Rect(0, 50, 550, 480), fetchTemp))
-
-// Sidebar
-comp.AddWidget(calendar.New(image.Rect(550, 50, 800, 480), fetchEvents))
+```yaml
+dashboard:
+  screens:
+    - name: main
+      widgets:
+        - type: label
+          bounds: [0, 0, 650, 50]
+          config:
+            text: "My Dashboard"
+        - type: clock
+          bounds: [650, 0, 800, 50]
+          config:
+            format: "15:04"
+        - type: weather
+          bounds: [0, 50, 550, 480]
+          config:
+            location: "Toronto, CA"
+        - type: calendar
+          bounds: [550, 50, 800, 480]
 ```
 
 ### Layout tips
@@ -225,11 +278,11 @@ directly, it accepts a `now func() time.Time` parameter:
 
 ```go
 // In production
-w := clock.New(bounds, time.Now)
+w := clock.New(bounds, time.Now, "15:04")
 
 // In tests — deterministic, reproducible
 fixed := time.Date(2024, 1, 1, 14, 30, 0, 0, time.UTC)
-w := clock.New(bounds, func() time.Time { return fixed })
+w := clock.New(bounds, func() time.Time { return fixed }, "15:04")
 ```
 
 Apply this pattern to any widget that depends on external data (API
@@ -340,7 +393,8 @@ Here's the typical flow for building a new dashboard component:
 2. **Create the widget** — implement `Bounds()` and `Render()` in a
    self-contained subpackage under `internal/inkwell/widgets/<name>/`
 3. **Write tests** — at minimum a render test and a golden file test
-4. **Wire it up** — add the widget to the compositor
+4. **Wire it up** — register the factory and add the widget to your YAML
+   config
 5. **Preview it** — run Inkwell and check the browser
 6. **Iterate** — adjust coordinates, font sizes, and content until it
    looks good
