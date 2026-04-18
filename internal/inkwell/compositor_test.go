@@ -3,7 +3,9 @@ package inkwell
 import (
 	"errors"
 	"image"
-"testing"
+	"testing"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
 // fillWidget fills its bounds with black (palette index 1).
@@ -32,11 +34,10 @@ func (w *errorWidget) Bounds() image.Rectangle { return w.bounds }
 
 func (w *errorWidget) Render(_ *image.Paletted) error { return w.err }
 
-func TestCompositor_AddWidget_Nil(t *testing.T) {
+func TestCompositor_NilWidget(t *testing.T) {
 	comp := NewCompositor(imageTestProfile())
-	comp.AddWidget(nil)
 
-	frame, err := comp.Render()
+	frame, err := comp.Render([]widget.Widget{nil})
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -50,7 +51,7 @@ func TestCompositor_ZeroWidgets(t *testing.T) {
 	p := imageTestProfile()
 	comp := NewCompositor(p)
 
-	frame, err := comp.Render()
+	frame, err := comp.Render(nil)
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -89,9 +90,7 @@ func TestCompositor_OneWidget(t *testing.T) {
 	comp := NewCompositor(p)
 
 	widgetBounds := image.Rect(2, 2, 6, 6) // 4x4 block
-	comp.AddWidget(&fillWidget{bounds: widgetBounds})
-
-	frame, err := comp.Render()
+	frame, err := comp.Render([]widget.Widget{&fillWidget{bounds: widgetBounds}})
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -119,10 +118,12 @@ func TestCompositor_TwoWidgets(t *testing.T) {
 	comp := NewCompositor(p)
 
 	// Two non-overlapping widgets
-	comp.AddWidget(&fillWidget{bounds: image.Rect(0, 0, 4, 4)})   // top-left
-	comp.AddWidget(&fillWidget{bounds: image.Rect(8, 8, 12, 12)}) // bottom-right
+	widgets := []widget.Widget{
+		&fillWidget{bounds: image.Rect(0, 0, 4, 4)},   // top-left
+		&fillWidget{bounds: image.Rect(8, 8, 12, 12)}, // bottom-right
+	}
 
-	frame, err := comp.Render()
+	frame, err := comp.Render(widgets)
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -151,7 +152,7 @@ func TestCompositor_TwoWidgets(t *testing.T) {
 
 func TestCompositor_NilProfile(t *testing.T) {
 	comp := NewCompositor(nil)
-	_, err := comp.Render()
+	_, err := comp.Render(nil)
 	if err == nil {
 		t.Fatal("expected error for nil profile, got nil")
 	}
@@ -159,13 +160,13 @@ func TestCompositor_NilProfile(t *testing.T) {
 
 func TestCompositor_InvalidDimensions(t *testing.T) {
 	comp := NewCompositor(&DisplayProfile{Width: 0, Height: 10, Color: BW})
-	_, err := comp.Render()
+	_, err := comp.Render(nil)
 	if err == nil {
 		t.Fatal("expected error for zero width, got nil")
 	}
 
 	comp = NewCompositor(&DisplayProfile{Width: 10, Height: -1, Color: BW})
-	_, err = comp.Render()
+	_, err = comp.Render(nil)
 	if err == nil {
 		t.Fatal("expected error for negative height, got nil")
 	}
@@ -173,7 +174,7 @@ func TestCompositor_InvalidDimensions(t *testing.T) {
 
 func TestCompositor_UnsupportedColorDepth(t *testing.T) {
 	comp := NewCompositor(&DisplayProfile{Width: 16, Height: 16, Color: Color7})
-	_, err := comp.Render()
+	_, err := comp.Render(nil)
 	if err == nil {
 		t.Fatal("expected error for unsupported color depth, got nil")
 	}
@@ -184,12 +185,11 @@ func TestCompositor_ErrorPropagation(t *testing.T) {
 	comp := NewCompositor(p)
 
 	expectedErr := errors.New("widget render failed")
-	comp.AddWidget(&errorWidget{
-		bounds: image.Rect(0, 0, 4, 4),
-		err:    expectedErr,
-	})
+	widgets := []widget.Widget{
+		&errorWidget{bounds: image.Rect(0, 0, 4, 4), err: expectedErr},
+	}
 
-	_, err := comp.Render()
+	_, err := comp.Render(widgets)
 	if err == nil {
 		t.Fatal("expected error from Render, got nil")
 	}

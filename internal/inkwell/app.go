@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
 // HTTPServer is implemented by Hardware backends that also serve HTTP.
@@ -23,6 +25,7 @@ type App struct {
 	epd        *EPD
 	comp       *Compositor
 	profile    *DisplayProfile
+	widgets    []widget.Widget
 	interval   time.Duration
 	listenAddr      string
 	listener        net.Listener
@@ -163,7 +166,7 @@ func (a *App) Run(ctx context.Context) error {
 	defer ticker.Stop()
 
 	for {
-		frame, err := a.comp.Render()
+		frame, err := a.comp.Render(a.widgets)
 		if err != nil {
 			a.epd.Close()
 			return fmt.Errorf("render: %w", err)

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
 // Compile-time assertion: WebPreview satisfies HTTPServer.
@@ -330,7 +332,7 @@ backend: preview
 		t.Fatalf("NewApp: %v", err)
 	}
 
-	app.comp.AddWidget(&brokenWidget{bounds: image.Rect(0, 0, 10, 10)})
+	app.widgets = []widget.Widget{&brokenWidget{bounds: image.Rect(0, 0, 10, 10)}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()

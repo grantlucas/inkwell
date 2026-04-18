@@ -8,10 +8,9 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
-// Compositor collects widgets and renders them into a single display frame.
+// Compositor renders widgets into a single display frame.
 type Compositor struct {
 	profile *DisplayProfile
-	widgets []widget.Widget
 }
 
 // NewCompositor creates a Compositor for the given display profile.
@@ -19,18 +18,10 @@ func NewCompositor(profile *DisplayProfile) *Compositor {
 	return &Compositor{profile: profile}
 }
 
-// AddWidget adds a widget to the compositor's render list.
-// Nil widgets are silently ignored.
-func (c *Compositor) AddWidget(w widget.Widget) {
-	if w == nil {
-		return
-	}
-	c.widgets = append(c.widgets, w)
-}
-
 // Render creates a new frame, calls each widget's Render in order, and returns
 // the composited frame. The palette is determined by the display profile's color depth.
-func (c *Compositor) Render() (*image.Paletted, error) {
+// Nil widgets in the slice are silently skipped.
+func (c *Compositor) Render(widgets []widget.Widget) (*image.Paletted, error) {
 	if c.profile == nil {
 		return nil, fmt.Errorf("compositor profile is nil")
 	}
@@ -50,7 +41,10 @@ func (c *Compositor) Render() (*image.Paletted, error) {
 		palette,
 	)
 
-	for _, w := range c.widgets {
+	for _, w := range widgets {
+		if w == nil {
+			continue
+		}
 		if err := w.Render(frame); err != nil {
 			return nil, err
 		}
