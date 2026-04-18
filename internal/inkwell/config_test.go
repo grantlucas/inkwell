@@ -187,6 +187,22 @@ dashboard:
 	}
 }
 
+func TestDuration_NegativeRotateInterval(t *testing.T) {
+	input := `
+display: waveshare_7in5_v2
+backend: preview
+dashboard:
+  rotate_interval: -5m
+`
+	_, err := LoadConfig(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected error for negative rotate interval")
+	}
+	if !strings.Contains(err.Error(), "non-negative") {
+		t.Errorf("error = %q, want mention of non-negative", err.Error())
+	}
+}
+
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 	if cfg.Display != "waveshare_7in5_v2" {

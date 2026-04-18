@@ -93,5 +93,9 @@ func LoadConfig(r io.Reader) (*Config, error) {
 		return nil, fmt.Errorf("invalid backend: %q (must be preview, image, or spi)", cfg.Backend)
 	}
 
+	if cfg.Dashboard.RotateInterval < 0 {
+		return nil, fmt.Errorf("dashboard.rotate_interval must be non-negative")
+	}
+
 	return cfg, nil
 }
