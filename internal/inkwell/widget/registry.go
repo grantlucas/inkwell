@@ -25,8 +25,14 @@ func NewRegistry() *Registry {
 }
 
 // Register adds a widget factory under the given type name.
-// It panics if typeName is already registered.
+// It panics if typeName is empty, f is nil, or typeName is already registered.
 func (r *Registry) Register(typeName string, f Factory) {
+	if typeName == "" {
+		panic("widget type name must not be empty")
+	}
+	if f == nil {
+		panic(fmt.Sprintf("widget type %q has nil factory", typeName))
+	}
 	if _, exists := r.factories[typeName]; exists {
 		panic(fmt.Sprintf("widget type %q already registered", typeName))
 	}

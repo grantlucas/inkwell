@@ -16,6 +16,28 @@ type stubWidget struct {
 func (s *stubWidget) Bounds() image.Rectangle            { return s.bounds }
 func (s *stubWidget) Render(_ *image.Paletted) error     { return nil }
 
+func TestRegistry_EmptyNamePanics(t *testing.T) {
+	r := widget.NewRegistry()
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic on empty type name")
+		}
+	}()
+	r.Register("", func(image.Rectangle, map[string]any, widget.Deps) (widget.Widget, error) {
+		return nil, nil
+	})
+}
+
+func TestRegistry_NilFactoryPanics(t *testing.T) {
+	r := widget.NewRegistry()
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic on nil factory")
+		}
+	}()
+	r.Register("test", nil)
+}
+
 func TestRegistry_DuplicateRegisterPanics(t *testing.T) {
 	r := widget.NewRegistry()
 	dummy := widget.Factory(func(image.Rectangle, map[string]any, widget.Deps) (widget.Widget, error) {
