@@ -6,6 +6,8 @@ import (
 	"image/draw"
 	"time"
 
+	"fmt"
+
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
 	"golang.org/x/image/math/fixed"
@@ -16,17 +18,38 @@ import (
 // Compile-time interface check.
 var _ widget.Widget = (*Widget)(nil)
 
-// Widget renders the current time as "HH:MM" into a region of the frame.
+// Widget renders the current time into a region of the frame.
 type Widget struct {
 	bounds image.Rectangle
 	now    func() time.Time
+	format string
 }
 
-// New creates a clock Widget that renders into bounds. The now
-// function is called each Render to determine the displayed time; pass
-// time.Now for live output or a fixed function for deterministic tests.
-func New(bounds image.Rectangle, now func() time.Time) *Widget {
-	return &Widget{bounds: bounds, now: now}
+// New creates a clock Widget that renders into bounds using the given time
+// format string. The now function is called each Render to determine the
+// displayed time; pass time.Now for live output or a fixed function for
+// deterministic tests.
+func New(bounds image.Rectangle, now func() time.Time, format string) *Widget {
+	return &Widget{bounds: bounds, now: now, format: format}
+}
+
+// Factory creates a clock Widget from config and dependencies.
+// Supported config keys:
+//   - format (string): Go time format string. Default: "15:04"
+func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
+	format := "15:04"
+	if v, ok := config["format"]; ok {
+		s, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("clock: format must be a string, got %T", v)
+		}
+		format = s
+	}
+	now := deps.Now
+	if now == nil {
+		now = time.Now
+	}
+	return New(bounds, now, format), nil
 }
 
 // Bounds returns the rectangle this widget occupies on the display.
@@ -37,7 +60,7 @@ func (w *Widget) Bounds() image.Rectangle {
 // Render draws the current time as "HH:MM" into frame using the 7×13
 // basicfont. Text is black on white, centred vertically within the bounds.
 func (w *Widget) Render(frame *image.Paletted) error {
-	text := w.now().Format("15:04")
+	text := w.now().Format(w.format)
 
 	face := basicfont.Face7x13
 	advance := font.MeasureString(face, text)
