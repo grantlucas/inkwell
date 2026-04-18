@@ -232,6 +232,9 @@ func (a *App) Run(ctx context.Context) error {
 // the registry. It validates that widget bounds fit within the display.
 func buildDashboard(cfg *Config, profile *DisplayProfile, registry *widget.Registry, deps widget.Deps) (*Dashboard, error) {
 	if len(cfg.Dashboard.Screens) == 0 {
+		if cfg.Dashboard.RotateInterval > 0 {
+			return nil, fmt.Errorf("dashboard.rotate_interval is set but no screens are configured")
+		}
 		return NewDashboard([]*Screen{NewScreen("default", nil)}, 0, deps.Now), nil
 	}
 

@@ -361,6 +361,20 @@ dashboard:
 	}
 }
 
+func TestBuildDashboard_RotateIntervalWithoutScreens(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Dashboard.RotateInterval = Duration(5 * time.Minute)
+	// No screens configured
+
+	_, err := buildDashboard(cfg, &Waveshare7in5V2, widget.NewRegistry(), widget.Deps{Now: time.Now})
+	if err == nil {
+		t.Fatal("expected error for rotate_interval without screens")
+	}
+	if !strings.Contains(err.Error(), "no screens are configured") {
+		t.Errorf("error = %q, want mention of no screens", err.Error())
+	}
+}
+
 func TestBuildDashboard_EmptyConfig(t *testing.T) {
 	cfg := DefaultConfig()
 	profile := &Waveshare7in5V2
