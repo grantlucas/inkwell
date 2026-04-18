@@ -18,17 +18,56 @@ browser refreshes automatically — no need to hit reload.
 
 ## How Dashboards Work
 
-A dashboard is a collection of **widgets** arranged on an 800×480 pixel
-canvas (matching the Waveshare 7.5" e-ink display). Each widget owns a
-rectangular region of the screen and draws its own content.
+Inkwell organizes what appears on your display using three concepts:
 
-The **compositor** walks through the widget list in order and asks each
-one to render into the shared frame. The result is packed into the
-display's binary format and sent to either the e-ink hardware or the
-web preview, depending on your configuration.
+- **Widget** — a Go type that renders content into a rectangular
+  region of the display (e.g., a clock, weather summary, calendar).
+  Widgets are code.
+- **Screen** — a named layout of widgets with positions. Each screen
+  defines what the display looks like at a given moment. Screens are
+  defined in YAML.
+- **Dashboard** — a collection of one or more screens. A dashboard
+  with a single screen shows that screen forever. A dashboard with
+  multiple screens rotates through them on a configurable interval.
+  Dashboards are defined in YAML.
 
 ```text
-+-- Your Dashboard ----------------------------+
+Dashboard
+  ├── Screen "home"
+  │     ├── clock widget    @ [650, 0, 800, 50]
+  │     ├── weather widget  @ [0, 50, 550, 480]
+  │     └── calendar widget @ [550, 50, 800, 480]
+  │
+  └── Screen "detail"
+        └── clock widget    @ [300, 210, 500, 270]
+```
+
+On each render tick, the dashboard picks the current screen, the
+compositor draws that screen's widgets into a frame, and the frame
+is sent to the display (hardware or web preview).
+
+### Screen rotation
+
+If you define multiple screens and set `rotate_interval`, the
+dashboard automatically cycles through them:
+
+```yaml
+dashboard:
+  rotate_interval: 5m
+  screens:
+    - name: home
+      widgets: [...]
+    - name: detail
+      widgets: [...]
+```
+
+With a single screen, omit `rotate_interval` — or don't set it —
+and the dashboard stays on that screen permanently.
+
+### What a single screen looks like
+
+```text
++-- Screen "home" ----------------------------+
 |                                              |
 |  +-------------------+ +------------------+  |
 |  | Widget A          | | Widget B         |  |
@@ -140,15 +179,9 @@ For tests or embedding, you can pass a custom registry via
 
 ## Configuring Dashboards in YAML
 
-Dashboards, screens, and widget layouts are defined in `inkwell.yaml`.
-You don't need to write Go code to arrange widgets — just edit the
-config.
-
-### Concepts
-
-- **Widget** — a Go implementation that renders content (code)
-- **Screen** — a named layout of widgets with positions (YAML)
-- **Dashboard** — a collection of screens, optionally rotating (YAML)
+Screens and dashboards are defined in `inkwell.yaml`. You don't need
+to write Go code to arrange widgets — just edit the config and
+restart.
 
 ### Example config
 
@@ -391,17 +424,20 @@ connection and updates independently.
 
 ## Putting It All Together
 
-Here's the typical flow for building a new dashboard component:
+Here's the typical flow for building a new dashboard:
 
-1. **Plan the layout** — sketch where each widget goes on the 800×480
-   canvas
-2. **Create the widget** — implement `Bounds()` and `Render()` in a
-   self-contained subpackage under `internal/inkwell/widgets/<name>/`
+1. **Plan your screens** — decide how many screens you need and
+   sketch the widget layout for each one on the 800×480 canvas
+2. **Create the widgets** — implement `Bounds()` and `Render()` in
+   self-contained subpackages under `internal/inkwell/widgets/<name>/`
 3. **Write tests** — at minimum a render test and a golden file test
-4. **Wire it up** — register the factory and add the widget to your YAML
-   config
-5. **Preview it** — run Inkwell and check the browser
-6. **Iterate** — adjust coordinates, font sizes, and content until it
-   looks good
-7. **Verify coverage** — the project requires 100% statement coverage
-8. **Commit** — golden PNGs are committed to git for visual diffing
+   per widget
+4. **Register factories** — add each widget's `Factory` to
+   `NewDefaultRegistry()` in `widgets/registry.go`
+5. **Configure in YAML** — define your screens, widget placements,
+   and rotation interval in `inkwell.yaml`
+6. **Preview it** — run Inkwell and check the browser
+7. **Iterate** — adjust bounds, config, or add screens without
+   recompiling — just edit YAML and restart
+8. **Verify coverage** — the project requires 100% statement coverage
+9. **Commit** — golden PNGs are committed to git for visual diffing
