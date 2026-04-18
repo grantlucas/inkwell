@@ -1,6 +1,7 @@
 package clock
 
 import (
+	"bytes"
 	"image"
 	"image/color"
 	"testing"
@@ -118,15 +119,29 @@ func TestFactory_CustomFormat(t *testing.T) {
 	fixedTime := time.Date(2024, 1, 1, 14, 30, 0, 0, time.UTC)
 	deps := widget.Deps{Now: fixedClock(fixedTime)}
 	bounds := image.Rect(0, 0, 200, 50)
+	palette := color.Palette{color.White, color.Black}
 
 	w, err := Factory(bounds, map[string]any{"format": "3:04 PM"}, deps)
 	if err != nil {
 		t.Fatalf("Factory: %v", err)
 	}
 
-	frame := image.NewPaletted(bounds, color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(bounds, palette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
+	}
+
+	// Verify custom format produces different output than default.
+	defaultWidget, err := Factory(bounds, nil, deps)
+	if err != nil {
+		t.Fatalf("Factory default: %v", err)
+	}
+	defaultFrame := image.NewPaletted(bounds, palette)
+	if err := defaultWidget.Render(defaultFrame); err != nil {
+		t.Fatalf("Render default: %v", err)
+	}
+	if bytes.Equal(frame.Pix, defaultFrame.Pix) {
+		t.Fatal("custom format rendered identically to the default format")
 	}
 
 	hasBlack := false

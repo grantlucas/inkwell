@@ -548,11 +548,22 @@ backend: preview
 		t.Fatalf("LoadConfig: %v", err)
 	}
 
+	cfg.Dashboard = DashboardConfig{Screens: []ScreenConfig{{Name: "main", Widgets: []WidgetConfig{{Type: "probe", Bounds: [4]int{0, 0, 10, 10}}}}}}
+	reg := widget.NewRegistry()
+	var got time.Time
+	reg.Register("probe", func(b image.Rectangle, _ map[string]any, d widget.Deps) (widget.Widget, error) {
+		got = d.Now()
+		return &stubWidget{bounds: b}, nil
+	})
+
 	mock := &MockHardware{}
 	deps := widget.Deps{Now: func() time.Time { return fixedTime }}
-	_, err = NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond), WithDeps(deps))
+	_, err = NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond), WithRegistry(reg), WithDeps(deps))
 	if err != nil {
 		t.Fatalf("NewApp with WithDeps: %v", err)
+	}
+	if !got.Equal(fixedTime) {
+		t.Errorf("deps.Now propagated time = %v, want %v", got, fixedTime)
 	}
 }
 
