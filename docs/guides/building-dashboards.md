@@ -127,11 +127,16 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 
 <!-- markdownlint-enable MD013 -->
 
-Register it in `internal/inkwell/widgets/registry.go`:
+Register it inside the `NewDefaultRegistry()` function in
+`internal/inkwell/widgets/registry.go` — this is the registry that
+`NewApp` uses by default:
 
 ```go
 r.Register("label", label.Factory)
 ```
+
+For tests or embedding, you can pass a custom registry via
+`WithRegistry(...)` when constructing the app.
 
 ## Configuring Dashboards in YAML
 
