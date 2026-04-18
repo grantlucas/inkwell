@@ -18,17 +18,56 @@ browser refreshes automatically — no need to hit reload.
 
 ## How Dashboards Work
 
-A dashboard is a collection of **widgets** arranged on an 800×480 pixel
-canvas (matching the Waveshare 7.5" e-ink display). Each widget owns a
-rectangular region of the screen and draws its own content.
+Inkwell organizes what appears on your display using three concepts:
 
-The **compositor** walks through the widget list in order and asks each
-one to render into the shared frame. The result is packed into the
-display's binary format and sent to either the e-ink hardware or the
-web preview, depending on your configuration.
+- **Widget** — a Go type that renders content into a rectangular
+  region of the display (e.g., a clock, weather summary, calendar).
+  Widgets are code.
+- **Screen** — a named layout of widgets with positions. Each screen
+  defines what the display looks like at a given moment. Screens are
+  defined in YAML.
+- **Dashboard** — a collection of one or more screens. A dashboard
+  with a single screen shows that screen forever. A dashboard with
+  multiple screens rotates through them on a configurable interval.
+  Dashboards are defined in YAML.
 
 ```text
-+-- Your Dashboard ----------------------------+
+Dashboard
+  ├── Screen "home"
+  │     ├── clock widget    @ [650, 0, 800, 50]
+  │     ├── weather widget  @ [0, 50, 550, 480]
+  │     └── calendar widget @ [550, 50, 800, 480]
+  │
+  └── Screen "detail"
+        └── clock widget    @ [300, 210, 500, 270]
+```
+
+On each render tick, the dashboard picks the current screen, the
+compositor draws that screen's widgets into a frame, and the frame
+is sent to the display (hardware or web preview).
+
+### Screen rotation
+
+If you define multiple screens and set `rotate_interval`, the
+dashboard automatically cycles through them:
+
+```yaml
+dashboard:
+  rotate_interval: 5m
+  screens:
+    - name: home
+      widgets: [...]
+    - name: detail
+      widgets: [...]
+```
+
+With a single screen, omit `rotate_interval` — or don't set it —
+and the dashboard stays on that screen permanently.
+
+### What a single screen looks like
+
+```text
++-- Screen "home" ----------------------------+
 |                                              |
 |  +-------------------+ +------------------+  |
 |  | Widget A          | | Widget B         |  |
@@ -110,21 +149,66 @@ func (w *Widget) Render(frame *image.Paletted) error {
 }
 ```
 
-### Adding it to the compositor
+### Registering with the widget factory
 
-Widgets are registered with the compositor, which renders them in order:
+Each widget package exports a `Factory` function so it can be
+instantiated from YAML config. The factory receives bounds, a config
+map, and injectable dependencies:
+
+<!-- markdownlint-disable MD013 -->
 
 ```go
-comp := NewCompositor(profile)
-comp.AddWidget(label.New(image.Rect(0, 0, 800, 30), "Hello from Inkwell"))
-comp.AddWidget(clock.New(image.Rect(650, 0, 800, 30), time.Now))
+func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
+    text, _ := config["text"].(string)
+    return New(bounds, text), nil
+}
 ```
 
-## Laying Out a Dashboard
+<!-- markdownlint-enable MD013 -->
 
-You position widgets by specifying pixel coordinates with
-`image.Rect(left, top, right, bottom)`. The origin `(0, 0)` is the
-top-left corner of the display.
+Register it inside the `NewDefaultRegistry()` function in
+`internal/inkwell/widgets/registry.go` — this is the registry that
+`NewApp` uses by default:
+
+```go
+r.Register("label", label.Factory)
+```
+
+For tests or embedding, you can pass a custom registry via
+`WithRegistry(...)` when constructing the app.
+
+## Configuring Dashboards in YAML
+
+Screens and dashboards are defined in `inkwell.yaml`. You don't need
+to write Go code to arrange widgets — just edit the config and
+restart.
+
+### Example config
+
+```yaml
+dashboard:
+  rotate_interval: 5m  # optional, omit for single-screen
+  screens:
+    - name: main
+      widgets:
+        - type: clock
+          bounds: [650, 0, 800, 50]
+          config:
+            format: "15:04"
+        - type: label
+          bounds: [0, 0, 650, 50]
+          config:
+            text: "My Dashboard"
+    - name: detail
+      widgets:
+        - type: clock
+          bounds: [0, 0, 200, 50]
+```
+
+### Bounds format
+
+`bounds` is `[x0, y0, x1, y1]` matching Go's `image.Rect()`. The
+origin `(0, 0)` is the top-left corner of the display.
 
 ### Planning your layout
 
@@ -144,20 +228,27 @@ three-panel dashboard:
 (0,480)                       (550)      (800,480)
 ```
 
-Translated to code:
+Translated to YAML:
 
-```go
-// Title bar — full width, 50px tall
-comp.AddWidget(label.New(image.Rect(0, 0, 650, 50), "My Dashboard"))
-
-// Clock — top right
-comp.AddWidget(clock.New(image.Rect(650, 0, 800, 50), time.Now))
-
-// Main content area
-comp.AddWidget(weather.New(image.Rect(0, 50, 550, 480), fetchTemp))
-
-// Sidebar
-comp.AddWidget(calendar.New(image.Rect(550, 50, 800, 480), fetchEvents))
+```yaml
+dashboard:
+  screens:
+    - name: main
+      widgets:
+        - type: label
+          bounds: [0, 0, 650, 50]
+          config:
+            text: "My Dashboard"
+        - type: clock
+          bounds: [650, 0, 800, 50]
+          config:
+            format: "15:04"
+        - type: weather
+          bounds: [0, 50, 550, 480]
+          config:
+            location: "Toronto, CA"
+        - type: calendar
+          bounds: [550, 50, 800, 480]
 ```
 
 ### Layout tips
@@ -225,11 +316,11 @@ directly, it accepts a `now func() time.Time` parameter:
 
 ```go
 // In production
-w := clock.New(bounds, time.Now)
+w := clock.New(bounds, time.Now, "15:04")
 
 // In tests — deterministic, reproducible
 fixed := time.Date(2024, 1, 1, 14, 30, 0, 0, time.UTC)
-w := clock.New(bounds, func() time.Time { return fixed })
+w := clock.New(bounds, func() time.Time { return fixed }, "15:04")
 ```
 
 Apply this pattern to any widget that depends on external data (API
@@ -333,16 +424,20 @@ connection and updates independently.
 
 ## Putting It All Together
 
-Here's the typical flow for building a new dashboard component:
+Here's the typical flow for building a new dashboard:
 
-1. **Plan the layout** — sketch where each widget goes on the 800×480
-   canvas
-2. **Create the widget** — implement `Bounds()` and `Render()` in a
-   self-contained subpackage under `internal/inkwell/widgets/<name>/`
+1. **Plan your screens** — decide how many screens you need and
+   sketch the widget layout for each one on the 800×480 canvas
+2. **Create the widgets** — implement `Bounds()` and `Render()` in
+   self-contained subpackages under `internal/inkwell/widgets/<name>/`
 3. **Write tests** — at minimum a render test and a golden file test
-4. **Wire it up** — add the widget to the compositor
-5. **Preview it** — run Inkwell and check the browser
-6. **Iterate** — adjust coordinates, font sizes, and content until it
-   looks good
-7. **Verify coverage** — the project requires 100% statement coverage
-8. **Commit** — golden PNGs are committed to git for visual diffing
+   per widget
+4. **Register factories** — add each widget's `Factory` to
+   `NewDefaultRegistry()` in `widgets/registry.go`
+5. **Configure in YAML** — define your screens, widget placements,
+   and rotation interval in `inkwell.yaml`
+6. **Preview it** — run Inkwell and check the browser
+7. **Iterate** — adjust bounds, config, or add screens without
+   recompiling — just edit YAML and restart
+8. **Verify coverage** — the project requires 100% statement coverage
+9. **Commit** — golden PNGs are committed to git for visual diffing
