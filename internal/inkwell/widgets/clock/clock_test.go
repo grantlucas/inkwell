@@ -149,6 +149,14 @@ func TestFactory_InvalidFormatType(t *testing.T) {
 	}
 }
 
+func TestFactory_EmptyFormat(t *testing.T) {
+	deps := widget.Deps{}
+	_, err := Factory(image.Rect(0, 0, 100, 50), map[string]any{"format": ""}, deps)
+	if err == nil {
+		t.Fatal("expected error for empty format")
+	}
+}
+
 func TestFactory_NilNowUsesDefault(t *testing.T) {
 	deps := widget.Deps{} // Now is nil
 	bounds := image.Rect(0, 0, 200, 50)

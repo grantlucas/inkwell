@@ -43,6 +43,9 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 		if !ok {
 			return nil, fmt.Errorf("clock: format must be a string, got %T", v)
 		}
+		if s == "" {
+			return nil, fmt.Errorf("clock: format must not be empty")
+		}
 		format = s
 	}
 	now := deps.Now
