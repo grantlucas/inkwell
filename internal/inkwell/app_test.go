@@ -416,6 +416,35 @@ dashboard:
 	}
 }
 
+func TestBuildDashboard_EmptyBounds(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+dashboard:
+  screens:
+    - name: main
+      widgets:
+        - type: stub
+          bounds: [0, 0, 0, 0]
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	reg := widget.NewRegistry()
+	reg.Register("stub", func(bounds image.Rectangle, _ map[string]any, _ widget.Deps) (widget.Widget, error) {
+		return &stubWidget{bounds: bounds}, nil
+	})
+
+	_, err = buildDashboard(cfg, &Waveshare7in5V2, reg, widget.Deps{Now: time.Now})
+	if err == nil {
+		t.Fatal("expected error for empty bounds")
+	}
+	if !strings.Contains(err.Error(), "empty bounds") {
+		t.Errorf("error = %q, want mention of empty bounds", err.Error())
+	}
+}
+
 func TestBuildDashboard_BoundsExceedDisplay(t *testing.T) {
 	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2

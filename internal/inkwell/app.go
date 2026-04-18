@@ -242,6 +242,10 @@ func buildDashboard(cfg *Config, profile *DisplayProfile, registry *widget.Regis
 		var ws []widget.Widget
 		for _, wc := range sc.Widgets {
 			bounds := image.Rect(wc.Bounds[0], wc.Bounds[1], wc.Bounds[2], wc.Bounds[3])
+			if bounds.Empty() {
+				return nil, fmt.Errorf("screen %q: widget %q has empty bounds %v",
+					sc.Name, wc.Type, wc.Bounds)
+			}
 			if !bounds.In(displayBounds) {
 				return nil, fmt.Errorf("screen %q: widget %q bounds %v exceed display %v",
 					sc.Name, wc.Type, bounds, displayBounds)
