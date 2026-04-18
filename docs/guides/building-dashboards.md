@@ -60,10 +60,10 @@ type Widget interface {
 
 ### Your first widget: a static label
 
-Create a new file `internal/inkwell/label_widget.go`:
+Create a new file `internal/inkwell/widgets/label/label.go`:
 
 ```go
-package inkwell
+package label
 
 import (
     "image"
@@ -73,21 +73,26 @@ import (
     "golang.org/x/image/font"
     "golang.org/x/image/font/basicfont"
     "golang.org/x/image/math/fixed"
+
+    "github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
-// LabelWidget displays a line of text.
-type LabelWidget struct {
+// Compile-time interface check.
+var _ widget.Widget = (*Widget)(nil)
+
+// Widget displays a line of text.
+type Widget struct {
     bounds image.Rectangle
     text   string
 }
 
-func NewLabelWidget(bounds image.Rectangle, text string) *LabelWidget {
-    return &LabelWidget{bounds: bounds, text: text}
+func New(bounds image.Rectangle, text string) *Widget {
+    return &Widget{bounds: bounds, text: text}
 }
 
-func (w *LabelWidget) Bounds() image.Rectangle { return w.bounds }
+func (w *Widget) Bounds() image.Rectangle { return w.bounds }
 
-func (w *LabelWidget) Render(frame *image.Paletted) error {
+func (w *Widget) Render(frame *image.Paletted) error {
     // White background
     draw.Draw(frame, w.bounds,
         image.NewUniform(color.White), image.Point{}, draw.Src)
@@ -111,8 +116,8 @@ Widgets are registered with the compositor, which renders them in order:
 
 ```go
 comp := NewCompositor(profile)
-comp.AddWidget(NewLabelWidget(image.Rect(0, 0, 800, 30), "Hello from Inkwell"))
-comp.AddWidget(NewClockWidget(image.Rect(650, 0, 800, 30), time.Now))
+comp.AddWidget(label.New(image.Rect(0, 0, 800, 30), "Hello from Inkwell"))
+comp.AddWidget(clock.New(image.Rect(650, 0, 800, 30), time.Now))
 ```
 
 ## Laying Out a Dashboard
@@ -143,16 +148,16 @@ Translated to code:
 
 ```go
 // Title bar — full width, 50px tall
-comp.AddWidget(NewLabelWidget(image.Rect(0, 0, 650, 50), "My Dashboard"))
+comp.AddWidget(label.New(image.Rect(0, 0, 650, 50), "My Dashboard"))
 
 // Clock — top right
-comp.AddWidget(NewClockWidget(image.Rect(650, 0, 800, 50), time.Now))
+comp.AddWidget(clock.New(image.Rect(650, 0, 800, 50), time.Now))
 
 // Main content area
-comp.AddWidget(NewWeatherWidget(image.Rect(0, 50, 550, 480), fetchTemp))
+comp.AddWidget(weather.New(image.Rect(0, 50, 550, 480), fetchTemp))
 
 // Sidebar
-comp.AddWidget(NewCalendarWidget(image.Rect(550, 50, 800, 480), fetchEvents))
+comp.AddWidget(calendar.New(image.Rect(550, 50, 800, 480), fetchEvents))
 ```
 
 ### Layout tips
@@ -215,16 +220,16 @@ Then use `largeFace` in a `font.Drawer` the same way as above.
 Inkwell widgets are designed to be testable without running the full
 application. The key pattern is **dependency injection via functions**.
 
-Look at the built-in `ClockWidget` — instead of calling `time.Now()`
+Look at the built-in clock widget — instead of calling `time.Now()`
 directly, it accepts a `now func() time.Time` parameter:
 
 ```go
 // In production
-w := NewClockWidget(bounds, time.Now)
+w := clock.New(bounds, time.Now)
 
 // In tests — deterministic, reproducible
 fixed := time.Date(2024, 1, 1, 14, 30, 0, 0, time.UTC)
-w := NewClockWidget(bounds, func() time.Time { return fixed })
+w := clock.New(bounds, func() time.Time { return fixed })
 ```
 
 Apply this pattern to any widget that depends on external data (API
@@ -233,8 +238,8 @@ calls, system time, file reads, etc.).
 ### Writing a basic widget test
 
 ```go
-func TestLabelWidget_Render(t *testing.T) {
-    w := NewLabelWidget(image.Rect(0, 0, 200, 30), "Test")
+func TestWidget_Render(t *testing.T) {
+    w := label.New(image.Rect(0, 0, 200, 30), "Test")
 
     frame := image.NewPaletted(
         image.Rect(0, 0, 200, 30),
@@ -262,25 +267,25 @@ future runs. If the output changes, the test fails — catching
 unintended visual regressions.
 
 ```go
-func TestLabelWidget_Golden(t *testing.T) {
-    w := NewLabelWidget(image.Rect(0, 0, 200, 30), "Test")
+func TestWidget_Golden(t *testing.T) {
+    w := label.New(image.Rect(0, 0, 200, 30), "Test")
     frame := image.NewPaletted(
         image.Rect(0, 0, 200, 30),
         color.Palette{color.White, color.Black},
     )
     _ = w.Render(frame)
 
-    AssertGoldenPNG(t, frame)
+    testutil.AssertGoldenPNG(t, frame)
 }
 ```
 
 The first time you run this (or after changing the widget's output):
 
 ```bash
-go test ./internal/inkwell -run TestLabelWidget_Golden -update
+go test ./internal/inkwell/widgets/label -run TestWidget_Golden -update
 ```
 
-This saves the rendered frame as a PNG in `internal/inkwell/testdata/`.
+This saves the rendered frame as a PNG in the widget's `testdata/` directory.
 Commit the golden file to git so that future test runs compare against
 it. When reviewing PRs, updated golden PNGs show you exactly what
 changed visually.
@@ -332,8 +337,8 @@ Here's the typical flow for building a new dashboard component:
 
 1. **Plan the layout** — sketch where each widget goes on the 800×480
    canvas
-2. **Create the widget** — implement `Bounds()` and `Render()` in a new
-   file under `internal/inkwell/`
+2. **Create the widget** — implement `Bounds()` and `Render()` in a
+   self-contained subpackage under `internal/inkwell/widgets/<name>/`
 3. **Write tests** — at minimum a render test and a golden file test
 4. **Wire it up** — add the widget to the compositor
 5. **Preview it** — run Inkwell and check the browser
