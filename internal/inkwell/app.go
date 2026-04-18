@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"net"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets"
 )
 
 // HTTPServer is implemented by Hardware backends that also serve HTTP.
@@ -21,12 +23,12 @@ type HTTPServer interface {
 // App wires together config, backend, EPD, and compositor into a running
 // application. Use NewApp to construct, then Run to start the render loop.
 type App struct {
-	hw         Hardware
-	epd        *EPD
-	comp       *Compositor
-	profile    *DisplayProfile
-	widgets    []widget.Widget
-	interval   time.Duration
+	hw              Hardware
+	epd             *EPD
+	comp            *Compositor
+	profile         *DisplayProfile
+	dashboard       *Dashboard
+	interval        time.Duration
 	listenAddr      string
 	listener        net.Listener
 	ready           chan struct{}
@@ -39,6 +41,8 @@ type AppOption func(*appOptions)
 type appOptions struct {
 	hw       Hardware
 	interval time.Duration
+	registry *widget.Registry
+	deps     widget.Deps
 }
 
 // WithHardware injects a Hardware backend, overriding config-driven selection.
@@ -49,6 +53,16 @@ func WithHardware(hw Hardware) AppOption {
 // WithInterval sets the render loop sleep interval.
 func WithInterval(d time.Duration) AppOption {
 	return func(o *appOptions) { o.interval = d }
+}
+
+// WithRegistry injects a widget registry, overriding the default.
+func WithRegistry(r *widget.Registry) AppOption {
+	return func(o *appOptions) { o.registry = r }
+}
+
+// WithDeps injects widget dependencies, overriding defaults.
+func WithDeps(d widget.Deps) AppOption {
+	return func(o *appOptions) { o.deps = d }
 }
 
 // NewApp creates an App from config. It resolves the display profile, creates
@@ -83,15 +97,30 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 		}
 	}
 
+	registry := o.registry
+	if registry == nil {
+		registry = widgets.NewDefaultRegistry()
+	}
+	deps := o.deps
+	if deps.Now == nil {
+		deps.Now = time.Now
+	}
+
+	dashboard, err := buildDashboard(cfg, profile, registry, deps)
+	if err != nil {
+		return nil, fmt.Errorf("build dashboard: %w", err)
+	}
+
 	epd := NewEPD(hw, profile)
 	comp := NewCompositor(profile)
 
 	return &App{
-		hw:         hw,
-		epd:        epd,
-		comp:       comp,
-		profile:    profile,
-		interval:   o.interval,
+		hw:              hw,
+		epd:             epd,
+		comp:            comp,
+		profile:         profile,
+		dashboard:       dashboard,
+		interval:        o.interval,
 		listenAddr:      fmt.Sprintf(":%d", cfg.Preview.Port),
 		ready:           make(chan struct{}),
 		shutdownTimeout: 5 * time.Second,
@@ -166,7 +195,12 @@ func (a *App) Run(ctx context.Context) error {
 	defer ticker.Stop()
 
 	for {
-		frame, err := a.comp.Render(a.widgets)
+		var ws []widget.Widget
+		if screen := a.dashboard.CurrentScreen(); screen != nil {
+			ws = screen.Widgets()
+		}
+
+		frame, err := a.comp.Render(ws)
 		if err != nil {
 			a.epd.Close()
 			return fmt.Errorf("render: %w", err)
@@ -192,6 +226,36 @@ func (a *App) Run(ctx context.Context) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+// buildDashboard creates a Dashboard from config, instantiating widgets via
+// the registry. It validates that widget bounds fit within the display.
+func buildDashboard(cfg *Config, profile *DisplayProfile, registry *widget.Registry, deps widget.Deps) (*Dashboard, error) {
+	if len(cfg.Dashboard.Screens) == 0 {
+		return NewDashboard([]*Screen{NewScreen("default", nil)}, 0, deps.Now), nil
+	}
+
+	displayBounds := image.Rect(0, 0, profile.Width, profile.Height)
+	var screens []*Screen
+
+	for _, sc := range cfg.Dashboard.Screens {
+		var ws []widget.Widget
+		for _, wc := range sc.Widgets {
+			bounds := image.Rect(wc.Bounds[0], wc.Bounds[1], wc.Bounds[2], wc.Bounds[3])
+			if !bounds.In(displayBounds) {
+				return nil, fmt.Errorf("screen %q: widget %q bounds %v exceed display %v",
+					sc.Name, wc.Type, bounds, displayBounds)
+			}
+			w, err := registry.Create(wc.Type, bounds, wc.Config, deps)
+			if err != nil {
+				return nil, fmt.Errorf("screen %q: widget %q: %w", sc.Name, wc.Type, err)
+			}
+			ws = append(ws, w)
+		}
+		screens = append(screens, NewScreen(sc.Name, ws))
+	}
+
+	return NewDashboard(screens, time.Duration(cfg.Dashboard.RotateInterval), deps.Now), nil
 }
 
 // createSPIBackendFn creates the SPI hardware backend. Overridden by

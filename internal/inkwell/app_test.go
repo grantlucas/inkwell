@@ -321,18 +321,27 @@ func TestRun_WidgetRenderError(t *testing.T) {
 	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2
 backend: preview
+dashboard:
+  screens:
+    - name: main
+      widgets:
+        - type: broken
+          bounds: [0, 0, 10, 10]
 `))
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
 
+	reg := widget.NewRegistry()
+	reg.Register("broken", func(bounds image.Rectangle, _ map[string]any, _ widget.Deps) (widget.Widget, error) {
+		return &brokenWidget{bounds: bounds}, nil
+	})
+
 	mock := &MockHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
+	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond), WithRegistry(reg))
 	if err != nil {
 		t.Fatalf("NewApp: %v", err)
 	}
-
-	app.widgets = []widget.Widget{&brokenWidget{bounds: image.Rect(0, 0, 10, 10)}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -349,6 +358,190 @@ backend: preview
 	last := mock.Calls[len(mock.Calls)-1]
 	if last.Type != "close" {
 		t.Errorf("expected close after error, got %s", last.Type)
+	}
+}
+
+func TestBuildDashboard_EmptyConfig(t *testing.T) {
+	cfg := DefaultConfig()
+	profile := &Waveshare7in5V2
+	registry := widget.NewRegistry()
+	deps := widget.Deps{Now: time.Now}
+
+	d, err := buildDashboard(cfg, profile, registry, deps)
+	if err != nil {
+		t.Fatalf("buildDashboard: %v", err)
+	}
+	screen := d.CurrentScreen()
+	if screen == nil {
+		t.Fatal("expected default screen")
+	}
+	if screen.Name != "default" {
+		t.Errorf("Name = %q, want default", screen.Name)
+	}
+}
+
+func TestBuildDashboard_WithWidgets(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+dashboard:
+  screens:
+    - name: main
+      widgets:
+        - type: clock
+          bounds: [0, 0, 200, 50]
+          config:
+            format: "15:04"
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	fixedTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	deps := widget.Deps{Now: func() time.Time { return fixedTime }}
+	profile := &Waveshare7in5V2
+
+	reg := widget.NewRegistry()
+	reg.Register("clock", func(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
+		return &stubWidget{bounds: bounds}, nil
+	})
+
+	d, err := buildDashboard(cfg, profile, reg, deps)
+	if err != nil {
+		t.Fatalf("buildDashboard: %v", err)
+	}
+	screen := d.CurrentScreen()
+	if len(screen.Widgets()) != 1 {
+		t.Fatalf("len(Widgets) = %d, want 1", len(screen.Widgets()))
+	}
+}
+
+func TestBuildDashboard_BoundsExceedDisplay(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+dashboard:
+  screens:
+    - name: main
+      widgets:
+        - type: stub
+          bounds: [0, 0, 900, 50]
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	reg := widget.NewRegistry()
+	reg.Register("stub", func(bounds image.Rectangle, _ map[string]any, _ widget.Deps) (widget.Widget, error) {
+		return &stubWidget{bounds: bounds}, nil
+	})
+
+	_, err = buildDashboard(cfg, &Waveshare7in5V2, reg, widget.Deps{Now: time.Now})
+	if err == nil {
+		t.Fatal("expected error for out-of-bounds widget")
+	}
+	if !strings.Contains(err.Error(), "exceed display") {
+		t.Errorf("error = %q, want mention of exceed display", err.Error())
+	}
+}
+
+func TestBuildDashboard_UnknownWidgetType(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+dashboard:
+  screens:
+    - name: main
+      widgets:
+        - type: nonexistent
+          bounds: [0, 0, 100, 50]
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	reg := widget.NewRegistry()
+	_, err = buildDashboard(cfg, &Waveshare7in5V2, reg, widget.Deps{Now: time.Now})
+	if err == nil {
+		t.Fatal("expected error for unknown widget type")
+	}
+	if !strings.Contains(err.Error(), "nonexistent") {
+		t.Errorf("error = %q, want mention of nonexistent", err.Error())
+	}
+}
+
+func TestNewApp_DashboardBuildError(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+dashboard:
+  screens:
+    - name: main
+      widgets:
+        - type: nonexistent
+          bounds: [0, 0, 100, 50]
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	mock := &MockHardware{}
+	_, err = NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
+	if err == nil {
+		t.Fatal("expected error for unknown widget type")
+	}
+	if !strings.Contains(err.Error(), "build dashboard") {
+		t.Errorf("error = %q, want mention of build dashboard", err.Error())
+	}
+}
+
+func TestNewApp_WithDeps(t *testing.T) {
+	fixedTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	mock := &MockHardware{}
+	deps := widget.Deps{Now: func() time.Time { return fixedTime }}
+	_, err = NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond), WithDeps(deps))
+	if err != nil {
+		t.Fatalf("NewApp with WithDeps: %v", err)
+	}
+}
+
+func TestNewApp_WithDashboardConfig(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+dashboard:
+  screens:
+    - name: home
+      widgets:
+        - type: clock
+          bounds: [0, 0, 200, 50]
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	mock := &MockHardware{}
+	app, err := NewApp(cfg,
+		WithHardware(mock),
+		WithInterval(time.Millisecond),
+	)
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if app.dashboard == nil {
+		t.Fatal("dashboard is nil")
+	}
+	screen := app.dashboard.CurrentScreen()
+	if screen.Name != "home" {
+		t.Errorf("screen name = %q, want home", screen.Name)
 	}
 }
 
@@ -523,11 +716,12 @@ func TestRun_PackImageError(t *testing.T) {
 		InitFull: []Command{{0x00, nil}},
 	}
 	app := &App{
-		hw:       mock,
-		epd:      NewEPD(mock, &bwProfile),
-		comp:     NewCompositor(&bwProfile),
-		profile:  &color7Profile,
-		interval: time.Millisecond,
+		hw:        mock,
+		epd:       NewEPD(mock, &bwProfile),
+		comp:      NewCompositor(&bwProfile),
+		profile:   &color7Profile,
+		dashboard: NewDashboard([]*Screen{NewScreen("default", nil)}, 0, time.Now),
+		interval:  time.Millisecond,
 	}
 
 	err := app.Run(context.Background())
