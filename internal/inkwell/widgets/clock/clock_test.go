@@ -1,10 +1,12 @@
-package inkwell
+package clock
 
 import (
 	"image"
 	"image/color"
 	"testing"
 	"time"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/testutil"
 )
 
 // fixedClock returns a time source that always returns t.
@@ -12,19 +14,19 @@ func fixedClock(t time.Time) func() time.Time {
 	return func() time.Time { return t }
 }
 
-func TestClockWidget_BoundsReturnsConfiguredRect(t *testing.T) {
+func TestWidget_BoundsReturnsConfiguredRect(t *testing.T) {
 	bounds := image.Rect(10, 20, 110, 60)
-	w := NewClockWidget(bounds, fixedClock(time.Time{}))
+	w := New(bounds, fixedClock(time.Time{}))
 
 	if got := w.Bounds(); got != bounds {
 		t.Errorf("Bounds() = %v, want %v", got, bounds)
 	}
 }
 
-func TestClockWidget_RenderDrawsNonBlankOutput(t *testing.T) {
+func TestWidget_RenderDrawsNonBlankOutput(t *testing.T) {
 	bounds := image.Rect(0, 0, 200, 50)
 	clk := fixedClock(time.Date(2024, 1, 1, 14, 30, 0, 0, time.UTC))
-	w := NewClockWidget(bounds, clk)
+	w := New(bounds, clk)
 
 	frame := image.NewPaletted(
 		image.Rect(0, 0, 200, 50),
@@ -52,13 +54,13 @@ func TestClockWidget_RenderDrawsNonBlankOutput(t *testing.T) {
 	}
 }
 
-func TestClockWidget_DifferentTimesProduceDifferentOutput(t *testing.T) {
+func TestWidget_DifferentTimesProduceDifferentOutput(t *testing.T) {
 	bounds := image.Rect(0, 0, 200, 50)
 	palette := color.Palette{color.White, color.Black}
 
 	render := func(hour, minute int) []uint8 {
 		clk := fixedClock(time.Date(2024, 1, 1, hour, minute, 0, 0, time.UTC))
-		w := NewClockWidget(bounds, clk)
+		w := New(bounds, clk)
 		frame := image.NewPaletted(image.Rect(0, 0, 200, 50), palette)
 		if err := w.Render(frame); err != nil {
 			t.Fatalf("Render(%d:%02d): %v", hour, minute, err)
@@ -83,10 +85,10 @@ func TestClockWidget_DifferentTimesProduceDifferentOutput(t *testing.T) {
 	}
 }
 
-func TestClockWidget_GoldenFile(t *testing.T) {
+func TestWidget_GoldenFile(t *testing.T) {
 	bounds := image.Rect(0, 0, 200, 50)
 	clk := fixedClock(time.Date(2024, 1, 1, 14, 30, 0, 0, time.UTC))
-	w := NewClockWidget(bounds, clk)
+	w := New(bounds, clk)
 
 	frame := image.NewPaletted(
 		image.Rect(0, 0, 200, 50),
@@ -96,5 +98,5 @@ func TestClockWidget_GoldenFile(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 
-	AssertGoldenPNG(t, frame)
+	testutil.AssertGoldenPNG(t, frame)
 }
