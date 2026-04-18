@@ -46,7 +46,7 @@ func AssertGoldenBuffer(t THelper, buf []byte) {
 	path := goldenPath(t, ".bin")
 
 	if *Update {
-		if err := os.MkdirAll(GoldenDir, 0o755); err != nil {
+		if err := os.MkdirAll(GoldenDir, 0o750); err != nil {
 			t.Fatalf("golden: mkdir %s: %v", GoldenDir, err)
 			return
 		}
@@ -74,7 +74,7 @@ func AssertGoldenPNG(t THelper, img image.Image) {
 	path := goldenPath(t, ".png")
 
 	if *Update {
-		if err := os.MkdirAll(GoldenDir, 0o755); err != nil {
+		if err := os.MkdirAll(GoldenDir, 0o750); err != nil {
 			t.Fatalf("golden: mkdir %s: %v", GoldenDir, err)
 			return
 		}
