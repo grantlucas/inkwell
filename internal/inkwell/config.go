@@ -44,6 +44,25 @@ type WidgetConfig struct {
 	Config map[string]any `yaml:"config"`
 }
 
+// SourcesConfig holds configuration for all data sources.
+type SourcesConfig struct {
+	ClaudeUsage    *ClaudeUsageSourceConfig    `yaml:"claude_usage,omitempty"`
+	GoogleCalendar *GoogleCalendarSourceConfig `yaml:"google_calendar,omitempty"`
+}
+
+// ClaudeUsageSourceConfig configures the Claude API usage data source.
+type ClaudeUsageSourceConfig struct {
+	CredentialsFile string   `yaml:"credentials_file"`
+	CacheTTL        Duration `yaml:"cache_ttl"`
+}
+
+// GoogleCalendarSourceConfig configures the Google Calendar data source.
+type GoogleCalendarSourceConfig struct {
+	CredentialsFile string   `yaml:"credentials_file"`
+	TokenFile       string   `yaml:"token_file"`
+	CacheTTL        Duration `yaml:"cache_ttl"`
+}
+
 // Config holds application configuration loaded from YAML.
 type Config struct {
 	Display   string          `yaml:"display"`
@@ -51,6 +70,7 @@ type Config struct {
 	Preview   PreviewConfig   `yaml:"preview,omitempty"`
 	Image     ImageConfig     `yaml:"image,omitempty"`
 	Dashboard DashboardConfig `yaml:"dashboard,omitempty"`
+	Sources   SourcesConfig   `yaml:"sources,omitempty"`
 }
 
 // PreviewConfig holds web preview server settings.
@@ -95,6 +115,26 @@ func LoadConfig(r io.Reader) (*Config, error) {
 
 	if cfg.Dashboard.RotateInterval < 0 {
 		return nil, fmt.Errorf("dashboard.rotate_interval must be non-negative")
+	}
+
+	if s := cfg.Sources.ClaudeUsage; s != nil {
+		if s.CredentialsFile == "" {
+			return nil, fmt.Errorf("sources.claude_usage.credentials_file is required")
+		}
+		if s.CacheTTL < 0 {
+			return nil, fmt.Errorf("sources.claude_usage.cache_ttl must be non-negative")
+		}
+	}
+	if s := cfg.Sources.GoogleCalendar; s != nil {
+		if s.CredentialsFile == "" {
+			return nil, fmt.Errorf("sources.google_calendar.credentials_file is required")
+		}
+		if s.TokenFile == "" {
+			return nil, fmt.Errorf("sources.google_calendar.token_file is required")
+		}
+		if s.CacheTTL < 0 {
+			return nil, fmt.Errorf("sources.google_calendar.cache_ttl must be non-negative")
+		}
 	}
 
 	return cfg, nil

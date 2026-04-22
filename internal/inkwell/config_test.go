@@ -203,6 +203,159 @@ dashboard:
 	}
 }
 
+func TestLoadConfig_SourcesClaudeUsage(t *testing.T) {
+	input := `
+display: waveshare_7in5_v2
+backend: preview
+sources:
+  claude_usage:
+    credentials_file: ~/.claude/.credentials.json
+    cache_ttl: 5m
+`
+	cfg, err := LoadConfig(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Sources.ClaudeUsage == nil {
+		t.Fatal("Sources.ClaudeUsage is nil")
+	}
+	if cfg.Sources.ClaudeUsage.CredentialsFile != "~/.claude/.credentials.json" {
+		t.Errorf("CredentialsFile = %q", cfg.Sources.ClaudeUsage.CredentialsFile)
+	}
+	if cfg.Sources.ClaudeUsage.CacheTTL != Duration(5*time.Minute) {
+		t.Errorf("CacheTTL = %v, want 5m", time.Duration(cfg.Sources.ClaudeUsage.CacheTTL))
+	}
+}
+
+func TestLoadConfig_SourcesClaudeUsageMissingCredentials(t *testing.T) {
+	input := `
+display: waveshare_7in5_v2
+backend: preview
+sources:
+  claude_usage:
+    cache_ttl: 5m
+`
+	_, err := LoadConfig(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected error for missing credentials_file")
+	}
+	if !strings.Contains(err.Error(), "credentials_file") {
+		t.Errorf("error = %q, want mention of credentials_file", err.Error())
+	}
+}
+
+func TestLoadConfig_SourcesClaudeUsageNegativeTTL(t *testing.T) {
+	input := `
+display: waveshare_7in5_v2
+backend: preview
+sources:
+  claude_usage:
+    credentials_file: /path/to/creds.json
+    cache_ttl: -1m
+`
+	_, err := LoadConfig(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected error for negative cache_ttl")
+	}
+	if !strings.Contains(err.Error(), "non-negative") {
+		t.Errorf("error = %q, want mention of non-negative", err.Error())
+	}
+}
+
+func TestLoadConfig_SourcesGoogleCalendar(t *testing.T) {
+	input := `
+display: waveshare_7in5_v2
+backend: preview
+sources:
+  google_calendar:
+    credentials_file: /path/to/creds.json
+    token_file: /path/to/token.json
+    cache_ttl: 10m
+`
+	cfg, err := LoadConfig(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Sources.GoogleCalendar == nil {
+		t.Fatal("Sources.GoogleCalendar is nil")
+	}
+	if cfg.Sources.GoogleCalendar.CredentialsFile != "/path/to/creds.json" {
+		t.Errorf("CredentialsFile = %q", cfg.Sources.GoogleCalendar.CredentialsFile)
+	}
+	if cfg.Sources.GoogleCalendar.TokenFile != "/path/to/token.json" {
+		t.Errorf("TokenFile = %q", cfg.Sources.GoogleCalendar.TokenFile)
+	}
+	if cfg.Sources.GoogleCalendar.CacheTTL != Duration(10*time.Minute) {
+		t.Errorf("CacheTTL = %v, want 10m", time.Duration(cfg.Sources.GoogleCalendar.CacheTTL))
+	}
+}
+
+func TestLoadConfig_SourcesGoogleCalendarMissingCredentials(t *testing.T) {
+	input := `
+display: waveshare_7in5_v2
+backend: preview
+sources:
+  google_calendar:
+    token_file: /path/to/token.json
+`
+	_, err := LoadConfig(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected error for missing credentials_file")
+	}
+	if !strings.Contains(err.Error(), "credentials_file") {
+		t.Errorf("error = %q, want mention of credentials_file", err.Error())
+	}
+}
+
+func TestLoadConfig_SourcesGoogleCalendarMissingToken(t *testing.T) {
+	input := `
+display: waveshare_7in5_v2
+backend: preview
+sources:
+  google_calendar:
+    credentials_file: /path/to/creds.json
+`
+	_, err := LoadConfig(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected error for missing token_file")
+	}
+	if !strings.Contains(err.Error(), "token_file") {
+		t.Errorf("error = %q, want mention of token_file", err.Error())
+	}
+}
+
+func TestLoadConfig_SourcesGoogleCalendarNegativeTTL(t *testing.T) {
+	input := `
+display: waveshare_7in5_v2
+backend: preview
+sources:
+  google_calendar:
+    credentials_file: /path/to/creds.json
+    token_file: /path/to/token.json
+    cache_ttl: -5m
+`
+	_, err := LoadConfig(strings.NewReader(input))
+	if err == nil {
+		t.Fatal("expected error for negative cache_ttl")
+	}
+	if !strings.Contains(err.Error(), "non-negative") {
+		t.Errorf("error = %q, want mention of non-negative", err.Error())
+	}
+}
+
+func TestLoadConfig_NoSourcesDefault(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Sources.ClaudeUsage != nil {
+		t.Error("expected nil ClaudeUsage when no sources section")
+	}
+	if cfg.Sources.GoogleCalendar != nil {
+		t.Error("expected nil GoogleCalendar when no sources section")
+	}
+}
+
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 	if cfg.Display != "waveshare_7in5_v2" {
