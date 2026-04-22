@@ -1,15 +1,19 @@
 package datasource
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 // Cached wraps a fetch function with TTL-based expiration and stale-on-error.
 // No background goroutines — refresh happens lazily when Get is called after
-// the TTL has expired.
+// the TTL has expired. Safe for concurrent use.
 type Cached[T any] struct {
 	fetch   func() (T, error)
 	ttl     time.Duration
 	now     func() time.Time
 
+	mu      sync.Mutex
 	value   T
 	fetched bool
 	expires time.Time
@@ -30,6 +34,9 @@ func NewCached[T any](fetch func() (T, error), ttl time.Duration, now func() tim
 // (stale-on-error). If no previous good value exists, returns zero T and the
 // error.
 func (c *Cached[T]) Get() (T, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.fetched && c.now().Before(c.expires) {
 		return c.value, nil
 	}
