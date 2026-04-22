@@ -1,4 +1,4 @@
-package claude_usage
+package claudeusage
 
 import (
 	"bytes"
