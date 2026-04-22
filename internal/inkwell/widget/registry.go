@@ -8,7 +8,9 @@ import (
 
 // Deps provides injectable dependencies for widget factories.
 type Deps struct {
-	Now func() time.Time
+	Now            func() time.Time
+	CalendarSource CalendarSource
+	UsageSource    UsageSource
 }
 
 // Factory creates a Widget from bounds, a raw config map, and dependencies.
