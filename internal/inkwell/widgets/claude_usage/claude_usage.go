@@ -105,7 +105,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 		}
 
 		// Draw percentage.
-		drawText(frame, face, barX+barW+font.MeasureString(face, "  ").Ceil()-font.MeasureString(face, "  ").Ceil()+4, ry+(rowH+face.Ascent-face.Descent)/2, pctText)
+		drawText(frame, face, barX+barW+4, ry+(rowH+face.Ascent-face.Descent)/2, pctText)
 
 		// Draw reset text below the bar if there's room.
 		resetY := barY + barH + face.Ascent + 2
