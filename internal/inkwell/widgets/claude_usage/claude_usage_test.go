@@ -257,3 +257,16 @@ func TestWidget_LongErrorTruncation(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 }
+
+func TestWidget_TinyBoundsErrorTruncation(t *testing.T) {
+	// Bounds so small that maxChars <= 3, which would previously panic
+	// with a negative slice index.
+	tiny := image.Rect(0, 0, 14, 20)
+	w := New(tiny, &stubUsageSource{err: errors.New("fail")}, fixedClock())
+	frame := image.NewPaletted(tiny, palette)
+
+	// Should not panic.
+	if err := w.Render(frame); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+}

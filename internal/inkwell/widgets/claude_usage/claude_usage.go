@@ -123,7 +123,7 @@ func (w *Widget) renderError(frame *image.Paletted, err error) {
 	text := "ERR: " + err.Error()
 	// Truncate long error messages.
 	maxChars := w.bounds.Dx() / 7
-	if maxChars > 0 && len(text) > maxChars {
+	if maxChars > 3 && len(text) > maxChars {
 		text = text[:maxChars-3] + "..."
 	}
 	y := w.bounds.Min.Y + (w.bounds.Dy()+face.Ascent-face.Descent)/2
