@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	calendarwidget "github.com/grantlucas/inkwell/internal/inkwell/widgets/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/clock"
 )
 
@@ -9,5 +10,6 @@ import (
 func NewDefaultRegistry() *widget.Registry {
 	r := widget.NewRegistry()
 	r.Register("clock", clock.Factory)
+	r.Register("calendar", calendarwidget.Factory)
 	return r
 }
