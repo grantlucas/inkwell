@@ -105,6 +105,12 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 	if deps.Now == nil {
 		deps.Now = time.Now
 	}
+	if deps.DataSources == nil {
+		deps.DataSources = make(map[string]any)
+	}
+	if _, ok := deps.DataSources["http_client"]; !ok {
+		deps.DataSources["http_client"] = http.DefaultClient
+	}
 
 	dashboard, err := buildDashboard(cfg, profile, registry, deps)
 	if err != nil {
