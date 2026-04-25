@@ -4,6 +4,9 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
+
+	cal "github.com/grantlucas/inkwell/internal/inkwell/calendar"
 )
 
 // stubHTTPClient returns an empty valid iCal feed for any request.
@@ -15,4 +18,14 @@ func (s *stubHTTPClient) Get(_ string) (*http.Response, error) {
 		StatusCode: 200,
 		Body:       io.NopCloser(strings.NewReader(body)),
 	}, nil
+}
+
+// staticSource is a Source that returns fixed events.
+type staticSource struct {
+	events []cal.Event
+	err    error
+}
+
+func (s *staticSource) Events(_, _ time.Time) ([]cal.Event, error) {
+	return s.events, s.err
 }

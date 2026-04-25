@@ -1,6 +1,7 @@
 package calendar
 
 import (
+	"fmt"
 	"image"
 	"testing"
 	"time"
@@ -341,6 +342,116 @@ func TestFactory_ShowLocation(t *testing.T) {
 	_, err := Factory(image.Rect(0, 0, 400, 300), config, deps)
 	if err != nil {
 		t.Fatalf("Factory with show_location: %v", err)
+	}
+}
+
+func TestWidget_RenderToday(t *testing.T) {
+	frame := newTestFrame(400, 200)
+	w := &Widget{
+		bounds: frame.Bounds(),
+		source: &staticSource{events: testEvents},
+		now:    fixedClock,
+		config: Config{
+			View:      ViewToday,
+			MaxEvents: 10,
+			now:       fixedClock,
+		},
+	}
+	if err := w.Render(frame); err != nil {
+		t.Fatal(err)
+	}
+	if !hasBlackPixels(frame, frame.Bounds()) {
+		t.Error("rendered blank frame")
+	}
+}
+
+func TestWidget_RenderUpcoming(t *testing.T) {
+	frame := newTestFrame(400, 300)
+	w := &Widget{
+		bounds: frame.Bounds(),
+		source: &staticSource{events: upcomingEvents},
+		now:    fixedClock,
+		config: Config{
+			View:      ViewUpcoming,
+			MaxEvents: 10,
+			WeekStart: time.Monday,
+			now:       fixedClock,
+		},
+	}
+	if err := w.Render(frame); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWidget_RenderWeek(t *testing.T) {
+	frame := newTestFrame(400, 480)
+	w := &Widget{
+		bounds: frame.Bounds(),
+		source: &staticSource{events: testEvents},
+		now:    fixedClock,
+		config: Config{
+			View:      ViewWeek,
+			MaxEvents: 10,
+			WeekStart: time.Monday,
+			now:       fixedClock,
+		},
+	}
+	if err := w.Render(frame); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWidget_RenderMonth(t *testing.T) {
+	frame := newTestFrame(400, 300)
+	w := &Widget{
+		bounds: frame.Bounds(),
+		source: &staticSource{events: testEvents},
+		now:    fixedClock,
+		config: Config{
+			View:      ViewMonth,
+			MaxEvents: 10,
+			WeekStart: time.Monday,
+			now:       fixedClock,
+		},
+	}
+	if err := w.Render(frame); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWidget_RenderUnknownView(t *testing.T) {
+	frame := newTestFrame(400, 200)
+	w := &Widget{
+		bounds: frame.Bounds(),
+		source: &staticSource{},
+		now:    fixedClock,
+		config: Config{
+			View:      "invalid",
+			MaxEvents: 10,
+			now:       fixedClock,
+		},
+	}
+	err := w.Render(frame)
+	if err == nil {
+		t.Fatal("expected error for unknown view")
+	}
+}
+
+func TestWidget_RenderWithSourceError(t *testing.T) {
+	frame := newTestFrame(400, 200)
+	w := &Widget{
+		bounds: frame.Bounds(),
+		source: &staticSource{events: testEvents, err: fmt.Errorf("fetch failed")},
+		now:    fixedClock,
+		config: Config{
+			View:      ViewToday,
+			MaxEvents: 10,
+			now:       fixedClock,
+		},
+	}
+	// Should render stale data even on error.
+	if err := w.Render(frame); err != nil {
+		t.Fatal(err)
 	}
 }
 

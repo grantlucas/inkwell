@@ -86,12 +86,12 @@ func Parse(r io.Reader) ([]Event, error) {
 // splitProperty splits "NAME;params:value" into (NAME, value).
 func splitProperty(line string) (string, string) {
 	// Find the first colon to split name (with params) from value.
-	colonIdx := strings.IndexByte(line, ':')
-	if colonIdx < 0 {
+	before, after, ok := strings.Cut(line, ":")
+	if !ok {
 		return line, ""
 	}
-	nameWithParams := line[:colonIdx]
-	value := line[colonIdx+1:]
+	nameWithParams := before
+	value := after
 
 	// Strip parameters: "DTSTART;VALUE=DATE" → "DTSTART"
 	if semiIdx := strings.IndexByte(nameWithParams, ';'); semiIdx >= 0 {
@@ -107,12 +107,12 @@ func splitProperty(line string) (string, string) {
 //
 // The full property line is passed to detect VALUE=DATE parameters.
 func parseDateTime(line string) (time.Time, bool, error) {
-	colonIdx := strings.IndexByte(line, ':')
-	if colonIdx < 0 {
+	before, after, ok := strings.Cut(line, ":")
+	if !ok {
 		return time.Time{}, false, fmt.Errorf("missing colon in %q", line)
 	}
-	value := line[colonIdx+1:]
-	params := line[:colonIdx]
+	value := after
+	params := before
 
 	isDate := strings.Contains(params, "VALUE=DATE") && !strings.Contains(params, "VALUE=DATE-TIME")
 
