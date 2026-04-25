@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 )
 
 func TestParse_BasicEvents(t *testing.T) {
@@ -368,8 +366,8 @@ func TestSplitProperty_NoColon(t *testing.T) {
 	}
 }
 
-// Verify Parse returns calendar.Event (interface compliance).
-func TestParse_ReturnsCalendarEvents(t *testing.T) {
+// Verify Parse returns ical.Event values.
+func TestParse_ReturnsEvents(t *testing.T) {
 	input := `BEGIN:VCALENDAR
 BEGIN:VEVENT
 UID:test
@@ -383,6 +381,8 @@ END:VCALENDAR
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Verify the return type matches calendar.Event.
-	var _ []calendar.Event = events
+	var _ []Event = events
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
 }

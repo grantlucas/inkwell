@@ -2,17 +2,14 @@
 // parsing for the Inkwell calendar widget.
 package calendar
 
-import "time"
+import (
+	"time"
 
-// Event represents a single calendar event.
-type Event struct {
-	UID      string
-	Summary  string
-	Start    time.Time
-	End      time.Time
-	AllDay   bool
-	Location string
-}
+	"github.com/grantlucas/inkwell/internal/inkwell/calendar/ical"
+)
+
+// Event is an alias for ical.Event, re-exported for convenience.
+type Event = ical.Event
 
 // Source provides calendar events for a time range.
 // Implementations must be safe for concurrent use.

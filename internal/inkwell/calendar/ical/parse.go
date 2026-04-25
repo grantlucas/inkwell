@@ -1,5 +1,5 @@
 // Package ical provides a minimal RFC 5545 iCalendar parser that extracts
-// VEVENT components into calendar.Event values.
+// VEVENT components into Event values.
 package ical
 
 import (
@@ -8,25 +8,23 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 )
 
 // Parse reads iCalendar data from r and returns all VEVENT entries as
-// calendar.Event values, sorted by start time. Events without a DTSTART
-// are silently skipped.
-func Parse(r io.Reader) ([]calendar.Event, error) {
+// Event values, sorted by start time. Events without a DTSTART are
+// silently skipped.
+func Parse(r io.Reader) ([]Event, error) {
 	lines := unfold(r)
 
-	var events []calendar.Event
-	var cur *calendar.Event
+	var events []Event
+	var cur *Event
 	inEvent := false
 
 	for _, line := range lines {
 		switch {
 		case line == "BEGIN:VEVENT":
 			inEvent = true
-			cur = &calendar.Event{}
+			cur = &Event{}
 		case line == "END:VEVENT":
 			if inEvent && cur != nil && !cur.Start.IsZero() {
 				if cur.End.IsZero() {
