@@ -118,3 +118,31 @@ func TestRegistry_CreatePassesConfigAndDeps(t *testing.T) {
 		t.Errorf("deps.Now() = %v, want %v", got, fixedTime)
 	}
 }
+
+func TestRegistry_CreatePassesDataSources(t *testing.T) {
+	r := widget.NewRegistry()
+
+	var gotDeps widget.Deps
+	r.Register("spy", func(bounds image.Rectangle, _ map[string]any, deps widget.Deps) (widget.Widget, error) {
+		gotDeps = deps
+		return &stubWidget{bounds: bounds}, nil
+	})
+
+	ds := map[string]any{"http_client": "fake-client"}
+	deps := widget.Deps{
+		Now:         time.Now,
+		DataSources: ds,
+	}
+
+	_, err := r.Create("spy", image.Rectangle{}, nil, deps)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if gotDeps.DataSources == nil {
+		t.Fatal("DataSources was nil, expected it to be forwarded")
+	}
+	if got := gotDeps.DataSources["http_client"]; got != "fake-client" {
+		t.Errorf("DataSources[http_client] = %v, want %q", got, "fake-client")
+	}
+}
