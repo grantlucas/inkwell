@@ -34,6 +34,7 @@ type Config struct {
 	MaxEvents    int
 	ShowLocation bool
 	Title        string
+	now          func() time.Time // injected clock for rendering
 }
 
 // Widget renders calendar events from iCal subscriptions.
@@ -50,8 +51,49 @@ func (w *Widget) Bounds() image.Rectangle { return w.bounds }
 // Render draws calendar events into the frame. The specific layout depends
 // on the configured view mode.
 func (w *Widget) Render(frame *image.Paletted) error {
-	// TODO: delegate to view-specific renderers in Phase 3.
-	return nil
+	now := w.now()
+	start, end := viewTimeRange(w.config.View, now, w.config.WeekStart)
+
+	events, err := w.source.Events(start, end)
+	if err != nil {
+		// Render with whatever events were returned (possibly stale).
+		_ = err
+	}
+
+	switch w.config.View {
+	case ViewToday:
+		return renderToday(frame, w.bounds, events, w.config)
+	case ViewUpcoming:
+		return renderUpcoming(frame, w.bounds, events, w.config)
+	case ViewWeek:
+		return renderWeek(frame, w.bounds, events, w.config)
+	case ViewMonth:
+		return renderMonth(frame, w.bounds, events, w.config)
+	default:
+		return fmt.Errorf("unknown view mode: %q", w.config.View)
+	}
+}
+
+// viewTimeRange returns the [start, end) time window for the given view mode.
+func viewTimeRange(view ViewMode, now time.Time, weekStart time.Weekday) (time.Time, time.Time) {
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+
+	switch view {
+	case ViewToday:
+		return today, today.AddDate(0, 0, 1)
+	case ViewUpcoming:
+		return today, today.AddDate(0, 0, 3)
+	case ViewWeek:
+		offset := (int(today.Weekday()) - int(weekStart) + 7) % 7
+		weekDay := today.AddDate(0, 0, -offset)
+		return weekDay, weekDay.AddDate(0, 0, 7)
+	case ViewMonth:
+		firstOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		firstOfNext := firstOfMonth.AddDate(0, 1, 0)
+		return firstOfMonth, firstOfNext
+	default:
+		return today, today.AddDate(0, 0, 1)
+	}
 }
 
 // Factory creates a calendar Widget from config and dependencies.
@@ -75,6 +117,8 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 	if now == nil {
 		now = time.Now
 	}
+
+	cfg.now = now
 
 	httpSource := calendar.NewHTTPSource(cfg.Feeds, httpClient)
 	cachedSource := calendar.NewCachedSource(httpSource, cfg.Refresh, now)

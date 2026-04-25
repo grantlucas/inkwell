@@ -156,11 +156,9 @@ func TestCachedSource_ConcurrentAccess(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 10 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_, _ = src.Events(start, end)
-		}()
+		})
 	}
 	wg.Wait()
 
