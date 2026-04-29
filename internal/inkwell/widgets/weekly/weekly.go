@@ -62,9 +62,8 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	now := w.now()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 
-	offset := (int(today.Weekday()) - int(w.config.WeekStart) + 7) % 7
-	weekStart := today.AddDate(0, 0, -offset)
-	weekEnd := weekStart.AddDate(0, 0, 7)
+	weekStart := today
+	weekEnd := today.AddDate(0, 0, 7)
 
 	events, _ := w.cal.Events(weekStart, weekEnd)
 
