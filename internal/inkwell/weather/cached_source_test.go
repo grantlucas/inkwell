@@ -137,11 +137,9 @@ func TestCachedSource_ConcurrentAccess(t *testing.T) {
 	loc := Location{Latitude: 45.4, Longitude: -75.7}
 	var wg sync.WaitGroup
 	for range 10 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_, _ = cached.Forecast(context.Background(), loc, 1)
-		}()
+		})
 	}
 	wg.Wait()
 

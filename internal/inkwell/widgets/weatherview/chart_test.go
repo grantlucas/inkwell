@@ -9,7 +9,7 @@ import (
 
 func sampleHourly() []weather.HourlyPoint {
 	var points []weather.HourlyPoint
-	for h := 0; h < 24; h++ {
+	for h := range 24 {
 		points = append(points, weather.HourlyPoint{
 			Hour:              h,
 			Temperature:       10 + float64(h)/2,
