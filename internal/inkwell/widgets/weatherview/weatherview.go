@@ -8,8 +8,32 @@ import (
 	"image"
 	"math"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
+	"golang.org/x/image/font"
 )
+
+var (
+	labelFace   font.Face
+	tempHiFace  font.Face
+	tempLoFace  font.Face
+)
+
+func init() {
+	var err error
+	labelFace, err = fonts.Face(fonts.SemiBold, 7)
+	if err != nil {
+		panic("weatherview: load label font: " + err.Error())
+	}
+	tempHiFace, err = fonts.Face(fonts.Bold, 10)
+	if err != nil {
+		panic("weatherview: load temp hi font: " + err.Error())
+	}
+	tempLoFace, err = fonts.Face(fonts.Regular, 9)
+	if err != nil {
+		panic("weatherview: load temp lo font: " + err.Error())
+	}
+}
 
 // Options controls how day weather is rendered.
 type Options struct {
@@ -62,16 +86,18 @@ func RenderDayWeather(frame *image.Paletted, bounds image.Rectangle, day weather
 	}
 
 	if opts.ShowLabel {
-		labelY := bounds.Min.Y + lineHeight
+		labelY := bounds.Min.Y + labelFace.Metrics().Ascent.Ceil() + 4
 		label := day.Condition.Label()
-		drawText(frame, textX, labelY, truncateText(label, (w-textX+bounds.Min.X)/charWidth))
+		maxLabelW := w - textX + bounds.Min.X
+		drawTextWithFace(frame, textX, labelY, truncateText(label, maxLabelW/charWidth), labelFace)
 	}
 
 	tempStr := fmt.Sprintf("%d°%s", int(math.Round(hi)), unit)
 	loStr := fmt.Sprintf("%d°", int(math.Round(lo)))
 	tempY := bounds.Min.Y + condRowH - 4
-	drawText(frame, textX, tempY, tempStr)
-	drawText(frame, textX+len(tempStr)*charWidth+3, tempY, loStr)
+	drawTextWithFace(frame, textX, tempY, tempStr, tempHiFace)
+	hiW := textWidth(tempHiFace, tempStr)
+	drawTextWithFace(frame, textX+hiW+3, tempY, loStr, tempLoFace)
 
 	drawHLine(frame, bounds.Min.X, bounds.Max.X, bounds.Min.Y+condRowH)
 

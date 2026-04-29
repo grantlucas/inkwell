@@ -9,14 +9,24 @@ import (
 	"fmt"
 
 	"golang.org/x/image/font"
-	"golang.org/x/image/font/basicfont"
 	"golang.org/x/image/math/fixed"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
 // Compile-time interface check.
 var _ widget.Widget = (*Widget)(nil)
+
+var clockFace font.Face
+
+func init() {
+	f, err := fonts.Face(fonts.Bold, 22)
+	if err != nil {
+		panic("clock: load font: " + err.Error())
+	}
+	clockFace = f
+}
 
 // Align controls text alignment within the widget bounds.
 type Align int
@@ -90,16 +100,14 @@ func (w *Widget) Bounds() image.Rectangle {
 	return w.bounds
 }
 
-// Render draws the current time into frame using the 7×13 basicfont.
-// Text is black on white, vertically centered, with horizontal
-// alignment controlled by the widget's Align setting.
+// Render draws the current time into frame using IBM Plex Mono Bold.
 func (w *Widget) Render(frame *image.Paletted) error {
 	text := w.now().Format(w.format)
 
-	face := basicfont.Face7x13
-	advance := font.MeasureString(face, text)
+	advance := font.MeasureString(clockFace, text)
 	textW := advance.Ceil()
-	textH := face.Ascent + face.Descent
+	metrics := clockFace.Metrics()
+	textH := (metrics.Ascent + metrics.Descent).Ceil()
 
 	bw := w.bounds.Dx()
 	bh := w.bounds.Dy()
@@ -113,14 +121,14 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	default:
 		x = w.bounds.Min.X + (bw-textW)/2
 	}
-	y := w.bounds.Min.Y + (bh-textH)/2 + face.Ascent
+	y := w.bounds.Min.Y + (bh-textH)/2 + metrics.Ascent.Ceil()
 
 	draw.Draw(frame, w.bounds, image.NewUniform(color.White), image.Point{}, draw.Src)
 
 	d := &font.Drawer{
 		Dst:  frame,
 		Src:  image.NewUniform(color.Black),
-		Face: face,
+		Face: clockFace,
 		Dot:  fixed.P(x, y),
 	}
 	d.DrawString(text)

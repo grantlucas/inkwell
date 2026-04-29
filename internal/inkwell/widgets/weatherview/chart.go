@@ -23,7 +23,7 @@ const (
 )
 
 var labelHours = map[int]string{
-	6: "6A", 9: "9A", 12: "12", 15: "3P", 20: "8P",
+	6: "6", 9: "9", 12: "12", 15: "3", 20: "8",
 }
 
 // RenderHourlyChart draws a temperature polyline and precipitation bars

@@ -11,20 +11,23 @@ import (
 	"time"
 
 	"golang.org/x/image/font"
-	"golang.org/x/image/font/basicfont"
 	"golang.org/x/image/math/fixed"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
 var _ widget.Widget = (*Widget)(nil)
 
-var face = basicfont.Face7x13
+var dateFace font.Face
 
-const (
-	charWidth  = 7
-	lineHeight = 13
-)
+func init() {
+	f, err := fonts.Face(fonts.SemiBold, 11)
+	if err != nil {
+		panic("date: load font: " + err.Error())
+	}
+	dateFace = f
+}
 
 // Widget renders a formatted date string.
 type Widget struct {
@@ -47,14 +50,17 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	draw.Draw(frame, w.bounds, image.NewUniform(color.White), image.Point{}, draw.Src)
 
 	text := strings.ToUpper(w.now().Format(w.format))
-	textW := len(text) * charWidth
+	textW := font.MeasureString(dateFace, text).Ceil()
+	metrics := dateFace.Metrics()
+	textH := (metrics.Ascent + metrics.Descent).Ceil()
+
 	x := w.bounds.Min.X + (w.bounds.Dx()-textW)/2
-	y := w.bounds.Min.Y + (w.bounds.Dy()-lineHeight)/2 + face.Ascent
+	y := w.bounds.Min.Y + (w.bounds.Dy()-textH)/2 + metrics.Ascent.Ceil()
 
 	d := &font.Drawer{
 		Dst:  frame,
 		Src:  image.NewUniform(color.Black),
-		Face: face,
+		Face: dateFace,
 		Dot:  fixed.P(x, y),
 	}
 	d.DrawString(text)
