@@ -26,6 +26,7 @@ func TestRenderHourlyChart_Basic(t *testing.T) {
 		GlobalTempMin: 5,
 		GlobalTempMax: 24,
 		HighlightHour: 15,
+		IsToday:       true,
 	}
 
 	RenderHourlyChart(frame, image.Rect(0, 0, 120, 80), sampleHourly(), opts)

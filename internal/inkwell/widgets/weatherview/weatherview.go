@@ -18,6 +18,7 @@ type Options struct {
 	GlobalTempMin float64
 	GlobalTempMax float64
 	HighlightHour int
+	IsToday       bool
 	IconSize      int
 }
 
@@ -86,6 +87,7 @@ func RenderDayWeather(frame *image.Paletted, bounds image.Rectangle, day weather
 			GlobalTempMin: opts.GlobalTempMin,
 			GlobalTempMax: opts.GlobalTempMax,
 			HighlightHour: opts.HighlightHour,
+			IsToday:       opts.IsToday,
 		}
 		RenderHourlyChart(frame, chartBounds, day.Hourly, chartOpts)
 	}

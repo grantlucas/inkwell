@@ -105,7 +105,8 @@ func (w *Widget) Render(frame *image.Paletted) error {
 				ShowLabel:     w.config.ShowWeatherLabel,
 				GlobalTempMin: globalMin,
 				GlobalTempMax: globalMax,
-				HighlightHour: w.config.HighlightHour,
+				HighlightHour: now.Hour(),
+				IsToday:       isToday,
 			}
 			weatherview.RenderDayWeather(frame, col.Weather, dayForecast, opts)
 		}

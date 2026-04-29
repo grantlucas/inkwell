@@ -13,6 +13,7 @@ type ChartOptions struct {
 	GlobalTempMin float64
 	GlobalTempMax float64
 	HighlightHour int
+	IsToday       bool
 }
 
 const (
@@ -74,7 +75,7 @@ func RenderHourlyChart(frame *image.Paletted, bounds image.Rectangle, hourly []w
 		i := hp.Hour - chartStartHour
 		cx := bounds.Min.X + int(float64(i)*step) + barW/2
 
-		if hp.Hour == opts.HighlightHour {
+		if opts.IsToday && hp.Hour == opts.HighlightHour {
 			drawDashedVLine(frame, cx, bounds.Min.Y, barTop+barMaxH, 2, 2)
 		}
 	}
