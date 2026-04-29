@@ -5,7 +5,7 @@ package weekly
 import "image"
 
 const (
-	dayHeaderH = 44
+	dayHeaderH = 56
 	charWidth  = 7
 	lineHeight = 13
 )

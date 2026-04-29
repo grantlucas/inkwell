@@ -59,11 +59,11 @@ func TestComputeColumns_LastColumnAbsorbsRemainder(t *testing.T) {
 }
 
 func TestComputeColumns_WeatherClampedToMaxY(t *testing.T) {
-	bounds := image.Rect(0, 0, 700, 50)
+	bounds := image.Rect(0, 0, 700, 60)
 	cols := computeColumns(bounds, 200)
 
 	for i, col := range cols {
-		if col.Weather.Max.Y > 50 {
+		if col.Weather.Max.Y > 60 {
 			t.Errorf("col[%d] weather Max.Y = %d, exceeds bounds", i, col.Weather.Max.Y)
 		}
 	}
