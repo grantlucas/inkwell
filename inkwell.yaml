@@ -5,9 +5,25 @@ preview:
 
 dashboard:
   screens:
-    - name: home
+    - name: weekly
       widgets:
+        - type: date
+          bounds: [0, 0, 800, 52]
+          config:
+            format: "Monday, January 2"
         - type: clock
-          bounds: [300, 210, 500, 270]
+          bounds: [700, 0, 800, 52]
           config:
             format: "15:04"
+            align: right
+        - type: weekly-calendar
+          bounds: [0, 52, 800, 480]
+          config:
+            feeds:
+              - "https://cal.sportssurge.com/mlb_blue-jays.ics"
+            latitude: 45.4215
+            longitude: -75.6972
+            temp_unit: C
+            show_weather: true
+            show_weather_label: true
+            max_events: 5
