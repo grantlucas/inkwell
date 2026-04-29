@@ -17,3 +17,6 @@ coverage.out
 .dolt/
 *.db
 .beads-credential-key
+
+# User config (copy inkwell.example.yaml to inkwell.yaml)
+inkwell.yaml

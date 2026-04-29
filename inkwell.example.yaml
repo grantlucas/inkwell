@@ -20,9 +20,9 @@ dashboard:
           bounds: [0, 52, 800, 480]
           config:
             feeds:
-              - "https://cal.sportssurge.com/mlb_blue-jays.ics"
-            latitude: 45.4215
-            longitude: -75.6972
+              - "https://example.com/my-calendar.ics"
+            latitude: 40.7128
+            longitude: -74.0060
             temp_unit: C
             show_weather: true
             show_weather_label: true
