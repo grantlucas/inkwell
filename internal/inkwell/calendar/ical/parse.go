@@ -132,11 +132,35 @@ func parseDateTime(line string) (time.Time, bool, error) {
 		return t, false, nil
 	}
 
+	if loc := extractTZID(params); loc != nil {
+		t, err := time.ParseInLocation("20060102T150405", value, loc)
+		if err != nil {
+			return time.Time{}, false, fmt.Errorf("invalid datetime %q: %w", value, err)
+		}
+		return t, false, nil
+	}
+
 	t, err := time.Parse("20060102T150405", value)
 	if err != nil {
 		return time.Time{}, false, fmt.Errorf("invalid datetime %q: %w", value, err)
 	}
 	return t, false, nil
+}
+
+// extractTZID extracts and loads a timezone from a TZID parameter.
+// Returns nil if no TZID is found or if the timezone is unknown.
+func extractTZID(params string) *time.Location {
+	for _, part := range strings.Split(params, ";") {
+		if strings.HasPrefix(part, "TZID=") {
+			name := part[5:]
+			loc, err := time.LoadLocation(name)
+			if err != nil {
+				return nil
+			}
+			return loc
+		}
+	}
+	return nil
 }
 
 // parseDuration parses an iCal DURATION value like "PT1H30M", "P1D", etc.

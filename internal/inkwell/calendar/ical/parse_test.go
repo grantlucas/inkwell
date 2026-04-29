@@ -335,6 +335,49 @@ func TestParseDateTime_InvalidUTC(t *testing.T) {
 	}
 }
 
+func TestParseDateTime_TZID(t *testing.T) {
+	dt, allDay, err := parseDateTime("DTSTART;TZID=America/New_York:20260429T190000")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if allDay {
+		t.Error("expected non-allday")
+	}
+	loc, _ := time.LoadLocation("America/New_York")
+	want := time.Date(2026, 4, 29, 19, 0, 0, 0, loc)
+	if !dt.Equal(want) {
+		t.Errorf("got %v, want %v", dt, want)
+	}
+}
+
+func TestParseDateTime_TZID_Unknown(t *testing.T) {
+	dt, _, err := parseDateTime("DTSTART;TZID=Fake/Zone:20260429T190000")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := time.Date(2026, 4, 29, 19, 0, 0, 0, time.UTC)
+	if !dt.Equal(want) {
+		t.Errorf("got %v, want %v (should fall back to UTC)", dt, want)
+	}
+}
+
+func TestExtractTZID(t *testing.T) {
+	loc := extractTZID("DTSTART;TZID=America/Toronto")
+	if loc == nil {
+		t.Fatal("expected non-nil location")
+	}
+	if loc.String() != "America/Toronto" {
+		t.Errorf("got %v, want America/Toronto", loc)
+	}
+}
+
+func TestExtractTZID_None(t *testing.T) {
+	loc := extractTZID("DTSTART;VALUE=DATE-TIME")
+	if loc != nil {
+		t.Error("expected nil for no TZID")
+	}
+}
+
 func TestParse_EventWithoutEnd(t *testing.T) {
 	input := `BEGIN:VCALENDAR
 BEGIN:VEVENT
