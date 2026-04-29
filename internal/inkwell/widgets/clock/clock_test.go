@@ -187,6 +187,91 @@ func TestFactory_NilNowUsesDefault(t *testing.T) {
 	}
 }
 
+func TestFactory_AlignRight(t *testing.T) {
+	deps := widget.Deps{Now: fixedClock(time.Date(2024, 1, 1, 14, 30, 0, 0, time.UTC))}
+	bounds := image.Rect(0, 0, 200, 50)
+
+	w, err := Factory(bounds, map[string]any{"align": "right"}, deps)
+	if err != nil {
+		t.Fatalf("Factory: %v", err)
+	}
+
+	frame := image.NewPaletted(bounds, color.Palette{color.White, color.Black})
+	if err := w.Render(frame); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	rightHalf := 0
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Dx() / 2; x < bounds.Max.X; x++ {
+			if frame.ColorIndexAt(x, y) == 1 {
+				rightHalf++
+			}
+		}
+	}
+	if rightHalf == 0 {
+		t.Error("right-aligned clock has no pixels in right half")
+	}
+}
+
+func TestFactory_AlignLeft(t *testing.T) {
+	deps := widget.Deps{Now: fixedClock(time.Date(2024, 1, 1, 14, 30, 0, 0, time.UTC))}
+	bounds := image.Rect(0, 0, 200, 50)
+
+	w, err := Factory(bounds, map[string]any{"align": "left"}, deps)
+	if err != nil {
+		t.Fatalf("Factory: %v", err)
+	}
+
+	frame := image.NewPaletted(bounds, color.Palette{color.White, color.Black})
+	if err := w.Render(frame); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	leftHalf := 0
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Dx()/2; x++ {
+			if frame.ColorIndexAt(x, y) == 1 {
+				leftHalf++
+			}
+		}
+	}
+	if leftHalf == 0 {
+		t.Error("left-aligned clock has no pixels in left half")
+	}
+}
+
+func TestFactory_AlignInvalid(t *testing.T) {
+	deps := widget.Deps{}
+	_, err := Factory(image.Rect(0, 0, 100, 50), map[string]any{"align": "middle"}, deps)
+	if err == nil {
+		t.Fatal("expected error for invalid align")
+	}
+}
+
+func TestFactory_AlignCenter(t *testing.T) {
+	deps := widget.Deps{Now: fixedClock(time.Date(2024, 1, 1, 14, 30, 0, 0, time.UTC))}
+	bounds := image.Rect(0, 0, 200, 50)
+
+	w, err := Factory(bounds, map[string]any{"align": "center"}, deps)
+	if err != nil {
+		t.Fatalf("Factory: %v", err)
+	}
+
+	frame := image.NewPaletted(bounds, color.Palette{color.White, color.Black})
+	if err := w.Render(frame); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+}
+
+func TestFactory_AlignWrongType(t *testing.T) {
+	deps := widget.Deps{}
+	_, err := Factory(image.Rect(0, 0, 100, 50), map[string]any{"align": 42}, deps)
+	if err == nil {
+		t.Fatal("expected error for non-string align")
+	}
+}
+
 func TestWidget_GoldenFile(t *testing.T) {
 	bounds := image.Rect(0, 0, 200, 50)
 	clk := fixedClock(time.Date(2024, 1, 1, 14, 30, 0, 0, time.UTC))
