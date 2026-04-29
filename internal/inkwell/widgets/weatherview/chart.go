@@ -42,10 +42,7 @@ func RenderHourlyChart(frame *image.Paletted, bounds image.Rectangle, hourly []w
 	labelH := lineHeight
 	tempH := int(float64(h-labelH) * 0.45)
 	sepH := 3
-	barMaxH := h - tempH - sepH - labelH
-	if barMaxH < 4 {
-		barMaxH = 4
-	}
+	barMaxH := max(h-tempH-sepH-labelH, 4)
 
 	step := float64(w) / float64(chartHours)
 	barW := max(int(step)-2, 2)
