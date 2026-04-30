@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets"
 )
@@ -110,6 +111,17 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 	}
 	if _, ok := deps.DataSources["http_client"]; !ok {
 		deps.DataSources["http_client"] = http.DefaultClient
+	}
+	if _, ok := deps.DataSources["weather_source"]; !ok {
+		httpClient := http.DefaultClient
+		ensemble := weather.NewEnsembleSource(
+			weather.NewOpenMeteoSource(weather.ModelGFS, httpClient),
+			weather.NewOpenMeteoSource(weather.ModelECMWF, httpClient),
+			weather.NewOpenMeteoSource(weather.ModelGEM, httpClient),
+		)
+		deps.DataSources["weather_source"] = weather.NewCachedSource(
+			ensemble, 3*time.Hour, deps.Now,
+		)
 	}
 
 	dashboard, err := buildDashboard(cfg, profile, registry, deps)

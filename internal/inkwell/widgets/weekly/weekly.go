@@ -15,7 +15,7 @@ import (
 
 var _ widget.Widget = (*Widget)(nil)
 
-const defaultWeatherH = 120
+const defaultWeatherH = 145
 
 // Config holds parsed weekly-calendar configuration.
 type Config struct {

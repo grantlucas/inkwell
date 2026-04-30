@@ -22,11 +22,11 @@ func init() {
 	if err != nil {
 		panic("weekly: load day abbr font: " + err.Error())
 	}
-	dateNumFace, err = fonts.Face(fonts.SemiBold, 22)
+	dateNumFace, err = fonts.Face(fonts.SemiBold, 16)
 	if err != nil {
 		panic("weekly: load date num font: " + err.Error())
 	}
-	monthFace, err = fonts.Face(fonts.Regular, 11)
+	monthFace, err = fonts.Face(fonts.Regular, 10)
 	if err != nil {
 		panic("weekly: load month font: " + err.Error())
 	}

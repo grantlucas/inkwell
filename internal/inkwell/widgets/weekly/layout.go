@@ -7,7 +7,7 @@ import "image"
 const (
 	dayHeaderH = 56
 	charWidth  = 7
-	lineHeight = 13
+	lineHeight = 15
 )
 
 // columnLayout describes the layout for one day column.

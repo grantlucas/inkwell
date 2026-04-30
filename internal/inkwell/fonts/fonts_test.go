@@ -5,9 +5,9 @@ import (
 )
 
 func TestFace_Regular(t *testing.T) {
-	f, err := Face(Regular, 13)
+	f, err := Face(Regular, 10)
 	if err != nil {
-		t.Fatalf("Face(Regular, 13): %v", err)
+		t.Fatalf("Face(Regular, 10): %v", err)
 	}
 	if f == nil {
 		t.Fatal("Face returned nil")
@@ -15,9 +15,9 @@ func TestFace_Regular(t *testing.T) {
 }
 
 func TestFace_SemiBold(t *testing.T) {
-	f, err := Face(SemiBold, 13)
+	f, err := Face(SemiBold, 10)
 	if err != nil {
-		t.Fatalf("Face(SemiBold, 13): %v", err)
+		t.Fatalf("Face(SemiBold, 10): %v", err)
 	}
 	if f == nil {
 		t.Fatal("Face returned nil")
@@ -25,9 +25,9 @@ func TestFace_SemiBold(t *testing.T) {
 }
 
 func TestFace_Bold(t *testing.T) {
-	f, err := Face(Bold, 22)
+	f, err := Face(Bold, 16)
 	if err != nil {
-		t.Fatalf("Face(Bold, 22): %v", err)
+		t.Fatalf("Face(Bold, 16): %v", err)
 	}
 	if f == nil {
 		t.Fatal("Face returned nil")
@@ -35,7 +35,7 @@ func TestFace_Bold(t *testing.T) {
 }
 
 func TestFace_MultipleSizes(t *testing.T) {
-	sizes := []float64{7, 8, 10, 11, 13, 22}
+	sizes := []float64{9, 10, 12, 14, 16, 18}
 	for _, sz := range sizes {
 		f, err := Face(Regular, sz)
 		if err != nil {
@@ -48,7 +48,7 @@ func TestFace_MultipleSizes(t *testing.T) {
 }
 
 func TestFace_HasDegreeSymbol(t *testing.T) {
-	f, err := Face(Regular, 13)
+	f, err := Face(Regular, 10)
 	if err != nil {
 		t.Fatalf("Face: %v", err)
 	}

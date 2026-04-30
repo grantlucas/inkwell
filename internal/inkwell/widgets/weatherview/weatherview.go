@@ -21,15 +21,15 @@ var (
 
 func init() {
 	var err error
-	labelFace, err = fonts.Face(fonts.SemiBold, 11)
+	labelFace, err = fonts.Face(fonts.SemiBold, 10)
 	if err != nil {
 		panic("weatherview: load label font: " + err.Error())
 	}
-	tempHiFace, err = fonts.Face(fonts.Bold, 13)
+	tempHiFace, err = fonts.Face(fonts.Bold, 12)
 	if err != nil {
 		panic("weatherview: load temp hi font: " + err.Error())
 	}
-	tempLoFace, err = fonts.Face(fonts.Regular, 11)
+	tempLoFace, err = fonts.Face(fonts.Regular, 10)
 	if err != nil {
 		panic("weatherview: load temp lo font: " + err.Error())
 	}

@@ -9,32 +9,29 @@ import (
 	"golang.org/x/image/font/opentype"
 )
 
-//go:embed IBMPlexMono-Regular.ttf
-var plexRegularTTF []byte
+//go:embed TerminusTTF-Regular.ttf
+var terminusRegularTTF []byte
 
-//go:embed IBMPlexMono-SemiBold.ttf
-var plexSemiBoldTTF []byte
-
-//go:embed IBMPlexMono-Bold.ttf
-var plexBoldTTF []byte
+//go:embed TerminusTTF-Bold.ttf
+var terminusBoldTTF []byte
 
 type Weight int
 
 const (
 	Regular  Weight = iota
-	SemiBold
+	SemiBold        // maps to Bold (Terminus has no SemiBold)
 	Bold
 )
 
 var (
-	parsedFonts [3]*opentype.Font
+	parsedFonts [2]*opentype.Font
 	parseOnce   sync.Once
 	parseErr    error
 )
 
 func parseFonts() {
 	parseOnce.Do(func() {
-		data := [3][]byte{plexRegularTTF, plexSemiBoldTTF, plexBoldTTF}
+		data := [2][]byte{terminusRegularTTF, terminusBoldTTF}
 		for i, d := range data {
 			f, err := opentype.Parse(d)
 			if err != nil {
@@ -46,14 +43,18 @@ func parseFonts() {
 	})
 }
 
-func Face(weight Weight, sizePx float64) (font.Face, error) {
+func Face(weight Weight, sizePt float64) (font.Face, error) {
 	parseFonts()
 	if parseErr != nil {
 		return nil, parseErr
 	}
-	return opentype.NewFace(parsedFonts[weight], &opentype.FaceOptions{
-		Size:    sizePx,
-		DPI:     72,
+	idx := 0
+	if weight >= SemiBold {
+		idx = 1
+	}
+	return opentype.NewFace(parsedFonts[idx], &opentype.FaceOptions{
+		Size:    sizePt,
+		DPI:     96,
 		Hinting: font.HintingFull,
 	})
 }

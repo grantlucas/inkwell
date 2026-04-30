@@ -67,7 +67,7 @@ func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calend
 	}
 
 	if rendered == 0 {
-		drawTextCentered(frame, bounds.Min.X, bounds.Max.X, bounds.Min.Y+lineHeight, "—")
+		drawTextCentered(frame, bounds.Min.X, bounds.Max.X, bounds.Min.Y+lineHeight, "--")
 	}
 
 	return rendered

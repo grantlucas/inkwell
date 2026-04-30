@@ -13,7 +13,7 @@ import (
 var defaultFace font.Face
 
 func init() {
-	f, err := fonts.Face(fonts.Regular, 11)
+	f, err := fonts.Face(fonts.Regular, 10)
 	if err != nil {
 		panic("weekly: load font: " + err.Error())
 	}

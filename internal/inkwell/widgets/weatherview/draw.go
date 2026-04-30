@@ -13,7 +13,7 @@ import (
 var defaultFace font.Face
 
 func init() {
-	f, err := fonts.Face(fonts.Regular, 11)
+	f, err := fonts.Face(fonts.Regular, 10)
 	if err != nil {
 		panic("weatherview: load font: " + err.Error())
 	}
@@ -22,7 +22,7 @@ func init() {
 
 const (
 	charWidth  = 7
-	lineHeight = 13
+	lineHeight = 15
 )
 
 func textWidth(f font.Face, text string) int {

@@ -22,7 +22,7 @@ var _ widget.Widget = (*Widget)(nil)
 var dateFace font.Face
 
 func init() {
-	f, err := fonts.Face(fonts.SemiBold, 11)
+	f, err := fonts.Face(fonts.SemiBold, 10)
 	if err != nil {
 		panic("date: load font: " + err.Error())
 	}

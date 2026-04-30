@@ -21,7 +21,7 @@ var _ widget.Widget = (*Widget)(nil)
 var clockFace font.Face
 
 func init() {
-	f, err := fonts.Face(fonts.Bold, 22)
+	f, err := fonts.Face(fonts.Bold, 16)
 	if err != nil {
 		panic("clock: load font: " + err.Error())
 	}
