@@ -18,7 +18,7 @@ var (
 
 func init() {
 	var err error
-	dayAbbrFace, err = fonts.Face(fonts.SemiBold, 10)
+	dayAbbrFace, err = fonts.Face(fonts.SemiBold, 12)
 	if err != nil {
 		panic("weekly: load day abbr font: " + err.Error())
 	}
@@ -26,7 +26,7 @@ func init() {
 	if err != nil {
 		panic("weekly: load date num font: " + err.Error())
 	}
-	monthFace, err = fonts.Face(fonts.Regular, 10)
+	monthFace, err = fonts.Face(fonts.Regular, 12)
 	if err != nil {
 		panic("weekly: load month font: " + err.Error())
 	}
