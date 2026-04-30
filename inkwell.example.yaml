@@ -8,14 +8,16 @@ dashboard:
     - name: weekly
       widgets:
         - type: date
-          bounds: [0, 0, 800, 52]
+          bounds: [0, 0, 800, 50]
           config:
             format: "Monday, January 2"
         - type: clock
-          bounds: [700, 0, 800, 52]
+          bounds: [700, 0, 800, 50]
           config:
             format: "15:04"
             align: right
+        - type: separator
+          bounds: [0, 50, 800, 52]
         - type: weekly-calendar
           bounds: [0, 52, 800, 480]
           config:

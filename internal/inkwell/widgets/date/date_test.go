@@ -14,17 +14,17 @@ func fixedClock(t time.Time) func() time.Time {
 }
 
 func TestWidget_Bounds(t *testing.T) {
-	bounds := image.Rect(0, 0, 800, 52)
-	w := New(bounds, fixedClock(time.Now()), "Monday, January 2", true)
+	bounds := image.Rect(0, 0, 800, 50)
+	w := New(bounds, fixedClock(time.Now()), "Monday, January 2")
 	if got := w.Bounds(); got != bounds {
 		t.Errorf("Bounds() = %v, want %v", got, bounds)
 	}
 }
 
 func TestWidget_Render(t *testing.T) {
-	bounds := image.Rect(0, 0, 800, 52)
+	bounds := image.Rect(0, 0, 800, 50)
 	clk := fixedClock(time.Date(2026, 4, 27, 14, 30, 0, 0, time.UTC))
-	w := New(bounds, clk, "Monday, January 2", true)
+	w := New(bounds, clk, "Monday, January 2")
 
 	frame := image.NewPaletted(bounds, color.Palette{color.White, color.Black})
 	if err := w.Render(frame); err != nil {
@@ -43,32 +43,10 @@ func TestWidget_Render(t *testing.T) {
 	}
 }
 
-func TestWidget_RenderNoBorder(t *testing.T) {
-	bounds := image.Rect(0, 0, 800, 52)
-	clk := fixedClock(time.Date(2026, 4, 27, 14, 30, 0, 0, time.UTC))
-	w := New(bounds, clk, "Monday, January 2", false)
-
-	frame := image.NewPaletted(bounds, color.Palette{color.White, color.Black})
-	if err := w.Render(frame); err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-
-	bottomBlack := false
-	for x := bounds.Min.X; x < bounds.Max.X; x++ {
-		if frame.ColorIndexAt(x, bounds.Max.Y-1) == 1 {
-			bottomBlack = true
-			break
-		}
-	}
-	if bottomBlack {
-		t.Error("border drawn when border=false")
-	}
-}
-
 func TestFactory_Default(t *testing.T) {
 	clk := fixedClock(time.Date(2026, 4, 27, 14, 30, 0, 0, time.UTC))
 	deps := widget.Deps{Now: clk}
-	bounds := image.Rect(0, 0, 800, 52)
+	bounds := image.Rect(0, 0, 800, 50)
 
 	w, err := Factory(bounds, nil, deps)
 	if err != nil {
@@ -83,7 +61,7 @@ func TestFactory_Default(t *testing.T) {
 
 func TestFactory_CustomFormat(t *testing.T) {
 	deps := widget.Deps{Now: fixedClock(time.Now())}
-	_, err := Factory(image.Rect(0, 0, 800, 52), map[string]any{"format": "Jan 2"}, deps)
+	_, err := Factory(image.Rect(0, 0, 800, 50), map[string]any{"format": "Jan 2"}, deps)
 	if err != nil {
 		t.Fatalf("Factory: %v", err)
 	}
@@ -105,29 +83,13 @@ func TestFactory_EmptyFormat(t *testing.T) {
 	}
 }
 
-func TestFactory_BorderConfig(t *testing.T) {
-	deps := widget.Deps{Now: fixedClock(time.Now())}
-	_, err := Factory(image.Rect(0, 0, 800, 52), map[string]any{"border": false}, deps)
-	if err != nil {
-		t.Fatalf("Factory: %v", err)
-	}
-}
-
-func TestFactory_BorderInvalidType(t *testing.T) {
-	deps := widget.Deps{}
-	_, err := Factory(image.Rect(0, 0, 100, 50), map[string]any{"border": "yes"}, deps)
-	if err == nil {
-		t.Fatal("expected error for non-bool border")
-	}
-}
-
 func TestFactory_NilNow(t *testing.T) {
 	deps := widget.Deps{}
-	w, err := Factory(image.Rect(0, 0, 800, 52), nil, deps)
+	w, err := Factory(image.Rect(0, 0, 800, 50), nil, deps)
 	if err != nil {
 		t.Fatalf("Factory: %v", err)
 	}
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 52), color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(image.Rect(0, 0, 800, 50), color.Palette{color.White, color.Black})
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}

@@ -34,12 +34,11 @@ type Widget struct {
 	bounds image.Rectangle
 	now    func() time.Time
 	format string
-	border bool
 }
 
 // New creates a date widget.
-func New(bounds image.Rectangle, now func() time.Time, format string, border bool) *Widget {
-	return &Widget{bounds: bounds, now: now, format: format, border: border}
+func New(bounds image.Rectangle, now func() time.Time, format string) *Widget {
+	return &Widget{bounds: bounds, now: now, format: format}
 }
 
 // Bounds returns the widget's display rectangle.
@@ -65,14 +64,6 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	}
 	d.DrawString(text)
 
-	if w.border {
-		by := w.bounds.Max.Y - 1
-		for x := w.bounds.Min.X; x < w.bounds.Max.X; x++ {
-			frame.SetColorIndex(x, by, 1)
-			frame.SetColorIndex(x, by-1, 1)
-		}
-	}
-
 	return nil
 }
 
@@ -90,19 +81,10 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 		format = s
 	}
 
-	border := true
-	if v, ok := config["border"]; ok {
-		b, ok := v.(bool)
-		if !ok {
-			return nil, fmt.Errorf("date: border must be a bool, got %T", v)
-		}
-		border = b
-	}
-
 	now := deps.Now
 	if now == nil {
 		now = time.Now
 	}
 
-	return New(bounds, now, format, border), nil
+	return New(bounds, now, format), nil
 }

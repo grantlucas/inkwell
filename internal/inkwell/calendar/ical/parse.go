@@ -150,7 +150,7 @@ func parseDateTime(line string) (time.Time, bool, error) {
 // extractTZID extracts and loads a timezone from a TZID parameter.
 // Returns nil if no TZID is found or if the timezone is unknown.
 func extractTZID(params string) *time.Location {
-	for _, part := range strings.Split(params, ";") {
+	for part := range strings.SplitSeq(params, ";") {
 		if strings.HasPrefix(part, "TZID=") {
 			name := part[5:]
 			loc, err := time.LoadLocation(name)
