@@ -195,7 +195,7 @@ func TestFilterEventsForDay(t *testing.T) {
 
 func TestRenderEvents_TitleClippedByHeight(t *testing.T) {
 	// Bounds just tall enough for time line but not title.
-	frame := newTestFrame(114, 30)
+	frame := newTestFrame(114, 38)
 	events := []ical.Event{
 		{
 			UID:     "1",
@@ -204,7 +204,7 @@ func TestRenderEvents_TitleClippedByHeight(t *testing.T) {
 			End:     time.Date(2026, 4, 28, 10, 0, 0, 0, time.UTC),
 		},
 	}
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 30), events, 5, false)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 38), events, 5, false)
 	if rendered != 1 {
 		t.Errorf("rendered %d events, want 1", rendered)
 	}
