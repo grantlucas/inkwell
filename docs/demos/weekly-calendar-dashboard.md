@@ -45,7 +45,7 @@ dashboard:
             max_events: 5
 ```
 
-The compositor renders widgets in declaration order — the clock paints over the date widget's right edge, both sharing the 52px header band. The weekly-calendar widget fetches events from the Blue Jays iCal feed and weather from Open-Meteo's ensemble of three models (GFS, ECMWF, GEM).
+The compositor renders widgets in declaration order — the clock paints over the date widget's right edge, both sharing the 52px header band. The weekly-calendar widget fetches events from the iCal feed configured in `feeds:` (the example uses a placeholder `example.com` URL — point this at any iCal endpoint) and weather from Open-Meteo's ensemble of three models (GFS, ECMWF, GEM).
 
 ## Widget Registry
 
@@ -77,7 +77,7 @@ func NewDefaultRegistry() *widget.Registry {
 
 ## Tests and Coverage
 
-All packages maintain 100% statement coverage. The weekly widget alone has 57 tests covering layout computation, day headers, event rendering, weather integration, config parsing, and error paths:
+Most packages maintain 100% statement coverage; the only exception is `weatherview` at 99.5% (see footnote below). The weekly widget alone has 57 tests covering layout computation, day headers, event rendering, weather integration, config parsing, and error paths:
 
 ```bash
 go test ./... -count=1 2>&1
