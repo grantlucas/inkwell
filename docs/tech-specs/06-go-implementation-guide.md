@@ -274,12 +274,14 @@ and the active beads workspace track them.
   wiring is the remaining work. Until it lands, the `spi` backend
   errors at startup on real hardware. Inkwell runs end-to-end with
   the `preview` and `image` backends today.
-- **Gray4 device path.** `packGray4` and the `EPD.Display` plane-split
-  protocol are wired: a Gray4 profile causes `Display` to split the
-  2bpp buffer into two 1bpp planes (low bit → `0x10`, high bit → `0x13`)
-  per the Waveshare reference. The remaining piece is the matching
-  `Init4Gray` `InitMode` selection in `App.Run` (and `Clear`'s
-  per-color-depth "all white" value). Tracked under beads `inkwell-101`.
+- **Gray4 device path.** Fully wired host-side: `packGray4` produces the
+  2bpp buffer, `EPD.Display` splits it into two 1bpp planes (low bit →
+  `0x10`, high bit → `0x13`), `App.Run` selects `Init4Gray` for the
+  panel waveform, `Clear` zeroes the buffer (which is all-white in both
+  encodings), and the capture backends (`WebPreview`, `ImageBackend`)
+  join the planes via `reconstructFrame` to render four distinct shades
+  in PNG. Remaining work is on-device validation
+  (beads `inkwell-0p7`) — needs a Raspberry Pi + Waveshare panel.
 - **Partial refresh in the render loop.** `EPD.DisplayPartial` is
   implemented but the render loop in `App.Run` only calls
   `EPD.Display` (full refresh). Switching to partial selectively is a

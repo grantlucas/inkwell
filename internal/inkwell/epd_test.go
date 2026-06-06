@@ -439,35 +439,61 @@ func TestDisplayUnsupportedColorDepth(t *testing.T) {
 
 // --- Clear ---
 
+// TestClearSendsWhiteBuffers locks the on-wire bytes Clear emits across
+// both supported color depths. In Inkwell's encoding the "all white"
+// sentinel byte is 0x00 for BW (packBW sets bit 1 for black, so 0=white)
+// and 0x00 for Gray4 (white=00 → both plane bits clear). The upstream
+// Waveshare reference confirms this: Clear() there writes 0xFF to 0x10
+// and 0x00 to 0x13 — the new-frame plane is all-white, the previous-
+// frame plane is its inversion. A regression that fills with 0xFF
+// renders solid black, not clear, on real hardware.
 func TestClearSendsWhiteBuffers(t *testing.T) {
-	m := &MockHardware{}
-	p := smallTestProfile()
-	epd := NewEPD(m, p)
-
-	if err := epd.Clear(); err != nil {
-		t.Fatal(err)
+	cases := []struct {
+		label   string
+		profile *DisplayProfile
+		// What Display sees on the wire after Clear.
+		wantOld []byte
+		wantNew []byte
+	}{
+		{
+			label:   "BW: 0x10←0xFF, 0x13←0x00",
+			profile: smallTestProfile(),
+			// 16x16 BW = 32 bytes.
+			wantOld: bytes.Repeat([]byte{0xFF}, 32),
+			wantNew: bytes.Repeat([]byte{0x00}, 32),
+		},
+		{
+			label:   "Gray4: both planes all-zero (white pixels)",
+			profile: gray4DisplayProfile(),
+			// 16x2 Gray4 = 8 bytes 2bpp → 4 bytes per plane.
+			wantOld: bytes.Repeat([]byte{0x00}, 4),
+			wantNew: bytes.Repeat([]byte{0x00}, 4),
+		},
 	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			m := &MockHardware{}
+			epd := NewEPD(m, tc.profile)
+			if err := epd.Clear(); err != nil {
+				t.Fatal(err)
+			}
 
-	wantCmds := []byte{0x10, 0x13, 0x12}
-	if cmds := m.Commands(); !bytes.Equal(cmds, wantCmds) {
-		t.Errorf("commands = %#v, want %#v", cmds, wantCmds)
-	}
+			wantCmds := []byte{0x10, 0x13, 0x12}
+			if cmds := m.Commands(); !bytes.Equal(cmds, wantCmds) {
+				t.Errorf("commands = %#v, want %#v", cmds, wantCmds)
+			}
 
-	dataCalls := m.DataCalls()
-	if len(dataCalls) < 2 {
-		t.Fatalf("expected at least 2 data calls, got %d", len(dataCalls))
-	}
-
-	// Old buffer: Clear sends 0xFF which Display inverts to 0x00
-	wantOld := bytes.Repeat([]byte{0x00}, p.BufferSize())
-	if !bytes.Equal(dataCalls[0], wantOld) {
-		t.Errorf("old buffer[0] = %#x, want 0x00", dataCalls[0][0])
-	}
-
-	// New buffer: 0xFF (white)
-	wantNew := bytes.Repeat([]byte{0xFF}, p.BufferSize())
-	if !bytes.Equal(dataCalls[1], wantNew) {
-		t.Errorf("new buffer[0] = %#x, want 0xFF", dataCalls[1][0])
+			dataCalls := m.DataCalls()
+			if len(dataCalls) < 2 {
+				t.Fatalf("expected at least 2 data calls, got %d", len(dataCalls))
+			}
+			if !bytes.Equal(dataCalls[0], tc.wantOld) {
+				t.Errorf("old plane = % X, want % X", dataCalls[0], tc.wantOld)
+			}
+			if !bytes.Equal(dataCalls[1], tc.wantNew) {
+				t.Errorf("new plane = % X, want % X", dataCalls[1], tc.wantNew)
+			}
+		})
 	}
 }
 

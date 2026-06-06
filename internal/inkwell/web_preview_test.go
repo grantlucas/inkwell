@@ -180,29 +180,91 @@ func TestWebPreview_NonGetMethodReturns405(t *testing.T) {
 	}
 }
 
-func TestWebPreview_NonBWProfileReturnsError(t *testing.T) {
-	p := &DisplayProfile{
-		Name:         "gray-test",
+// gray4PreviewProfile mirrors gray4ImageProfile but is local to this
+// file so the two backend test sets stay independently editable.
+func gray4PreviewProfile() *DisplayProfile {
+	return &DisplayProfile{
+		Name:         "gray-preview",
 		Width:        16,
-		Height:       16,
+		Height:       1,
 		Color:        Gray4,
 		OldBufferCmd: 0x10,
 		NewBufferCmd: 0x13,
 		RefreshCmd:   0x12,
 	}
+}
+
+// TestWebPreview_Gray4Frame drives WebPreview with a Gray4 frame and
+// verifies wp.Frame() returns the four canonical shades at the expected
+// pixel positions. This is the inverse of the EPD.Display plane-split
+// path: the backend captures both planes off the wire and recombines
+// them into a viewable image.
+func TestWebPreview_Gray4Frame(t *testing.T) {
+	p := gray4PreviewProfile()
 	wp := NewWebPreview(p)
 
-	buf := make([]byte, p.BufferSize())
-	if err := wp.SendCommand(p.NewBufferCmd); err != nil {
-		t.Fatalf("SendCommand(NewBufferCmd): %v", err)
-	}
-	if err := wp.SendData(buf); err != nil {
-		t.Fatalf("SendData: %v", err)
+	buf := []byte{0x1B, 0xE4, 0x55, 0xAA} // w,l,d,b, b,d,l,w, l*4, d*4
+	sendDisplaySequence(t, wp, p, buf)
+
+	frame := wp.Frame()
+	if frame == nil {
+		t.Fatal("expected Gray4 frame after display sequence, got nil")
 	}
 
-	err := wp.SendCommand(p.RefreshCmd)
-	if err == nil {
-		t.Fatal("expected unsupported color depth error, got nil")
+	wantY := []uint8{0xFF, 0xC0, 0x80, 0x00}
+	for x, want := range wantY {
+		got := color.GrayModel.Convert(frame.At(x, 0)).(color.Gray).Y
+		if got != want {
+			t.Errorf("pixel (%d,0) Y=0x%02X, want 0x%02X", x, got, want)
+		}
+	}
+}
+
+// TestWebPreview_Gray4ServesPNGWithFourShades exercises the full preview
+// pipeline (capture → unpack → PNG encode → HTTP serve) for Gray4 to
+// confirm a developer running color_mode=gray4 actually sees four
+// distinct shades in the browser, not a 1-bit reduction.
+func TestWebPreview_Gray4ServesPNGWithFourShades(t *testing.T) {
+	p := gray4PreviewProfile()
+	wp := NewWebPreview(p)
+
+	buf := []byte{0x1B, 0xE4, 0x55, 0xAA}
+	sendDisplaySequence(t, wp, p, buf)
+
+	req := httptest.NewRequest(http.MethodGet, "/frame.png", nil)
+	rec := httptest.NewRecorder()
+	wp.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	img, err := png.Decode(rec.Body)
+	if err != nil {
+		t.Fatalf("decode PNG: %v", err)
+	}
+	seen := map[uint8]bool{}
+	for x := range 16 {
+		seen[color.GrayModel.Convert(img.At(x, 0)).(color.Gray).Y] = true
+	}
+	if len(seen) != 4 {
+		t.Errorf("distinct luminances in PNG = %d, want 4 (got %v)", len(seen), seen)
+	}
+}
+
+func TestWebPreview_Gray4PlaneSizeMismatch(t *testing.T) {
+	p := gray4PreviewProfile()
+	wp := NewWebPreview(p)
+
+	// Capture only the new plane (skip OldBufferCmd) — reconstructFrame
+	// must reject the partial state on RefreshCmd.
+	if err := wp.SendCommand(p.NewBufferCmd); err != nil {
+		t.Fatalf("SendCommand: %v", err)
+	}
+	if err := wp.SendData([]byte{0x00, 0x00}); err != nil {
+		t.Fatalf("SendData: %v", err)
+	}
+	if err := wp.SendCommand(p.RefreshCmd); err == nil {
+		t.Fatal("expected error for missing old plane, got nil")
 	}
 }
 

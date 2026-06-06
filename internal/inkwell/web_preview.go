@@ -13,15 +13,20 @@ import (
 
 // WebPreview is a Hardware implementation that serves the current display
 // frame over HTTP. Useful for live browser-based preview during development.
+// Captures both wire planes (the old-buffer payload after OldBufferCmd
+// and the new-buffer payload after NewBufferCmd) so it can reconstruct
+// either BW or Gray4 frames — the BW path ignores the old plane, the
+// Gray4 path joins both to recover the 2bpp buffer.
 type WebPreview struct {
-	profile     *DisplayProfile
-	lastCmd     byte
-	captured    []byte
-	mu          sync.RWMutex
-	current     *image.Paletted
-	source      *image.Paletted // high-fidelity pre-pack frame, if supplied
-	encodePNG   func(w io.Writer, m image.Image) error
-	subscribers map[chan struct{}]struct{}
+	profile      *DisplayProfile
+	lastCmd      byte
+	capturedOld  []byte
+	capturedNew  []byte
+	mu           sync.RWMutex
+	current      *image.Paletted
+	source       *image.Paletted // high-fidelity pre-pack frame, if supplied
+	encodePNG    func(w io.Writer, m image.Image) error
+	subscribers  map[chan struct{}]struct{}
 }
 
 var _ Hardware = (*WebPreview)(nil)
@@ -52,14 +57,14 @@ func (wp *WebPreview) Frame() *image.Paletted {
 	return frame
 }
 
-// SendCommand tracks the last command sent. On RefreshCmd it unpacks the
-// captured device buffer into wp.current so ServeHTTP can show what the
-// e-paper panel actually receives — i.e. the post-dither, 1-bit version,
-// not the rich grayscale source. The high-fidelity source frame (set via
-// SetSourceFrame) is kept on wp.source and served when the client opts in
-// with ?source=1. Important: wp.current must only be replaced (not mutated
-// in place) so that ServeHTTP can read the pointer under RLock without a
-// data race on the underlying pixel data.
+// SendCommand tracks the last command sent. On RefreshCmd it reconstructs
+// the captured device buffer into wp.current so ServeHTTP can show what
+// the e-paper panel actually receives — i.e. the post-dither/quantize
+// version, not the rich grayscale source. The high-fidelity source
+// frame (set via SetSourceFrame) is kept on wp.source and served when
+// the client opts in with ?source=1. Important: wp.current must only
+// be replaced (not mutated in place) so that ServeHTTP can read the
+// pointer under RLock without a data race on the underlying pixel data.
 func (wp *WebPreview) SendCommand(cmd byte) error {
 	if wp.profile == nil {
 		return fmt.Errorf("web preview: nil display profile")
@@ -69,14 +74,12 @@ func (wp *WebPreview) SendCommand(cmd byte) error {
 
 	wp.lastCmd = cmd
 	if cmd == wp.profile.RefreshCmd {
-		if wp.captured != nil {
-			if wp.profile.Color != BW {
-				return fmt.Errorf("web preview: unsupported color depth %v; only BW is currently supported", wp.profile.Color)
+		if wp.capturedNew != nil {
+			img, err := reconstructFrame(wp.profile, wp.capturedOld, wp.capturedNew)
+			if err != nil {
+				return fmt.Errorf("web preview: %w", err)
 			}
-			if expected := wp.profile.BufferSize(); len(wp.captured) != expected {
-				return fmt.Errorf("web preview: buffer size %d does not match expected %d", len(wp.captured), expected)
-			}
-			wp.current = UnpackBuffer(wp.profile, wp.captured)
+			wp.current = img
 			wp.notifyLocked()
 			return nil
 		}
@@ -108,7 +111,9 @@ func (wp *WebPreview) SetSourceFrame(frame *image.Paletted) {
 	wp.source = dup
 }
 
-// SendData captures the data payload when the previous command was NewBufferCmd.
+// SendData captures the data payload when the previous command was a
+// buffer-write (OldBufferCmd or NewBufferCmd). Both planes are needed
+// to reconstruct a Gray4 frame; BW reconstruction ignores the old plane.
 func (wp *WebPreview) SendData(data []byte) error {
 	if wp.profile == nil {
 		return fmt.Errorf("web preview: nil display profile")
@@ -116,9 +121,11 @@ func (wp *WebPreview) SendData(data []byte) error {
 	wp.mu.Lock()
 	defer wp.mu.Unlock()
 
-	if wp.lastCmd == wp.profile.NewBufferCmd {
-		wp.captured = make([]byte, len(data))
-		copy(wp.captured, data)
+	switch wp.lastCmd {
+	case wp.profile.OldBufferCmd:
+		wp.capturedOld = append(wp.capturedOld[:0], data...)
+	case wp.profile.NewBufferCmd:
+		wp.capturedNew = append(wp.capturedNew[:0], data...)
 	}
 	return nil
 }

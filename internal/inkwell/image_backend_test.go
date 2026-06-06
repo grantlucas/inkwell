@@ -146,6 +146,53 @@ func TestImageBackend_BufferSizeMismatchReturnsError(t *testing.T) {
 	}
 }
 
+// gray4ImageProfile is a small Gray4 profile sized to keep test buffer
+// math hand-checkable: 16x1 = 16 px, 4 bytes 2bpp, 2 bytes per plane.
+func gray4ImageProfile() *DisplayProfile {
+	return &DisplayProfile{
+		Name:         "test-gray4",
+		Width:        16,
+		Height:       1,
+		Color:        Gray4,
+		OldBufferCmd: 0x10,
+		NewBufferCmd: 0x13,
+		RefreshCmd:   0x12,
+	}
+}
+
+// TestImageBackend_Gray4PNGShowsFourShades drives ImageBackend with a
+// Gray4 frame containing all four shades and verifies the output PNG
+// renders them as distinct luminances. Without the both-planes capture
+// + reconstructFrame join, the PNG would either fail to write
+// (buffer size mismatch) or show only one bit of the 2-bit code.
+func TestImageBackend_Gray4PNGShowsFourShades(t *testing.T) {
+	dir := t.TempDir()
+	p := gray4ImageProfile()
+	backend := NewImageBackend(p, dir)
+
+	// w, l, d, b then b, d, l, w, then 8 light, then 8 dark.
+	buf := []byte{0x1B, 0xE4, 0x55, 0xAA}
+	sendDisplaySequence(t, backend, p, buf)
+
+	f, err := os.Open(filepath.Join(dir, "frame_000.png"))
+	if err != nil {
+		t.Fatalf("open PNG: %v", err)
+	}
+	defer f.Close()
+	img, err := png.Decode(f)
+	if err != nil {
+		t.Fatalf("decode PNG: %v", err)
+	}
+
+	wantY := []uint8{0xFF, 0xC0, 0x80, 0x00}
+	for x, want := range wantY {
+		got := color.GrayModel.Convert(img.At(x, 0)).(color.Gray).Y
+		if got != want {
+			t.Errorf("pixel (%d,0) Y=0x%02X, want 0x%02X", x, got, want)
+		}
+	}
+}
+
 func TestImageBackend_ReadBusyResetClose(t *testing.T) {
 	p := imageTestProfile()
 	backend := NewImageBackend(p, t.TempDir())
@@ -161,23 +208,32 @@ func TestImageBackend_ReadBusyResetClose(t *testing.T) {
 	}
 }
 
-// sendDisplaySequence simulates the EPD Display() call sequence on a backend.
+// sendDisplaySequence simulates the EPD Display() call sequence on a
+// backend, dispatching on the profile's color depth to match what
+// EPD.Display would actually emit.
 func sendDisplaySequence(t *testing.T, hw Hardware, p *DisplayProfile, buf []byte) {
 	t.Helper()
-	inverted := make([]byte, len(buf))
-	for i, b := range buf {
-		inverted[i] = ^b
+	var oldData, newData []byte
+	switch p.Color {
+	case Gray4:
+		oldData, newData = splitGray4Planes(buf)
+	default:
+		oldData = make([]byte, len(buf))
+		for i, b := range buf {
+			oldData[i] = ^b
+		}
+		newData = buf
 	}
 	if err := hw.SendCommand(p.OldBufferCmd); err != nil {
 		t.Fatalf("SendCommand(OldBufferCmd): %v", err)
 	}
-	if err := hw.SendData(inverted); err != nil {
+	if err := hw.SendData(oldData); err != nil {
 		t.Fatalf("SendData(old): %v", err)
 	}
 	if err := hw.SendCommand(p.NewBufferCmd); err != nil {
 		t.Fatalf("SendCommand(NewBufferCmd): %v", err)
 	}
-	if err := hw.SendData(buf); err != nil {
+	if err := hw.SendData(newData); err != nil {
 		t.Fatalf("SendData(new): %v", err)
 	}
 	if err := hw.SendCommand(p.RefreshCmd); err != nil {
