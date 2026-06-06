@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"log"
 	"net/http"
 	"time"
 
@@ -65,7 +66,14 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	weekStart := today
 	weekEnd := today.AddDate(0, 0, 7)
 
-	events, _ := w.cal.Events(weekStart, weekEnd)
+	// A calendar fetch failure (network, parse, etc.) shouldn't blank
+	// the dashboard — render with whatever events made it through (or
+	// an empty list) but log so the failure shows up in the operator's
+	// terminal instead of being silently dropped.
+	events, err := w.cal.Events(weekStart, weekEnd)
+	if err != nil {
+		log.Printf("weekly: fetch calendar events: %v", err)
+	}
 
 	var forecast *weather.Forecast
 	weatherH := 0
