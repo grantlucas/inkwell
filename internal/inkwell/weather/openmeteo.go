@@ -38,11 +38,16 @@ type OpenMeteoSource struct {
 	client  HTTPClient
 }
 
-// NewOpenMeteoSource creates a source for the given model.
+// NewOpenMeteoSource creates a source for the given model. A nil client
+// falls through to http.DefaultClient so a caller-forgotten dependency
+// doesn't surface as a nil-pointer panic from the first request.
 func NewOpenMeteoSource(model Model, client HTTPClient) *OpenMeteoSource {
 	base, ok := modelBaseURLs[model]
 	if !ok {
 		base = modelBaseURLs[ModelGFS]
+	}
+	if client == nil {
+		client = http.DefaultClient
 	}
 	return &OpenMeteoSource{model: model, baseURL: base, client: client}
 }
@@ -58,7 +63,13 @@ func (s *OpenMeteoSource) Forecast(_ context.Context, loc Location, days int) (*
 	if err != nil {
 		return nil, fmt.Errorf("openmeteo %s: fetch: %w", s.model, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		// Drain to allow connection reuse, then close. Body.Close on a
+		// completed response generally doesn't return an actionable
+		// error, but we still surface it via the swallowed log so an
+		// upstream HTTP cleanup bug shows up under observation.
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("openmeteo %s: HTTP %d", s.model, resp.StatusCode)

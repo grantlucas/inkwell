@@ -213,6 +213,18 @@ func TestOpenMeteoSource_BadBaseURL(t *testing.T) {
 	}
 }
 
+// A nil client passed to NewOpenMeteoSource must not panic; the
+// constructor should fall back to http.DefaultClient.
+func TestNewOpenMeteoSource_NilClientUsesDefault(t *testing.T) {
+	src := NewOpenMeteoSource(ModelGFS, nil)
+	if src.client == nil {
+		t.Fatal("client = nil, want http.DefaultClient")
+	}
+	if src.client != http.DefaultClient {
+		t.Errorf("client = %v, want http.DefaultClient", src.client)
+	}
+}
+
 func TestOpenMeteoSource_ReadBodyError(t *testing.T) {
 	client := &mockHTTPClient{
 		response: &http.Response{
