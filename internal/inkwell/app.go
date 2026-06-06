@@ -113,7 +113,13 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 		deps.DataSources["http_client"] = http.DefaultClient
 	}
 	if _, ok := deps.DataSources["weather_source"]; !ok {
-		httpClient := http.DefaultClient
+		// Use the injected http_client so callers can override the
+		// transport (timeouts, instrumentation, test stubs) and have
+		// the default weather source actually honor it.
+		httpClient, ok := deps.DataSources["http_client"].(weather.HTTPClient)
+		if !ok {
+			httpClient = http.DefaultClient
+		}
 		ensemble := weather.NewEnsembleSource(
 			weather.NewOpenMeteoSource(weather.ModelGFS, httpClient),
 			weather.NewOpenMeteoSource(weather.ModelECMWF, httpClient),
