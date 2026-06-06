@@ -244,3 +244,22 @@ func TestFilterEventsForDay_Empty(t *testing.T) {
 		t.Errorf("got %d events, want 0", len(filtered))
 	}
 }
+
+// When the column runs out of vertical room *before* the next event's
+// time line can fit, the loop must stop via the pre-event y-overflow
+// break (line 35 in events.go). With lineHeight=18 and bounds height
+// 70, event 1 completes (time line at y=38, summary at y=58) and
+// event 2's pre-event check `58 > 70-18=52` fires.
+func TestRenderEvents_StopsAtPreEventYOverflow(t *testing.T) {
+	frame := newTestFrame(114, 70)
+	events := []ical.Event{
+		{UID: "1", Summary: "First", Start: time.Date(2026, 4, 28, 9, 0, 0, 0, time.UTC)},
+		{UID: "2", Summary: "Second", Start: time.Date(2026, 4, 28, 10, 0, 0, 0, time.UTC)},
+		{UID: "3", Summary: "Third", Start: time.Date(2026, 4, 28, 11, 0, 0, 0, time.UTC)},
+	}
+
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 70), events, 10, false)
+	if rendered != 1 {
+		t.Errorf("rendered %d events, want 1 (pre-event y-overflow should have stopped the loop after event 1)", rendered)
+	}
+}

@@ -2,9 +2,11 @@ package date
 
 import (
 	"image"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
@@ -92,6 +94,26 @@ func TestFactory_NilNow(t *testing.T) {
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
+}
+
+// mustLoadDateFace runs at package init with valid embedded fonts.
+// Pin its panic branch by swapping in bad TTF data and re-invoking
+// it directly.
+func TestMustLoadDateFace_PanicsOnFontError(t *testing.T) {
+	restore := fonts.SwapDataForTest([]byte("bad"), []byte("bad"))
+	defer restore()
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic from mustLoadDateFace")
+		}
+		msg, ok := r.(string)
+		if !ok || !strings.Contains(msg, "date: load font") {
+			t.Errorf("panic = %v, want a string mentioning 'date: load font'", r)
+		}
+	}()
+	_ = mustLoadDateFace()
 }
 
 // Direct callers of New must also survive a nil clock; the constructor

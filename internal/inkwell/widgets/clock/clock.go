@@ -21,11 +21,18 @@ var _ widget.Widget = (*Widget)(nil)
 var clockFace font.Face
 
 func init() {
+	clockFace = mustLoadClockFace()
+}
+
+// mustLoadClockFace is extracted so the font-load panic branch is
+// reachable from tests via fonts.SwapDataForTest. Production paths
+// invoke it once at init time.
+func mustLoadClockFace() font.Face {
 	f, err := fonts.Face(fonts.Bold, 16)
 	if err != nil {
 		panic("clock: load font: " + err.Error())
 	}
-	clockFace = f
+	return f
 }
 
 // Align controls text alignment within the widget bounds.

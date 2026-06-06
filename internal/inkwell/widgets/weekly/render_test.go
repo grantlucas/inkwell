@@ -2,8 +2,10 @@ package weekly
 
 import (
 	"image"
+	"strings"
 	"testing"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
@@ -157,4 +159,42 @@ func TestTruncateText(t *testing.T) {
 			t.Errorf("truncateText(%q, %d) = %q, want %q", tc.text, tc.max, got, tc.expected)
 		}
 	}
+}
+
+// mustLoadDefaultFace runs at package init with valid embedded
+// fonts. Pin its panic branch by swapping in bad TTF data.
+func TestMustLoadDefaultFace_PanicsOnFontError(t *testing.T) {
+	restore := fonts.SwapDataForTest([]byte("bad"), []byte("bad"))
+	defer restore()
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic from mustLoadDefaultFace")
+		}
+		msg, ok := r.(string)
+		if !ok || !strings.Contains(msg, "weekly: load font") {
+			t.Errorf("panic = %v, want a string mentioning 'weekly: load font'", r)
+		}
+	}()
+	_ = mustLoadDefaultFace()
+}
+
+// mustLoadHeaderFace covers the per-face panic branches used by
+// day_header.go init.
+func TestMustLoadHeaderFace_PanicsOnFontError(t *testing.T) {
+	restore := fonts.SwapDataForTest([]byte("bad"), []byte("bad"))
+	defer restore()
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic from mustLoadHeaderFace")
+		}
+		msg, ok := r.(string)
+		if !ok || !strings.Contains(msg, "weekly: load smoke font") {
+			t.Errorf("panic = %v, want a string mentioning 'weekly: load smoke font'", r)
+		}
+	}()
+	_ = mustLoadHeaderFace(fonts.SemiBold, 12, "smoke")
 }

@@ -29,10 +29,14 @@ var (
 	parseErr    error
 )
 
+// fontData is the source of truth for which embedded TTFs the parser
+// reads. Tests swap this via SwapDataForTest so the parseErr branch
+// of parseFonts is reachable.
+var fontData = [2][]byte{terminusRegularTTF, terminusBoldTTF}
+
 func parseFonts() {
 	parseOnce.Do(func() {
-		data := [2][]byte{terminusRegularTTF, terminusBoldTTF}
-		for i, d := range data {
+		for i, d := range fontData {
 			f, err := opentype.Parse(d)
 			if err != nil {
 				parseErr = fmt.Errorf("parse font %d: %w", i, err)
@@ -41,6 +45,29 @@ func parseFonts() {
 			parsedFonts[i] = f
 		}
 	})
+}
+
+// SwapDataForTest replaces the embedded TTF data the parser reads and
+// resets the package's once-state so the next Face call re-parses
+// with whatever was supplied. Returns a restore function that puts
+// the original data and a fresh (un-parsed) state back. Test-only:
+// callers must always defer the restore.
+func SwapDataForTest(regular, bold []byte) (restore func()) {
+	origData := fontData
+	origParsed := parsedFonts
+	origErr := parseErr
+
+	fontData = [2][]byte{regular, bold}
+	parsedFonts = [2]*opentype.Font{}
+	parseErr = nil
+	parseOnce = sync.Once{}
+
+	return func() {
+		fontData = origData
+		parsedFonts = origParsed
+		parseErr = origErr
+		parseOnce = sync.Once{}
+	}
 }
 
 func Face(weight Weight, sizePt float64) (font.Face, error) {

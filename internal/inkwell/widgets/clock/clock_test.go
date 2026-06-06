@@ -3,9 +3,11 @@ package clock
 import (
 	"bytes"
 	"image"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
@@ -285,4 +287,29 @@ func TestWidget_GoldenFile(t *testing.T) {
 	}
 
 	testutil.AssertGoldenPNG(t, frame)
+}
+
+// mustLoadClockFace is invoked at package init with valid embedded
+// fonts. Pin its panic branch by swapping in bad TTF data and
+// re-invoking it directly; the test only succeeds if the panic
+// message identifies the clock package.
+func TestMustLoadClockFace_PanicsOnFontError(t *testing.T) {
+	restore := fonts.SwapDataForTest([]byte("bad"), []byte("bad"))
+	defer restore()
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic from mustLoadClockFace")
+		}
+		msg, ok := r.(string)
+		if !ok {
+			t.Fatalf("recovered non-string panic: %T %v", r, r)
+		}
+		if !strings.Contains(msg, "clock: load font") {
+			t.Errorf("panic message = %q, want it to mention 'clock: load font'", msg)
+		}
+	}()
+
+	_ = mustLoadClockFace()
 }

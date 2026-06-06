@@ -14,11 +14,17 @@ import (
 var defaultFace font.Face
 
 func init() {
+	defaultFace = mustLoadDefaultFace()
+}
+
+// mustLoadDefaultFace is extracted so the font-load panic branch is
+// reachable from tests via fonts.SwapDataForTest.
+func mustLoadDefaultFace() font.Face {
 	f, err := fonts.Face(fonts.Regular, 10)
 	if err != nil {
 		panic("weatherview: load font: " + err.Error())
 	}
-	defaultFace = f
+	return f
 }
 
 const (

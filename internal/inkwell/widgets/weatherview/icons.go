@@ -31,6 +31,11 @@ var conditionGlyphs = map[weather.Condition]rune{
 // invalid font data for error-path coverage.
 var fontData = weatherIconsTTF
 
+// newOpenTypeFace is the indirection over opentype.NewFace that tests
+// override to exercise the otherwise-unreachable "create face" error
+// branch. Production calls go straight through.
+var newOpenTypeFace = opentype.NewFace
+
 // DrawIcon renders a weather icon for the given condition at (x, y) with
 // the specified pixel size. The icon is drawn centered horizontally and
 // vertically within a size×size box at (x, y).
@@ -87,13 +92,13 @@ func iconFace(size float64) (font.Face, error) {
 	// rather than pixel-aligned stems, so full hinting was producing chunky
 	// staircased edges. Without hinting the glyph anti-aliases against the
 	// grayscale palette and the icon edges read as smooth curves.
-	face, err := opentype.NewFace(tt, &opentype.FaceOptions{
+	face, err := newOpenTypeFace(tt, &opentype.FaceOptions{
 		Size:    max(size, 1),
 		DPI:     72,
 		Hinting: font.HintingNone,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("create weather icon face: %w", err) //nolint:goerr113 // unreachable with valid embedded font
+		return nil, fmt.Errorf("create weather icon face: %w", err) //nolint:goerr113 // only reachable via test override
 	}
 
 	return face, nil

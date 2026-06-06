@@ -1,7 +1,11 @@
 package weatherview
 
 import (
+	"errors"
 	"testing"
+
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/opentype"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
@@ -115,6 +119,23 @@ func TestIconFace_ZeroSize(t *testing.T) {
 	}
 	if cerr := f.Close(); cerr != nil {
 		t.Errorf("close face: %v", cerr)
+	}
+}
+
+// The opentype.NewFace error path is structurally unreachable with a
+// valid embedded font + bounded options, so iconFace routes through
+// the newOpenTypeFace indirection that tests override. Swap in a
+// stub that always errors so the wrap-and-return branch is covered.
+func TestIconFace_OpenTypeNewFaceError(t *testing.T) {
+	orig := newOpenTypeFace
+	defer func() { newOpenTypeFace = orig }()
+	newOpenTypeFace = func(*opentype.Font, *opentype.FaceOptions) (font.Face, error) {
+		return nil, errors.New("injected NewFace failure")
+	}
+
+	_, err := iconFace(24)
+	if err == nil {
+		t.Fatal("expected error from injected NewFace stub")
 	}
 }
 

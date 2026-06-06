@@ -357,3 +357,36 @@ func TestWebPreview_ReadBusyResetClose(t *testing.T) {
 		t.Errorf("Close: %v", err)
 	}
 }
+
+// notifyLocked's send is non-blocking — when a subscriber's buffered
+// channel is full, the default branch must fire and the next refresh
+// must still complete. Pin the default branch by filling a
+// subscriber's channel before triggering another refresh.
+func TestWebPreview_NotifyDropsWhenSubscriberFull(t *testing.T) {
+	profile, ok := Profiles["waveshare_7in5_v2"]
+	if !ok {
+		t.Fatal("missing waveshare_7in5_v2 profile")
+	}
+	wp := NewWebPreview(profile)
+
+	// Prime: capture a buffer so SendCommand(RefreshCmd) calls notifyLocked.
+	if err := wp.SendData(make([]byte, profile.BufferSize())); err != nil {
+		t.Fatalf("SendData: %v", err)
+	}
+
+	ch := wp.Subscribe()
+	defer wp.Unsubscribe(ch)
+
+	// Fill the (cap=1) subscriber channel so the second notify hits
+	// the default-branch drop.
+	ch <- struct{}{}
+
+	if err := wp.SendCommand(profile.RefreshCmd); err != nil {
+		t.Fatalf("SendCommand: %v", err)
+	}
+	// Sanity: the subscriber should still be registered (the drop
+	// doesn't remove it).
+	if got := wp.subscriberCount(); got != 1 {
+		t.Errorf("subscriberCount = %d, want 1", got)
+	}
+}

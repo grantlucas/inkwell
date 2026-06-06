@@ -22,11 +22,17 @@ var _ widget.Widget = (*Widget)(nil)
 var dateFace font.Face
 
 func init() {
+	dateFace = mustLoadDateFace()
+}
+
+// mustLoadDateFace is extracted so the font-load panic branch is
+// reachable from tests via fonts.SwapDataForTest.
+func mustLoadDateFace() font.Face {
 	f, err := fonts.Face(fonts.SemiBold, 12)
 	if err != nil {
 		panic("date: load font: " + err.Error())
 	}
-	dateFace = f
+	return f
 }
 
 // Widget renders a formatted date string.

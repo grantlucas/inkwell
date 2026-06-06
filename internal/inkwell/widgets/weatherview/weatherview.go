@@ -16,25 +16,27 @@ import (
 )
 
 var (
-	labelFace   font.Face
-	tempHiFace  font.Face
-	tempLoFace  font.Face
+	labelFace  font.Face
+	tempHiFace font.Face
+	tempLoFace font.Face
 )
 
 func init() {
-	var err error
-	labelFace, err = fonts.Face(fonts.SemiBold, 10)
+	labelFace = mustLoadFace(fonts.SemiBold, 10, "label")
+	tempHiFace = mustLoadFace(fonts.Bold, 12, "temp hi")
+	tempLoFace = mustLoadFace(fonts.Regular, 10, "temp lo")
+}
+
+// mustLoadFace is extracted so the per-face panic branches are
+// reachable from tests via fonts.SwapDataForTest. The role label
+// flows into the panic message so a failure points at which face
+// failed to load.
+func mustLoadFace(weight fonts.Weight, size float64, role string) font.Face {
+	f, err := fonts.Face(weight, size)
 	if err != nil {
-		panic("weatherview: load label font: " + err.Error())
+		panic("weatherview: load " + role + " font: " + err.Error())
 	}
-	tempHiFace, err = fonts.Face(fonts.Bold, 12)
-	if err != nil {
-		panic("weatherview: load temp hi font: " + err.Error())
-	}
-	tempLoFace, err = fonts.Face(fonts.Regular, 10)
-	if err != nil {
-		panic("weatherview: load temp lo font: " + err.Error())
-	}
+	return f
 }
 
 // Options controls how day weather is rendered.

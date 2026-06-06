@@ -18,19 +18,21 @@ var (
 )
 
 func init() {
-	var err error
-	dayAbbrFace, err = fonts.Face(fonts.SemiBold, 12)
+	dayAbbrFace = mustLoadHeaderFace(fonts.SemiBold, 12, "day abbr")
+	dateNumFace = mustLoadHeaderFace(fonts.SemiBold, 16, "date num")
+	monthFace = mustLoadHeaderFace(fonts.Regular, 12, "month")
+}
+
+// mustLoadHeaderFace is extracted so the per-face panic branches are
+// reachable from tests via fonts.SwapDataForTest. The role label
+// flows into the panic message so a failure identifies which face
+// failed to load.
+func mustLoadHeaderFace(weight fonts.Weight, size float64, role string) font.Face {
+	f, err := fonts.Face(weight, size)
 	if err != nil {
-		panic("weekly: load day abbr font: " + err.Error())
+		panic("weekly: load " + role + " font: " + err.Error())
 	}
-	dateNumFace, err = fonts.Face(fonts.SemiBold, 16)
-	if err != nil {
-		panic("weekly: load date num font: " + err.Error())
-	}
-	monthFace, err = fonts.Face(fonts.Regular, 12)
-	if err != nil {
-		panic("weekly: load month font: " + err.Error())
-	}
+	return f
 }
 
 // renderDayHeader draws the day header for a column: abbreviated day name,

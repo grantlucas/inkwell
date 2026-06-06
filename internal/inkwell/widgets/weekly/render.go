@@ -14,11 +14,17 @@ import (
 var defaultFace font.Face
 
 func init() {
+	defaultFace = mustLoadDefaultFace()
+}
+
+// mustLoadDefaultFace is extracted so the font-load panic branch is
+// reachable from tests via fonts.SwapDataForTest.
+func mustLoadDefaultFace() font.Face {
 	f, err := fonts.Face(fonts.Regular, 12)
 	if err != nil {
 		panic("weekly: load font: " + err.Error())
 	}
-	defaultFace = f
+	return f
 }
 
 func fillWhite(frame *image.Paletted, r image.Rectangle) {

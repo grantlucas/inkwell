@@ -2,8 +2,10 @@ package weatherview
 
 import (
 	"image"
+	"strings"
 	"testing"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
@@ -233,4 +235,43 @@ func TestAbs(t *testing.T) {
 	if abs(0) != 0 {
 		t.Error("abs(0) != 0")
 	}
+}
+
+// mustLoadDefaultFace runs at package init with valid embedded
+// fonts. Pin its panic branch by swapping in bad TTF data.
+func TestMustLoadDefaultFace_PanicsOnFontError(t *testing.T) {
+	restore := fonts.SwapDataForTest([]byte("bad"), []byte("bad"))
+	defer restore()
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic from mustLoadDefaultFace")
+		}
+		msg, ok := r.(string)
+		if !ok || !strings.Contains(msg, "weatherview: load font") {
+			t.Errorf("panic = %v, want a string mentioning 'weatherview: load font'", r)
+		}
+	}()
+	_ = mustLoadDefaultFace()
+}
+
+// mustLoadFace covers the per-face panic branch used by the
+// weatherview.go init. The role label must appear in the panic
+// message so it's easy to tell which face failed.
+func TestMustLoadFace_PanicsOnFontError(t *testing.T) {
+	restore := fonts.SwapDataForTest([]byte("bad"), []byte("bad"))
+	defer restore()
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic from mustLoadFace")
+		}
+		msg, ok := r.(string)
+		if !ok || !strings.Contains(msg, "weatherview: load smoke font") {
+			t.Errorf("panic = %v, want a string mentioning 'weatherview: load smoke font'", r)
+		}
+	}()
+	_ = mustLoadFace(fonts.Regular, 10, "smoke")
 }
