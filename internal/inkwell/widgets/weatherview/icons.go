@@ -74,10 +74,14 @@ func iconFace(size float64) (font.Face, error) {
 		return nil, fmt.Errorf("parse weather icons font: %w", err)
 	}
 
+	// HintingNone for icon glyphs: weather symbols are circular/curved shapes
+	// rather than pixel-aligned stems, so full hinting was producing chunky
+	// staircased edges. Without hinting the glyph anti-aliases against the
+	// grayscale palette and the icon edges read as smooth curves.
 	face, err := opentype.NewFace(tt, &opentype.FaceOptions{
 		Size:    max(size, 1),
 		DPI:     72,
-		Hinting: font.HintingFull,
+		Hinting: font.HintingNone,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create weather icon face: %w", err) //nolint:goerr113 // unreachable with valid embedded font
