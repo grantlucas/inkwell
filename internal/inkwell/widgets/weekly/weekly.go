@@ -261,6 +261,9 @@ func parseConfig(config map[string]any) (Config, error) {
 		if !ok {
 			return cfg, fmt.Errorf("weekly-calendar: latitude must be a number, got %T", v)
 		}
+		if f < -90 || f > 90 {
+			return cfg, fmt.Errorf("weekly-calendar: latitude must be in [-90, 90], got %v", f)
+		}
 		cfg.Latitude = f
 	}
 
@@ -268,6 +271,9 @@ func parseConfig(config map[string]any) (Config, error) {
 		f, ok := v.(float64)
 		if !ok {
 			return cfg, fmt.Errorf("weekly-calendar: longitude must be a number, got %T", v)
+		}
+		if f < -180 || f > 180 {
+			return cfg, fmt.Errorf("weekly-calendar: longitude must be in [-180, 180], got %v", f)
 		}
 		cfg.Longitude = f
 	}
@@ -305,6 +311,9 @@ func parseConfig(config map[string]any) (Config, error) {
 		n, ok := v.(int)
 		if !ok {
 			return cfg, fmt.Errorf("weekly-calendar: highlight_hour must be an integer, got %T", v)
+		}
+		if n < 0 || n > 23 {
+			return cfg, fmt.Errorf("weekly-calendar: highlight_hour must be in [0, 23], got %d", n)
 		}
 		cfg.HighlightHour = n
 	}

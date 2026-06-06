@@ -504,6 +504,39 @@ func TestParseConfig_LatLon(t *testing.T) {
 	}
 }
 
+func TestParseConfig_LatLonRange(t *testing.T) {
+	cases := []struct {
+		label   string
+		lat     float64
+		lon     float64
+		wantErr bool
+	}{
+		{"lat lower boundary", -90, 0, false},
+		{"lat upper boundary", 90, 0, false},
+		{"lat below range", -90.001, 0, true},
+		{"lat above range", 90.001, 0, true},
+		{"lat far out of range", 500, 0, true},
+		{"lon lower boundary", 0, -180, false},
+		{"lon upper boundary", 0, 180, false},
+		{"lon below range", 0, -180.001, true},
+		{"lon above range", 0, 180.001, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			cfg := minimalConfig()
+			cfg["latitude"] = tc.lat
+			cfg["longitude"] = tc.lon
+			_, err := parseConfig(cfg)
+			if tc.wantErr && err == nil {
+				t.Errorf("lat=%f lon=%f: want error, got nil", tc.lat, tc.lon)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("lat=%f lon=%f: unexpected error: %v", tc.lat, tc.lon, err)
+			}
+		})
+	}
+}
+
 func TestParseConfig_ShowWeather(t *testing.T) {
 	cfg := minimalConfig()
 	cfg["show_weather"] = false
@@ -574,6 +607,33 @@ func TestParseConfig_HighlightHour(t *testing.T) {
 	cfg["highlight_hour"] = "noon"
 	if _, err := parseConfig(cfg); err == nil {
 		t.Error("expected error for non-int highlight_hour")
+	}
+}
+
+func TestParseConfig_HighlightHourRange(t *testing.T) {
+	cases := []struct {
+		label   string
+		hour    int
+		wantErr bool
+	}{
+		{"lower boundary", 0, false},
+		{"upper boundary", 23, false},
+		{"below range", -1, true},
+		{"above range", 24, true},
+		{"far above range", 99, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			cfg := minimalConfig()
+			cfg["highlight_hour"] = tc.hour
+			_, err := parseConfig(cfg)
+			if tc.wantErr && err == nil {
+				t.Errorf("hour=%d: want error, got nil", tc.hour)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("hour=%d: unexpected error: %v", tc.hour, err)
+			}
+		})
 	}
 }
 
