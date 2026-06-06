@@ -61,8 +61,9 @@ charts). Trade-off: tiny regions (<12 px on a side) don't have enough
 pixels for the stipple to read.
 
 Either way, on the Waveshare 7.5" V2 you can also opt into the panel's
-native 4-level grayscale mode via the upcoming `color_mode: gray4` config
-knob (see [follow-up issues][gray4-chain]). Once that lands, four
+native 4-level grayscale mode via the upcoming `color_mode: gray4`
+config knob (tracked in this project's beads workspace — run
+`bd ready` to see the active Gray4 work). Once that lands, four
 specific palette indices will map to flat native grays without dithering:
 
 | Native level | Closest `PaperPalette` index |
@@ -74,8 +75,6 @@ specific palette indices will map to flat native grays without dithering:
 
 Anything else in the palette will still dither (via the future
 `packGray4` dither path) to fake the missing intermediates.
-
-[gray4-chain]: https://github.com/grantlucas/inkwell/issues?q=is%3Aissue+label%3Agray4
 
 ## Strategy 2 — IT8951-controller panels (6" HD, 7.8", 9.7", 10.3", 13.3")
 
