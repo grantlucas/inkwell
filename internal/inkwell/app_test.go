@@ -309,6 +309,69 @@ backend: preview
 	}
 }
 
+// TestRun_Init4GrayWhenColorGray4 confirms App.Run picks the Init4Gray
+// init sequence (not InitFull) when the resolved profile is Gray4. The
+// signature command is 0xE5 with data 0x5F — Waveshare's "force
+// temperature for 4-gray refresh waveform." Without this, the panel
+// would receive a BW init followed by 4-gray plane data and render
+// garbage.
+func TestRun_Init4GrayWhenColorGray4(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+color_mode: gray4
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	mock := &MockHardware{}
+	app, err := NewApp(cfg, WithHardware(mock), WithInterval(10*time.Millisecond))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if err := app.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// Find the 0xE5 (force temperature) command and confirm its data byte.
+	// Init4Gray uses 0x5F (4-gray); InitFull doesn't issue 0xE5 at all.
+	var foundTempCmd bool
+	for i, c := range mock.Calls {
+		if c.Type == "command" && c.Data[0] == 0xE5 {
+			if i+1 >= len(mock.Calls) || mock.Calls[i+1].Type != "data" {
+				t.Fatalf("0xE5 command at call %d missing data payload", i)
+			}
+			data := mock.Calls[i+1].Data
+			if len(data) != 1 || data[0] != 0x5F {
+				t.Errorf("0xE5 data = % X, want 0x5F (4-gray temperature)", data)
+			}
+			foundTempCmd = true
+			break
+		}
+	}
+	if !foundTempCmd {
+		t.Fatal("init sequence missing 0xE5 — Gray4 init was not selected")
+	}
+
+	// And the first init command after reset should match the Init4Gray
+	// sequence, not InitFull's. Init4Gray starts with 0x00 (panel
+	// setting); InitFull starts with 0x06 (booster soft start).
+	var firstCmd byte
+	for _, c := range mock.Calls {
+		if c.Type == "command" {
+			firstCmd = c.Data[0]
+			break
+		}
+	}
+	if firstCmd != 0x00 {
+		t.Errorf("first init command = 0x%X, want 0x00 (Init4Gray panel setting)", firstCmd)
+	}
+}
+
 // brokenWidget is a Widget that always returns an error on Render.
 type brokenWidget struct {
 	bounds image.Rectangle

@@ -184,9 +184,10 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	defer signalReady()
 
-	if err := a.epd.Init(InitFull); err != nil {
+	mode := initModeFor(a.profile.Color)
+	if err := a.epd.Init(mode); err != nil {
 		a.epd.Close()
-		return fmt.Errorf("init display: %w", err)
+		return fmt.Errorf("init display %q: %w", a.profile.Name, err)
 	}
 
 	// Start HTTP server if the backend supports it.
@@ -296,6 +297,17 @@ func buildDashboard(cfg *Config, profile *DisplayProfile, registry *widget.Regis
 	}
 
 	return NewDashboard(screens, time.Duration(cfg.Dashboard.RotateInterval), deps.Now), nil
+}
+
+// initModeFor maps a ColorDepth to the init sequence the panel needs
+// before any frame data is written. Gray4 requires the Init4Gray
+// sequence (different temperature waveform); BW (and any future depth
+// without a special init) uses the standard full init.
+func initModeFor(c ColorDepth) InitMode {
+	if c == Gray4 {
+		return Init4Gray
+	}
+	return InitFull
 }
 
 // applyColorMode returns a profile pinned to the color depth requested in
