@@ -84,9 +84,14 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 		return nil, fmt.Errorf("interval must be positive")
 	}
 
-	profile, ok := Profiles[cfg.Display]
+	baseProfile, ok := Profiles[cfg.Display]
 	if !ok {
 		return nil, fmt.Errorf("unknown display profile: %q", cfg.Display)
+	}
+
+	profile, err := applyColorMode(baseProfile, cfg.ColorMode)
+	if err != nil {
+		return nil, err
 	}
 
 	hw := o.hw
@@ -291,6 +296,26 @@ func buildDashboard(cfg *Config, profile *DisplayProfile, registry *widget.Regis
 	}
 
 	return NewDashboard(screens, time.Duration(cfg.Dashboard.RotateInterval), deps.Now), nil
+}
+
+// applyColorMode returns a profile pinned to the color depth requested in
+// config. "" or "bw" leaves the base profile untouched; "gray4" returns a
+// shallow copy with Color overridden. We copy rather than mutate so the
+// shared Profiles map is never modified — each App owns its own profile.
+func applyColorMode(base *DisplayProfile, mode string) (*DisplayProfile, error) {
+	switch mode {
+	case "", "bw":
+		return base, nil
+	case "gray4":
+		if !base.Capabilities.Grayscale {
+			return nil, fmt.Errorf("display %q does not support grayscale", base.Name)
+		}
+		p := *base
+		p.Color = Gray4
+		return &p, nil
+	default:
+		return nil, fmt.Errorf("invalid color_mode: %q", mode)
+	}
 }
 
 // createSPIBackendFn creates the SPI hardware backend. Overridden by
