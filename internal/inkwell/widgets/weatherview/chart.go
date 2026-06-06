@@ -86,7 +86,7 @@ func RenderHourlyChart(frame *image.Paletted, bounds image.Rectangle, hourly []w
 			cx := bounds.Min.X + int(float64(i)*step) + barW/2
 			bandW := max(barW+2, 6)
 			band := image.Rect(cx-bandW/2, bounds.Min.Y, cx+bandW/2+1, barTop+barMaxH)
-			fillRect(frame, band, widget.PaperGray10)
+			fillRect(frame, band, widget.PaperGray20)
 			break
 		}
 	}
