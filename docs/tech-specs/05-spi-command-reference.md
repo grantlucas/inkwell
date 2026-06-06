@@ -1,7 +1,16 @@
 # SPI Command Reference
 
-This documents the SPI commands used by the 7.5" e-Paper V2 controller IC, as
-observed in the Waveshare Python driver.
+This documents the SPI commands used by the 7.5" e-Paper V2 controller
+IC, as observed in the Waveshare Python driver.
+
+These same commands are encoded as data in
+[`internal/inkwell/profile.go`][profile-go] (`Waveshare7in5V2`) and
+walked by the generic [`EPD`][epd-go] driver — when adding new
+displays or new init modes, this table is the spec the profile data
+must match.
+
+[profile-go]: ../../internal/inkwell/profile.go
+[epd-go]: ../../internal/inkwell/epd.go
 
 ## Communication Protocol
 

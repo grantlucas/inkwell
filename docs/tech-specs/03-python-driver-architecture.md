@@ -1,7 +1,30 @@
-# Python Driver Architecture
+# Python Driver Architecture (Historical Reference)
 
-This document explains the architecture of the Waveshare Python driver for the
-7.5" e-Paper V2, broken into its two main modules.
+> **This documents the *Waveshare-provided Python driver*, not Inkwell.**
+> Inkwell is a Go application with its own driver layer. This page is
+> kept as a historical reference for *where* the SPI command sequences
+> in [`internal/inkwell/profile.go`][profile-go] came from — the Python
+> driver was the source-of-truth read while building the Go
+> implementation.
+>
+> For the current Go implementation, read:
+>
+> - [`internal/inkwell/profile.go`][profile-go] — `Waveshare7in5V2`
+>   profile (the SPI sequences below, encoded as data)
+> - [`internal/inkwell/epd.go`][epd-go] — generic `EPD` driver that
+>   walks the profile sequences
+> - [`internal/inkwell/spi_hardware.go`][spi-go] — SPI/GPIO transport
+>   via periph.io (build-tagged `hardware`)
+>
+> The Python driver is not invoked at Inkwell runtime; you do not need
+> Python installed to run Inkwell.
+
+[profile-go]: ../../internal/inkwell/profile.go
+[epd-go]: ../../internal/inkwell/epd.go
+[spi-go]: ../../internal/inkwell/spi_hardware.go
+
+This document explains the architecture of the Waveshare Python driver
+for the 7.5" e-Paper V2, broken into its two main modules.
 
 ## Module 1: `epdconfig.py` — Hardware Abstraction Layer
 
