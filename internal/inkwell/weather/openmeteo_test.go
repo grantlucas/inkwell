@@ -13,10 +13,12 @@ type mockHTTPClient struct {
 	response *http.Response
 	err      error
 	lastURL  string
+	lastCtx  context.Context
 }
 
-func (m *mockHTTPClient) Get(url string) (*http.Response, error) {
-	m.lastURL = url
+func (m *mockHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	m.lastURL = req.URL.String()
+	m.lastCtx = req.Context()
 	return m.response, m.err
 }
 
@@ -211,6 +213,56 @@ func TestOpenMeteoSource_BadBaseURL(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for bad base URL")
 	}
+}
+
+// Ctx cancellation flows from Source.Forecast through to the HTTP
+// client, which Phase 5 of the PR #24 fix-up made real (the original
+// code took _ context.Context and ignored it). A client that returns
+// req.Context().Err() simulates an HTTP transport honoring the
+// deadline.
+func TestOpenMeteoSource_ForecastHonorsContextCancellation(t *testing.T) {
+	client := &ctxAwareHTTPClient{}
+	src := NewOpenMeteoSource(ModelGFS, client)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := src.Forecast(ctx, Location{}, 1)
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want wrapping context.Canceled", err)
+	}
+}
+
+// Build-request error path is unreachable in production because
+// buildURL produces sanitized URLs. Exercise it via the
+// newRequestWithContext hook for coverage parity with the rest of
+// the package.
+func TestOpenMeteoSource_BuildRequestError(t *testing.T) {
+	orig := newRequestWithContext
+	newRequestWithContext = func(_ context.Context, _, _ string, _ io.Reader) (*http.Request, error) {
+		return nil, errors.New("synthetic build-request error")
+	}
+	defer func() { newRequestWithContext = orig }()
+
+	src := NewOpenMeteoSource(ModelGFS, &mockHTTPClient{})
+	_, err := src.Forecast(context.Background(), Location{}, 1)
+	if err == nil {
+		t.Fatal("expected error from build request")
+	}
+	if !strings.Contains(err.Error(), "build request") {
+		t.Errorf("error = %q, want to mention 'build request'", err.Error())
+	}
+}
+
+// ctxAwareHTTPClient honors the request's context so the source's
+// ctx plumbing can be exercised without a real network round-trip.
+type ctxAwareHTTPClient struct{}
+
+func (c *ctxAwareHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	if err := req.Context().Err(); err != nil {
+		return nil, err
+	}
+	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("{}"))}, nil
 }
 
 // A nil client passed to NewOpenMeteoSource must not panic; the

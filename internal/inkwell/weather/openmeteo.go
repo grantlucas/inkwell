@@ -12,8 +12,11 @@ import (
 )
 
 // HTTPClient is the subset of *http.Client needed for fetching weather data.
+// Modeled on http.Client.Do so callers can pass a *http.Client directly and
+// the request carries its context — letting Source.Forecast(ctx, …) actually
+// honor cancellation.
 type HTTPClient interface {
-	Get(url string) (*http.Response, error)
+	Do(req *http.Request) (*http.Response, error)
 }
 
 // Model identifies an Open-Meteo forecast model.
@@ -30,6 +33,13 @@ var modelBaseURLs = map[Model]string{
 	ModelECMWF: "https://api.open-meteo.com/v1/ecmwf",
 	ModelGEM:   "https://api.open-meteo.com/v1/gem",
 }
+
+// newRequestWithContext is the indirection over http.NewRequestWithContext
+// that tests override to exercise the otherwise-unreachable "build request"
+// error branch (the URL comes from url.Parse → Encode so it's always
+// well-formed in production). Same pattern as weatherview's
+// newOpenTypeFace hook.
+var newRequestWithContext = http.NewRequestWithContext
 
 // OpenMeteoSource fetches weather forecasts from a single Open-Meteo model.
 type OpenMeteoSource struct {
@@ -52,14 +62,20 @@ func NewOpenMeteoSource(model Model, client HTTPClient) *OpenMeteoSource {
 	return &OpenMeteoSource{model: model, baseURL: base, client: client}
 }
 
-// Forecast fetches a weather forecast for the given location.
-func (s *OpenMeteoSource) Forecast(_ context.Context, loc Location, days int) (*Forecast, error) {
+// Forecast fetches a weather forecast for the given location. The request
+// carries ctx so callers can bound the fetch with a deadline or cancel it.
+func (s *OpenMeteoSource) Forecast(ctx context.Context, loc Location, days int) (*Forecast, error) {
 	u, err := s.buildURL(loc, days)
 	if err != nil {
 		return nil, fmt.Errorf("openmeteo %s: build URL: %w", s.model, err)
 	}
 
-	resp, err := s.client.Get(u)
+	req, err := newRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("openmeteo %s: build request: %w", s.model, err) //nolint:goerr113 // only reachable via test override
+	}
+
+	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("openmeteo %s: fetch: %w", s.model, err)
 	}
