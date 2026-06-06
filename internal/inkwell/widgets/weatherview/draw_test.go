@@ -144,11 +144,26 @@ func TestDrawLine_Gray(t *testing.T) {
 func TestDrawText(t *testing.T) {
 	frame := newTestFrame(100, 20)
 	drawText(frame, 0, 13, "Hi")
+	if !anyNonWhite(frame) {
+		t.Error("drawText produced no pixels")
+	}
 }
 
 func TestDrawTextCentered(t *testing.T) {
 	frame := newTestFrame(100, 20)
 	drawTextCentered(frame, 0, 100, 13, "OK")
+	if !anyNonWhite(frame) {
+		t.Error("drawTextCentered produced no pixels")
+	}
+}
+
+func anyNonWhite(frame *image.Paletted) bool {
+	for _, px := range frame.Pix {
+		if px != widget.PaperWhite {
+			return true
+		}
+	}
+	return false
 }
 
 func TestDrawTextCenteredGray(t *testing.T) {
@@ -192,6 +207,13 @@ func TestTruncateText(t *testing.T) {
 		{"hi", 2, "hi"},
 		{"hello", 3, "hel"},
 		{"hello", 4, "h..."},
+		// Multi-byte characters were previously sliced mid-sequence
+		// because truncation worked on bytes. The Japanese label below
+		// is 3 runes / 9 bytes — slicing at maxChars=2 must give the
+		// first two runes, not the first two bytes of "あ" (which would
+		// be invalid UTF-8).
+		{"あいう", 2, "あい"},
+		{"あいうえお", 4, "あ..."},
 	}
 	for _, tt := range tests {
 		got := truncateText(tt.text, tt.max)

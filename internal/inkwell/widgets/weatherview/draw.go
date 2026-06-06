@@ -130,12 +130,17 @@ func abs(x int) int {
 	return x
 }
 
+// truncateText shortens text to at most maxChars runes, appending an
+// ellipsis when truncation occurs. Operating on runes (rather than
+// bytes) avoids slicing through the middle of a multi-byte UTF-8
+// sequence and producing invalid output.
 func truncateText(text string, maxChars int) string {
-	if len(text) <= maxChars {
+	runes := []rune(text)
+	if len(runes) <= maxChars {
 		return text
 	}
 	if maxChars <= 3 {
-		return text[:maxChars]
+		return string(runes[:maxChars])
 	}
-	return text[:maxChars-3] + "..."
+	return string(runes[:maxChars-3]) + "..."
 }
