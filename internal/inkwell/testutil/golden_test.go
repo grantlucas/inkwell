@@ -3,7 +3,6 @@ package testutil
 import (
 	"bytes"
 	"image"
-	"image/color"
 	"image/png"
 	"io"
 	"os"
@@ -11,6 +10,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
 // goldenFixDir overrides GoldenDir for test isolation and restores it on cleanup.
@@ -127,7 +128,7 @@ func TestAssertGoldenPNG_Match(t *testing.T) {
 	dir := goldenFixDir(t)
 
 	img := image.NewPaletted(image.Rect(0, 0, 4, 4),
-		color.Palette{color.White, color.Black})
+		widget.PaperPalette)
 
 	p := goldenTestPath(dir, t.Name(), ".png")
 	f, err := os.Create(p)
@@ -147,7 +148,7 @@ func TestAssertGoldenPNG_Mismatch(t *testing.T) {
 	dir := goldenFixDir(t)
 
 	golden := image.NewPaletted(image.Rect(0, 0, 4, 4),
-		color.Palette{color.White, color.Black})
+		widget.PaperPalette)
 
 	p := goldenTestPath(dir, t.Name(), ".png")
 	f, err := os.Create(p)
@@ -162,7 +163,7 @@ func TestAssertGoldenPNG_Mismatch(t *testing.T) {
 
 	// One black pixel — differs from the all-white golden.
 	different := image.NewPaletted(image.Rect(0, 0, 4, 4),
-		color.Palette{color.White, color.Black})
+		widget.PaperPalette)
 	different.SetColorIndex(0, 0, 1)
 
 	spy := runSpy(t, func(s *spyT) {
@@ -181,7 +182,7 @@ func TestAssertGoldenPNG_Update(t *testing.T) {
 	defer func() { *Update = oldUpdate }()
 
 	img := image.NewPaletted(image.Rect(0, 0, 2, 2),
-		color.Palette{color.White, color.Black})
+		widget.PaperPalette)
 	img.SetColorIndex(1, 1, 1)
 
 	AssertGoldenPNG(t, img)
@@ -211,7 +212,7 @@ func TestAssertGoldenPNG_MissingFile(t *testing.T) {
 	goldenFixDir(t) // empty dir
 
 	img := image.NewPaletted(image.Rect(0, 0, 2, 2),
-		color.Palette{color.White, color.Black})
+		widget.PaperPalette)
 
 	spy := runSpy(t, func(s *spyT) {
 		AssertGoldenPNG(s, img)
@@ -283,7 +284,7 @@ func TestAssertGoldenPNG_UpdateMkdirError(t *testing.T) {
 	defer func() { *Update = oldUpdate }()
 
 	img := image.NewPaletted(image.Rect(0, 0, 2, 2),
-		color.Palette{color.White, color.Black})
+		widget.PaperPalette)
 
 	spy := runSpy(t, func(s *spyT) {
 		AssertGoldenPNG(s, img)
@@ -308,7 +309,7 @@ func TestAssertGoldenPNG_UpdateCreateError(t *testing.T) {
 	defer func() { *Update = oldUpdate }()
 
 	img := image.NewPaletted(image.Rect(0, 0, 2, 2),
-		color.Palette{color.White, color.Black})
+		widget.PaperPalette)
 
 	spy := runSpy(t, func(s *spyT) {
 		AssertGoldenPNG(s, img)
@@ -332,7 +333,7 @@ func TestAssertGoldenPNG_UpdateEncodeError(t *testing.T) {
 	defer func() { GoldenEncodePNG = oldEncode }()
 
 	img := image.NewPaletted(image.Rect(0, 0, 2, 2),
-		color.Palette{color.White, color.Black})
+		widget.PaperPalette)
 
 	spy := runSpy(t, func(s *spyT) {
 		AssertGoldenPNG(s, img)
@@ -347,7 +348,7 @@ func TestAssertGoldenPNG_CompareEncodeError(t *testing.T) {
 
 	// Write a golden PNG so ReadFile succeeds.
 	img := image.NewPaletted(image.Rect(0, 0, 2, 2),
-		color.Palette{color.White, color.Black})
+		widget.PaperPalette)
 	p := goldenTestPath(dir, t.Name(), ".png")
 	f, err := os.Create(p)
 	if err != nil {

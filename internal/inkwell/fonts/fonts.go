@@ -52,9 +52,14 @@ func Face(weight Weight, sizePt float64) (font.Face, error) {
 	if weight >= SemiBold {
 		idx = 1
 	}
+	// HintingVertical keeps baselines and stems aligned to whole pixels
+	// (keeps small text legible) while permitting horizontal anti-aliasing
+	// along glyph edges. Against the multi-level grayscale frame this
+	// gives soft letter edges that read well both in the preview and
+	// after the e-ink controller's dithering.
 	return opentype.NewFace(parsedFonts[idx], &opentype.FaceOptions{
 		Size:    sizePt,
 		DPI:     96,
-		Hinting: font.HintingFull,
+		Hinting: font.HintingVertical,
 	})
 }

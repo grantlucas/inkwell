@@ -3,7 +3,6 @@ package inkwell
 import (
 	"fmt"
 	"image"
-	"image/color"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
@@ -19,8 +18,10 @@ func NewCompositor(profile *DisplayProfile) *Compositor {
 }
 
 // Render creates a new frame, calls each widget's Render in order, and returns
-// the composited frame. The palette is determined by the display profile's color depth.
-// Nil widgets in the slice are silently skipped.
+// the composited frame. Rendering always targets PaperPalette (multi-level
+// grayscale) regardless of the device color depth — the packer handles the
+// final mapping to the device's 1-bit or 4-level buffer. Nil widgets are
+// silently skipped.
 func (c *Compositor) Render(widgets []widget.Widget) (*image.Paletted, error) {
 	if c.profile == nil {
 		return nil, fmt.Errorf("compositor profile is nil")
@@ -29,16 +30,9 @@ func (c *Compositor) Render(widgets []widget.Widget) (*image.Paletted, error) {
 		return nil, fmt.Errorf("invalid display dimensions: %dx%d", c.profile.Width, c.profile.Height)
 	}
 
-	var palette color.Palette
-	switch c.profile.Color {
-	case BW:
-		palette = color.Palette{color.White, color.Black}
-	default:
-		return nil, fmt.Errorf("unsupported color depth: %v", c.profile.Color)
-	}
 	frame := image.NewPaletted(
 		image.Rect(0, 0, c.profile.Width, c.profile.Height),
-		palette,
+		widget.PaperPalette,
 	)
 
 	for _, w := range widgets {

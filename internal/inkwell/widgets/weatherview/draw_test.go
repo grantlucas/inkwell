@@ -2,96 +2,97 @@ package weatherview
 
 import (
 	"image"
-	"image/color"
 	"testing"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
 func newTestFrame(w, h int) *image.Paletted {
 	return image.NewPaletted(
 		image.Rect(0, 0, w, h),
-		color.Palette{color.White, color.Black},
+		widget.PaperPalette,
 	)
 }
 
 func TestSetPixel(t *testing.T) {
 	frame := newTestFrame(10, 10)
-	setPixel(frame, 5, 5, 1)
-	if frame.ColorIndexAt(5, 5) != 1 {
+	setPixel(frame, 5, 5, widget.PaperBlack)
+	if frame.ColorIndexAt(5, 5) != widget.PaperBlack {
 		t.Error("pixel not set")
 	}
 }
 
 func TestSetPixel_OutOfBounds(t *testing.T) {
 	frame := newTestFrame(10, 10)
-	setPixel(frame, -1, -1, 1)
-	setPixel(frame, 100, 100, 1)
+	setPixel(frame, -1, -1, widget.PaperBlack)
+	setPixel(frame, 100, 100, widget.PaperBlack)
 }
 
 func TestDrawHLine(t *testing.T) {
 	frame := newTestFrame(20, 10)
-	drawHLine(frame, 2, 8, 5)
+	drawHLine(frame, 2, 8, 5, widget.PaperBlack)
 	for x := 2; x < 8; x++ {
-		if frame.ColorIndexAt(x, 5) != 1 {
+		if frame.ColorIndexAt(x, 5) != widget.PaperBlack {
 			t.Errorf("pixel at (%d, 5) not set", x)
 		}
 	}
-	if frame.ColorIndexAt(1, 5) != 0 {
+	if frame.ColorIndexAt(1, 5) != widget.PaperWhite {
 		t.Error("pixel before line should be white")
+	}
+}
+
+func TestDrawHLine_Gray(t *testing.T) {
+	frame := newTestFrame(20, 10)
+	drawHLine(frame, 0, 10, 3, widget.PaperGray30)
+	for x := range 10 {
+		if frame.ColorIndexAt(x, 3) != widget.PaperGray30 {
+			t.Errorf("pixel at (%d,3) not gray", x)
+		}
 	}
 }
 
 func TestDrawVLine(t *testing.T) {
 	frame := newTestFrame(10, 20)
-	drawVLine(frame, 5, 2, 8)
+	drawVLine(frame, 5, 2, 8, widget.PaperBlack)
 	for y := 2; y < 8; y++ {
-		if frame.ColorIndexAt(5, y) != 1 {
+		if frame.ColorIndexAt(5, y) != widget.PaperBlack {
 			t.Errorf("pixel at (5, %d) not set", y)
 		}
-	}
-}
-
-func TestDrawDashedVLine(t *testing.T) {
-	frame := newTestFrame(10, 20)
-	drawDashedVLine(frame, 5, 0, 10, 2, 2)
-	if frame.ColorIndexAt(5, 0) != 1 {
-		t.Error("dash pixel 0 not set")
-	}
-	if frame.ColorIndexAt(5, 1) != 1 {
-		t.Error("dash pixel 1 not set")
-	}
-	if frame.ColorIndexAt(5, 2) != 0 {
-		t.Error("gap pixel 2 should be white")
-	}
-	if frame.ColorIndexAt(5, 3) != 0 {
-		t.Error("gap pixel 3 should be white")
-	}
-	if frame.ColorIndexAt(5, 4) != 1 {
-		t.Error("dash pixel 4 not set")
 	}
 }
 
 func TestFillRect(t *testing.T) {
 	frame := newTestFrame(20, 20)
 	r := image.Rect(2, 2, 8, 8)
-	fillRect(frame, r, 1)
-	if frame.ColorIndexAt(4, 4) != 1 {
+	fillRect(frame, r, widget.PaperBlack)
+	if frame.ColorIndexAt(4, 4) != widget.PaperBlack {
 		t.Error("interior pixel not set")
 	}
-	if frame.ColorIndexAt(1, 1) != 0 {
+	if frame.ColorIndexAt(1, 1) != widget.PaperWhite {
 		t.Error("exterior pixel should be white")
 	}
 
-	fillRect(frame, r, 0)
-	if frame.ColorIndexAt(4, 4) != 0 {
+	fillRect(frame, r, widget.PaperWhite)
+	if frame.ColorIndexAt(4, 4) != widget.PaperWhite {
 		t.Error("cleared pixel should be white")
+	}
+}
+
+func TestFillRect_Gray(t *testing.T) {
+	frame := newTestFrame(20, 20)
+	r := image.Rect(2, 2, 8, 8)
+	fillRect(frame, r, widget.PaperGray20)
+	if frame.ColorIndexAt(4, 4) != widget.PaperGray20 {
+		t.Errorf("interior idx = %d, want %d (PaperGray20)",
+			frame.ColorIndexAt(4, 4), widget.PaperGray20)
 	}
 }
 
 func TestDrawLine_Horizontal(t *testing.T) {
 	frame := newTestFrame(20, 10)
-	drawLine(frame, 2, 5, 8, 5)
+	drawLine(frame, 2, 5, 8, 5, widget.PaperBlack)
 	for x := 2; x <= 8; x++ {
-		if frame.ColorIndexAt(x, 5) != 1 {
+		if frame.ColorIndexAt(x, 5) != widget.PaperBlack {
 			t.Errorf("pixel at (%d, 5) not set", x)
 		}
 	}
@@ -99,9 +100,9 @@ func TestDrawLine_Horizontal(t *testing.T) {
 
 func TestDrawLine_Vertical(t *testing.T) {
 	frame := newTestFrame(10, 20)
-	drawLine(frame, 5, 2, 5, 8)
+	drawLine(frame, 5, 2, 5, 8, widget.PaperBlack)
 	for y := 2; y <= 8; y++ {
-		if frame.ColorIndexAt(5, y) != 1 {
+		if frame.ColorIndexAt(5, y) != widget.PaperBlack {
 			t.Errorf("pixel at (5, %d) not set", y)
 		}
 	}
@@ -109,23 +110,34 @@ func TestDrawLine_Vertical(t *testing.T) {
 
 func TestDrawLine_Diagonal(t *testing.T) {
 	frame := newTestFrame(20, 20)
-	drawLine(frame, 0, 0, 9, 9)
-	if frame.ColorIndexAt(0, 0) != 1 {
+	drawLine(frame, 0, 0, 9, 9, widget.PaperBlack)
+	if frame.ColorIndexAt(0, 0) != widget.PaperBlack {
 		t.Error("start pixel not set")
 	}
-	if frame.ColorIndexAt(9, 9) != 1 {
+	if frame.ColorIndexAt(9, 9) != widget.PaperBlack {
 		t.Error("end pixel not set")
 	}
 }
 
 func TestDrawLine_Reverse(t *testing.T) {
 	frame := newTestFrame(20, 20)
-	drawLine(frame, 9, 9, 0, 0)
-	if frame.ColorIndexAt(0, 0) != 1 {
+	drawLine(frame, 9, 9, 0, 0, widget.PaperBlack)
+	if frame.ColorIndexAt(0, 0) != widget.PaperBlack {
 		t.Error("start pixel not set")
 	}
-	if frame.ColorIndexAt(9, 9) != 1 {
+	if frame.ColorIndexAt(9, 9) != widget.PaperBlack {
 		t.Error("end pixel not set")
+	}
+}
+
+func TestDrawLine_Gray(t *testing.T) {
+	frame := newTestFrame(20, 20)
+	drawLine(frame, 0, 0, 5, 5, widget.PaperGray70)
+	if got := frame.ColorIndexAt(0, 0); got != widget.PaperGray70 {
+		t.Errorf("(0,0) = %d, want %d (PaperGray70)", got, widget.PaperGray70)
+	}
+	if got := frame.ColorIndexAt(5, 5); got != widget.PaperGray70 {
+		t.Errorf("(5,5) = %d, want %d (PaperGray70)", got, widget.PaperGray70)
 	}
 }
 
@@ -137,6 +149,36 @@ func TestDrawText(t *testing.T) {
 func TestDrawTextCentered(t *testing.T) {
 	frame := newTestFrame(100, 20)
 	drawTextCentered(frame, 0, 100, 13, "OK")
+}
+
+func TestDrawTextCenteredGray(t *testing.T) {
+	frame := newTestFrame(100, 20)
+	drawTextCenteredGray(frame, 0, 100, 13, "OK", widget.PaperGray70)
+	sawAny := false
+	for _, px := range frame.Pix {
+		if px != widget.PaperWhite {
+			sawAny = true
+			break
+		}
+	}
+	if !sawAny {
+		t.Error("drawTextCenteredGray produced no pixels")
+	}
+}
+
+func TestDrawTextGrayWithFace(t *testing.T) {
+	frame := newTestFrame(100, 20)
+	drawTextGrayWithFace(frame, 0, 13, "Hi", defaultFace, widget.PaperGray50)
+	sawAny := false
+	for _, px := range frame.Pix {
+		if px != widget.PaperWhite {
+			sawAny = true
+			break
+		}
+	}
+	if !sawAny {
+		t.Error("drawTextGrayWithFace produced no pixels")
+	}
 }
 
 func TestTruncateText(t *testing.T) {

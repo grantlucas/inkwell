@@ -10,6 +10,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"golang.org/x/image/font"
 )
 
@@ -99,7 +100,10 @@ func RenderDayWeather(frame *image.Paletted, bounds image.Rectangle, day weather
 	hiW := textWidth(tempHiFace, tempStr)
 	drawTextWithFace(frame, textX+hiW+3, tempY, loStr, tempLoFace)
 
-	drawHLine(frame, bounds.Min.X, bounds.Max.X, bounds.Min.Y+condRowH)
+	// Soft hairline dividing the condition row from the chart below. Pure
+	// black would scream against the small text — Gray30 reads as a clean
+	// structural rule without dominating the cell.
+	drawHLine(frame, bounds.Min.X, bounds.Max.X, bounds.Min.Y+condRowH, widget.PaperGray30)
 
 	chartBounds := image.Rect(
 		bounds.Min.X+2,

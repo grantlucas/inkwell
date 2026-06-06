@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
 const (
@@ -35,9 +36,11 @@ func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calend
 			break
 		}
 
+		// Soft accent rule: the inner pixel is mid-gray, the outer is darker
+		// so the rule reads as a 2px stroke with a subtle anti-aliased edge.
 		ruleX := bounds.Min.X + eventPadX
-		drawVLine(frame, ruleX, y-lineHeight+2, y+2)
-		drawVLine(frame, ruleX+1, y-lineHeight+2, y+2)
+		drawVLine(frame, ruleX, y-lineHeight+2, y+2, widget.PaperGray60)
+		drawVLine(frame, ruleX+1, y-lineHeight+2, y+2, widget.PaperGray40)
 
 		textX := ruleX + eventRuleW + eventGap
 
@@ -47,7 +50,9 @@ func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calend
 		} else {
 			timeLine = e.Start.Format("15:04")
 		}
-		drawText(frame, textX, y, truncateText(timeLine, maxChars))
+		// Time line is secondary information — render in muted gray so the
+		// event title becomes the primary read.
+		drawTextGray(frame, textX, y, truncateText(timeLine, maxChars), widget.PaperGray70)
 		y += lineHeight + eventLineGap
 
 		if y > bounds.Max.Y-lineHeight {
@@ -59,7 +64,7 @@ func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calend
 		y += lineHeight + eventLineGap
 
 		if showLocation && e.Location != "" && y <= bounds.Max.Y-lineHeight {
-			drawText(frame, textX, y, truncateText(e.Location, maxChars))
+			drawTextGray(frame, textX, y, truncateText(e.Location, maxChars), widget.PaperGray70)
 			y += lineHeight + eventLineGap
 		}
 

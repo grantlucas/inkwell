@@ -3,11 +3,14 @@ package inkwell
 import (
 	"errors"
 	"image"
+	"image/color"
 	"image/png"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
 func TestWebPreview_CapturesBufferOnDisplay(t *testing.T) {
@@ -219,6 +222,76 @@ func TestWebPreview_EncodeErrorReturns500(t *testing.T) {
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestWebPreview_SetSourceFramePrefersOverPackedBuffer(t *testing.T) {
+	p := imageTestProfile()
+	wp := NewWebPreview(p)
+
+	// Supply a high-fidelity source frame with a mid-gray pixel at (1, 0).
+	src := image.NewPaletted(image.Rect(0, 0, p.Width, p.Height), widget.PaperPalette)
+	src.SetColorIndex(1, 0, widget.PaperGray50)
+	wp.SetSourceFrame(src)
+
+	// Mutate the source after handing it over — the preview must hold a copy.
+	src.SetColorIndex(1, 0, widget.PaperBlack)
+
+	// Send a packed buffer of all-white; the source frame should take
+	// precedence on RefreshCmd and yield mid-gray, not white.
+	buf := make([]byte, p.BufferSize())
+	sendDisplaySequence(t, wp, p, buf)
+
+	frame := wp.Frame()
+	if frame == nil {
+		t.Fatal("expected frame after display sequence, got nil")
+	}
+	got, ok := frame.At(1, 0).(color.Gray)
+	if !ok {
+		t.Fatalf("pixel (1,0) is %T, want color.Gray", frame.At(1, 0))
+	}
+	want := widget.PaperPalette[widget.PaperGray50].(color.Gray)
+	if got.Y != want.Y {
+		t.Errorf("pixel (1,0) Y = 0x%02X, want 0x%02X (widget.PaperGray50)", got.Y, want.Y)
+	}
+}
+
+func TestWebPreview_SetSourceFrameNilIgnored(t *testing.T) {
+	wp := NewWebPreview(imageTestProfile())
+	wp.SetSourceFrame(nil) // must not panic
+	if wp.source != nil {
+		t.Errorf("source = %v, want nil", wp.source)
+	}
+}
+
+func TestWebPreview_SourceFrameAloneServesWithoutPackedBuffer(t *testing.T) {
+	p := imageTestProfile()
+	wp := NewWebPreview(p)
+
+	src := image.NewPaletted(image.Rect(0, 0, p.Width, p.Height), widget.PaperPalette)
+	src.SetColorIndex(0, 0, widget.PaperBlack)
+	wp.SetSourceFrame(src)
+
+	// Trigger a refresh without ever capturing a buffer.
+	if err := wp.SendCommand(p.RefreshCmd); err != nil {
+		t.Fatalf("SendCommand(RefreshCmd): %v", err)
+	}
+	frame := wp.Frame()
+	if frame == nil {
+		t.Fatal("expected frame from source alone, got nil")
+	}
+	if got := frame.ColorIndexAt(0, 0); got != widget.PaperBlack {
+		t.Errorf("pixel (0,0) idx = %d, want %d (widget.PaperBlack)", got, widget.PaperBlack)
+	}
+}
+
+func TestWebPreview_RefreshWithoutBufferOrSourceIsNoop(t *testing.T) {
+	wp := NewWebPreview(imageTestProfile())
+	if err := wp.SendCommand(wp.profile.RefreshCmd); err != nil {
+		t.Fatalf("RefreshCmd with no captured/source: %v", err)
+	}
+	if frame := wp.Frame(); frame != nil {
+		t.Errorf("Frame = %v, want nil", frame)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
 func sampleHourly() []weather.HourlyPoint {
@@ -31,20 +32,8 @@ func TestRenderHourlyChart_Basic(t *testing.T) {
 
 	RenderHourlyChart(frame, image.Rect(0, 0, 120, 80), sampleHourly(), opts)
 
-	hasBlack := false
-	for y := range 80 {
-		for x := range 120 {
-			if frame.ColorIndexAt(x, y) == 1 {
-				hasBlack = true
-				break
-			}
-		}
-		if hasBlack {
-			break
-		}
-	}
-	if !hasBlack {
-		t.Error("chart drew no black pixels")
+	if !chartHasInk(frame) {
+		t.Error("chart drew nothing")
 	}
 }
 
@@ -59,21 +48,21 @@ func TestRenderHourlyChart_Fahrenheit(t *testing.T) {
 
 	RenderHourlyChart(frame, image.Rect(0, 0, 120, 80), sampleHourly(), opts)
 
-	hasBlack := false
-	for y := range 80 {
-		for x := range 120 {
-			if frame.ColorIndexAt(x, y) == 1 {
-				hasBlack = true
-				break
-			}
-		}
-		if hasBlack {
-			break
+	if !chartHasInk(frame) {
+		t.Error("chart drew nothing in Fahrenheit mode")
+	}
+}
+
+// chartHasInk reports whether any pixel in frame is non-white. The chart now
+// draws in soft grays rather than pure black, so asserting on PaperBlack
+// alone would miss every line and bar.
+func chartHasInk(frame *image.Paletted) bool {
+	for _, px := range frame.Pix {
+		if px != widget.PaperWhite {
+			return true
 		}
 	}
-	if !hasBlack {
-		t.Error("chart drew no black pixels in Fahrenheit mode")
-	}
+	return false
 }
 
 func TestRenderHourlyChart_EmptyHourly(t *testing.T) {

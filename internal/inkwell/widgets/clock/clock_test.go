@@ -3,7 +3,6 @@ package clock
 import (
 	"bytes"
 	"image"
-	"image/color"
 	"testing"
 	"time"
 
@@ -32,7 +31,7 @@ func TestWidget_RenderDrawsNonBlankOutput(t *testing.T) {
 
 	frame := image.NewPaletted(
 		image.Rect(0, 0, 200, 50),
-		color.Palette{color.White, color.Black},
+		widget.PaperPalette,
 	)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
@@ -58,7 +57,7 @@ func TestWidget_RenderDrawsNonBlankOutput(t *testing.T) {
 
 func TestWidget_DifferentTimesProduceDifferentOutput(t *testing.T) {
 	bounds := image.Rect(0, 0, 200, 50)
-	palette := color.Palette{color.White, color.Black}
+	palette := widget.PaperPalette
 
 	render := func(hour, minute int) []uint8 {
 		clk := fixedClock(time.Date(2024, 1, 1, hour, minute, 0, 0, time.UTC))
@@ -97,7 +96,7 @@ func TestFactory_DefaultFormat(t *testing.T) {
 		t.Fatalf("Factory: %v", err)
 	}
 
-	frame := image.NewPaletted(bounds, color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(bounds, widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -119,7 +118,7 @@ func TestFactory_CustomFormat(t *testing.T) {
 	fixedTime := time.Date(2024, 1, 1, 14, 30, 0, 0, time.UTC)
 	deps := widget.Deps{Now: fixedClock(fixedTime)}
 	bounds := image.Rect(0, 0, 200, 50)
-	palette := color.Palette{color.White, color.Black}
+	palette := widget.PaperPalette
 
 	w, err := Factory(bounds, map[string]any{"format": "3:04 PM"}, deps)
 	if err != nil {
@@ -181,7 +180,7 @@ func TestFactory_NilNowUsesDefault(t *testing.T) {
 		t.Fatalf("Factory: %v", err)
 	}
 	// Just verify it doesn't panic on render.
-	frame := image.NewPaletted(bounds, color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(bounds, widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -196,7 +195,7 @@ func TestFactory_AlignRight(t *testing.T) {
 		t.Fatalf("Factory: %v", err)
 	}
 
-	frame := image.NewPaletted(bounds, color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(bounds, widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -223,7 +222,7 @@ func TestFactory_AlignLeft(t *testing.T) {
 		t.Fatalf("Factory: %v", err)
 	}
 
-	frame := image.NewPaletted(bounds, color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(bounds, widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -258,7 +257,7 @@ func TestFactory_AlignCenter(t *testing.T) {
 		t.Fatalf("Factory: %v", err)
 	}
 
-	frame := image.NewPaletted(bounds, color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(bounds, widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -279,7 +278,7 @@ func TestWidget_GoldenFile(t *testing.T) {
 
 	frame := image.NewPaletted(
 		image.Rect(0, 0, 200, 50),
-		color.Palette{color.White, color.Black},
+		widget.PaperPalette,
 	)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)

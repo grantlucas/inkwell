@@ -2,7 +2,6 @@ package date
 
 import (
 	"image"
-	"image/color"
 	"testing"
 	"time"
 
@@ -26,7 +25,7 @@ func TestWidget_Render(t *testing.T) {
 	clk := fixedClock(time.Date(2026, 4, 27, 14, 30, 0, 0, time.UTC))
 	w := New(bounds, clk, "Monday, January 2")
 
-	frame := image.NewPaletted(bounds, color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(bounds, widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -53,7 +52,7 @@ func TestFactory_Default(t *testing.T) {
 		t.Fatalf("Factory: %v", err)
 	}
 
-	frame := image.NewPaletted(bounds, color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(bounds, widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -89,7 +88,7 @@ func TestFactory_NilNow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Factory: %v", err)
 	}
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 50), color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(image.Rect(0, 0, 800, 50), widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}

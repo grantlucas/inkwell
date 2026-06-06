@@ -3,7 +3,6 @@ package weekly
 import (
 	"context"
 	"image"
-	"image/color"
 	nethttp "net/http"
 	"testing"
 	"time"
@@ -119,7 +118,7 @@ func TestWidget_RenderNoWeather(t *testing.T) {
 		TempUnit:  "C",
 	})
 
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -151,7 +150,7 @@ func TestWidget_RenderWithWeather(t *testing.T) {
 		Longitude:        -75.7,
 	})
 
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -181,7 +180,7 @@ func TestWidget_RenderWeatherError(t *testing.T) {
 		Longitude:    -75.7,
 	})
 
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -196,7 +195,7 @@ func TestWidget_RenderCalendarError(t *testing.T) {
 		TempUnit:  "C",
 	})
 
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -211,7 +210,7 @@ func TestWidget_SundayWeekStart(t *testing.T) {
 		TempUnit:  "C",
 	})
 
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -227,7 +226,7 @@ func TestWidget_ShowLocation(t *testing.T) {
 		ShowLocation: true,
 	})
 
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -243,7 +242,7 @@ func TestWidget_FahrenheitUnit(t *testing.T) {
 		ShowWeather: true,
 	})
 
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}

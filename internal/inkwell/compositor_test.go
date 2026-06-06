@@ -71,17 +71,18 @@ func TestCompositor_ZeroWidgets(t *testing.T) {
 			frame.Bounds().Dx(), frame.Bounds().Dy(), p.Width, p.Height)
 	}
 
-	// Verify palette
-	if len(frame.Palette) != 2 {
-		t.Fatalf("palette length = %d, want 2", len(frame.Palette))
+	// Verify palette is the PaperPalette grayscale ramp. Indices 0 (white)
+	// and 1 (black) are stable so existing widget code keeps working.
+	if len(frame.Palette) != len(widget.PaperPalette) {
+		t.Fatalf("palette length = %d, want %d", len(frame.Palette), len(widget.PaperPalette))
 	}
-	r, g, b, _ := frame.Palette[0].RGBA()
+	r, g, b, _ := frame.Palette[widget.PaperWhite].RGBA()
 	if r != 0xFFFF || g != 0xFFFF || b != 0xFFFF {
-		t.Errorf("palette[0] = (%d,%d,%d), want white", r, g, b)
+		t.Errorf("palette[%d] = (%d,%d,%d), want white", widget.PaperWhite, r, g, b)
 	}
-	r, g, b, _ = frame.Palette[1].RGBA()
+	r, g, b, _ = frame.Palette[widget.PaperBlack].RGBA()
 	if r != 0 || g != 0 || b != 0 {
-		t.Errorf("palette[1] = (%d,%d,%d), want black", r, g, b)
+		t.Errorf("palette[%d] = (%d,%d,%d), want black", widget.PaperBlack, r, g, b)
 	}
 }
 
@@ -169,14 +170,6 @@ func TestCompositor_InvalidDimensions(t *testing.T) {
 	_, err = comp.Render(nil)
 	if err == nil {
 		t.Fatal("expected error for negative height, got nil")
-	}
-}
-
-func TestCompositor_UnsupportedColorDepth(t *testing.T) {
-	comp := NewCompositor(&DisplayProfile{Width: 16, Height: 16, Color: Color7})
-	_, err := comp.Render(nil)
-	if err == nil {
-		t.Fatal("expected error for unsupported color depth, got nil")
 	}
 }
 

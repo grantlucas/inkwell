@@ -11,7 +11,9 @@ import (
 
 var _ widget.Widget = (*Widget)(nil)
 
-// Widget draws a horizontal line across its full bounds.
+// Widget draws a horizontal hairline across its full bounds. A multi-row
+// separator anti-aliases the edge rows so the line reads as a soft division
+// rather than a hard 2-bit slab.
 type Widget struct {
 	bounds    image.Rectangle
 	thickness int
@@ -25,17 +27,26 @@ func New(bounds image.Rectangle, thickness int) *Widget {
 // Bounds returns the widget's display rectangle.
 func (w *Widget) Bounds() image.Rectangle { return w.bounds }
 
-// Render draws a horizontal line at the bottom of the bounds.
+// Render draws a soft horizontal divider at the bottom of the bounds. A
+// 1px line is a single mid-gray row; thicker lines render the interior in
+// gray with a darker pixel at the top edge for a subtle hairline.
 func (w *Widget) Render(frame *image.Paletted) error {
 	draw.Draw(frame, w.bounds, image.NewUniform(color.White), image.Point{}, draw.Src)
 
-	for dy := range w.thickness {
-		y := w.bounds.Max.Y - 1 - dy
-		if y < w.bounds.Min.Y {
-			break
+	// Compute the highest (topmost) row we'll actually draw, so we can put
+	// the darker accent there even when the requested thickness is clipped
+	// by the widget's bounds.
+	topY := max(w.bounds.Max.Y-w.thickness, w.bounds.Min.Y)
+
+	for y := w.bounds.Max.Y - 1; y >= topY; y-- {
+		idx := widget.PaperGray40
+		// Multi-row separators get a slightly darker top edge so the
+		// transition off white reads as a soft hairline.
+		if y == topY && w.bounds.Max.Y-topY > 1 {
+			idx = widget.PaperGray60
 		}
 		for x := w.bounds.Min.X; x < w.bounds.Max.X; x++ {
-			frame.SetColorIndex(x, y, 1)
+			frame.SetColorIndex(x, y, idx)
 		}
 	}
 

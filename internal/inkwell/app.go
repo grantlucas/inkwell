@@ -224,6 +224,10 @@ func (a *App) Run(ctx context.Context) error {
 			return fmt.Errorf("render: %w", err)
 		}
 
+		if sink, ok := a.hw.(FrameSink); ok {
+			sink.SetSourceFrame(frame)
+		}
+
 		buf, err := PackImage(a.profile, frame)
 		if err != nil {
 			a.epd.Close()

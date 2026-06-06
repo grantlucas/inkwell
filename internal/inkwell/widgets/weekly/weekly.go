@@ -115,7 +115,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 		renderEvents(frame, col.Events, dayEvents, w.config.MaxEvents, w.config.ShowLocation)
 
 		if !col.IsLast {
-			drawVLine(frame, col.Bounds.Max.X-1, w.bounds.Min.Y, w.bounds.Max.Y)
+			drawVLine(frame, col.Bounds.Max.X-1, w.bounds.Min.Y, w.bounds.Max.Y, widget.PaperGray40)
 		}
 	}
 

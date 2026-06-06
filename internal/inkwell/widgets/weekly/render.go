@@ -6,6 +6,7 @@ import (
 	"image/draw"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 )
@@ -38,14 +39,17 @@ func drawTextWithFace(frame *image.Paletted, x, y int, text string, f font.Face)
 	d.DrawString(text)
 }
 
-func drawTextWhite(frame *image.Paletted, x, y int, text string) {
-	drawTextWhiteWithFace(frame, x, y, text, defaultFace)
+// drawTextGray draws text in the supplied gray index. Useful for secondary
+// labels (times, day-of-week tags) that should sit visually below the
+// primary content.
+func drawTextGray(frame *image.Paletted, x, y int, text string, idx uint8) {
+	drawTextGrayWithFace(frame, x, y, text, defaultFace, idx)
 }
 
-func drawTextWhiteWithFace(frame *image.Paletted, x, y int, text string, f font.Face) {
+func drawTextGrayWithFace(frame *image.Paletted, x, y int, text string, f font.Face, idx uint8) {
 	d := &font.Drawer{
 		Dst:  frame,
-		Src:  image.NewUniform(color.White),
+		Src:  image.NewUniform(widget.PaperPalette[idx]),
 		Face: f,
 		Dot:  fixed.P(x, y),
 	}
@@ -66,25 +70,21 @@ func drawTextCenteredWithFace(frame *image.Paletted, x1, x2, y int, text string,
 	drawTextWithFace(frame, x, y, text, f)
 }
 
-func drawTextCenteredWhite(frame *image.Paletted, x1, x2, y int, text string) {
-	drawTextCenteredWhiteWithFace(frame, x1, x2, y, text, defaultFace)
-}
-
-func drawTextCenteredWhiteWithFace(frame *image.Paletted, x1, x2, y int, text string, f font.Face) {
+func drawTextCenteredGrayWithFace(frame *image.Paletted, x1, x2, y int, text string, f font.Face, idx uint8) {
 	tw := textWidth(f, text)
 	x := x1 + (x2-x1-tw)/2
-	drawTextWhiteWithFace(frame, x, y, text, f)
+	drawTextGrayWithFace(frame, x, y, text, f, idx)
 }
 
-func drawHLine(frame *image.Paletted, x1, x2, y int) {
+func drawHLine(frame *image.Paletted, x1, x2, y int, idx uint8) {
 	for x := x1; x < x2; x++ {
-		setPixel(frame, x, y, 1)
+		setPixel(frame, x, y, idx)
 	}
 }
 
-func drawVLine(frame *image.Paletted, x, y1, y2 int) {
+func drawVLine(frame *image.Paletted, x, y1, y2 int, idx uint8) {
 	for y := y1; y < y2; y++ {
-		setPixel(frame, x, y, 1)
+		setPixel(frame, x, y, idx)
 	}
 }
 
@@ -95,11 +95,7 @@ func setPixel(frame *image.Paletted, x, y int, idx uint8) {
 }
 
 func fillRect(frame *image.Paletted, r image.Rectangle, idx uint8) {
-	c := color.White
-	if idx == 1 {
-		c = color.Black
-	}
-	draw.Draw(frame, r, image.NewUniform(c), image.Point{}, draw.Src)
+	draw.Draw(frame, r, image.NewUniform(widget.PaperPalette[idx]), image.Point{}, draw.Src)
 }
 
 func truncateText(text string, maxChars int) string {

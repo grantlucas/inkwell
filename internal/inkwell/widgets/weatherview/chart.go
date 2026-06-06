@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
 // ChartOptions controls hourly chart rendering.
@@ -69,14 +70,24 @@ func RenderHourlyChart(frame *image.Paletted, bounds image.Rectangle, hourly []w
 
 	barTop := bounds.Min.Y + tempH + sepH
 
-	drawHLine(frame, bounds.Min.X, bounds.Max.X, barTop-1)
+	// Faint axis line between the temperature curve and the precipitation
+	// bars — used to be solid black; a soft gray reads as a structural
+	// guideline without dominating the chart.
+	drawHLine(frame, bounds.Min.X, bounds.Max.X, barTop-1, widget.PaperGray30)
 
-	for _, hp := range filtered {
-		i := hp.Hour - chartStartHour
-		cx := bounds.Min.X + int(float64(i)*step) + barW/2
-
-		if opts.IsToday && hp.Hour == opts.HighlightHour {
-			drawDashedVLine(frame, cx, bounds.Min.Y, barTop+barMaxH, 2, 2)
+	// Soft hour-highlight band: a thin vertical fill behind the data for
+	// today's current hour. Much easier to parse than the old dashed line.
+	if opts.IsToday {
+		for _, hp := range filtered {
+			if hp.Hour != opts.HighlightHour {
+				continue
+			}
+			i := hp.Hour - chartStartHour
+			cx := bounds.Min.X + int(float64(i)*step) + barW/2
+			bandW := max(barW+2, 6)
+			band := image.Rect(cx-bandW/2, bounds.Min.Y, cx+bandW/2+1, barTop+barMaxH)
+			fillRect(frame, band, widget.PaperGray10)
+			break
 		}
 	}
 
@@ -92,14 +103,16 @@ func RenderHourlyChart(frame *image.Paletted, bounds image.Rectangle, hourly []w
 		points = append(points, chartPoint{cx, cy})
 	}
 
+	// Temperature polyline in a dark — but not pure black — gray. Pairs
+	// with the faint axis and gives the curve weight without sharp glare.
 	for j := 1; j < len(points); j++ {
-		drawLine(frame, points[j-1].x, points[j-1].y, points[j].x, points[j].y)
+		drawLine(frame, points[j-1].x, points[j-1].y, points[j].x, points[j].y, widget.PaperGray80)
 	}
 	for _, p := range points {
 		for dy := -1; dy <= 1; dy++ {
 			for dx := -1; dx <= 1; dx++ {
 				if dx*dx+dy*dy <= 1 {
-					setPixel(frame, p.x+dx, p.y+dy, 1)
+					setPixel(frame, p.x+dx, p.y+dy, widget.PaperGray80)
 				}
 			}
 		}
@@ -115,12 +128,17 @@ func RenderHourlyChart(frame *image.Paletted, bounds image.Rectangle, hourly []w
 			barH = 2
 		}
 		if barH > 0 {
+			// Precip bars: soft gray fill with a slightly darker top edge,
+			// so a single bar reads as a column of "weight" rather than a
+			// solid black slab. Tall bars then look like a smooth ramp.
 			r := image.Rect(bx, barTop+barMaxH-barH, bx+barW, barTop+barMaxH)
-			fillRect(frame, r, 1)
+			fillRect(frame, r, widget.PaperGray40)
+			drawHLine(frame, r.Min.X, r.Max.X, r.Min.Y, widget.PaperGray70)
 		}
 
-		setPixel(frame, bx, barTop+barMaxH, 1)
-		setPixel(frame, bx+barW-1, barTop+barMaxH, 1)
+		// Faint tick marks at the base of the bar gutter for x-axis grounding.
+		setPixel(frame, bx, barTop+barMaxH, widget.PaperGray60)
+		setPixel(frame, bx+barW-1, barTop+barMaxH, widget.PaperGray60)
 	}
 
 	for _, hp := range filtered {
@@ -132,7 +150,7 @@ func RenderHourlyChart(frame *image.Paletted, bounds image.Rectangle, hourly []w
 		cx := bounds.Min.X + int(float64(i)*step) + barW/2
 		labelY := barTop + barMaxH + lineHeight
 		textW := len(label) * charWidth
-		drawText(frame, cx-textW/2, labelY, label)
+		drawTextCenteredGray(frame, cx-textW/2, cx-textW/2+textW, labelY, label, widget.PaperGray70)
 	}
 }
 

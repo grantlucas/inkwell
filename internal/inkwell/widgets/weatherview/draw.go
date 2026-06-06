@@ -6,6 +6,7 @@ import (
 	"image/draw"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 )
@@ -35,34 +36,20 @@ func setPixel(frame *image.Paletted, x, y int, idx uint8) {
 	}
 }
 
-func drawHLine(frame *image.Paletted, x1, x2, y int) {
+func drawHLine(frame *image.Paletted, x1, x2, y int, idx uint8) {
 	for x := x1; x < x2; x++ {
-		setPixel(frame, x, y, 1)
+		setPixel(frame, x, y, idx)
 	}
 }
 
-func drawVLine(frame *image.Paletted, x, y1, y2 int) {
+func drawVLine(frame *image.Paletted, x, y1, y2 int, idx uint8) {
 	for y := y1; y < y2; y++ {
-		setPixel(frame, x, y, 1)
-	}
-}
-
-func drawDashedVLine(frame *image.Paletted, x, y1, y2, dash, gap int) {
-	i := 0
-	for y := y1; y < y2; y++ {
-		if i%(dash+gap) < dash {
-			setPixel(frame, x, y, 1)
-		}
-		i++
+		setPixel(frame, x, y, idx)
 	}
 }
 
 func fillRect(frame *image.Paletted, r image.Rectangle, idx uint8) {
-	c := color.White
-	if idx == 1 {
-		c = color.Black
-	}
-	draw.Draw(frame, r, image.NewUniform(c), image.Point{}, draw.Src)
+	draw.Draw(frame, r, image.NewUniform(widget.PaperPalette[idx]), image.Point{}, draw.Src)
 }
 
 func drawText(frame *image.Paletted, x, y int, text string) {
@@ -79,14 +66,34 @@ func drawTextWithFace(frame *image.Paletted, x, y int, text string, f font.Face)
 	d.DrawString(text)
 }
 
+// drawTextGrayWithFace draws text using a given gray palette index. The
+// font.Drawer's alpha mask is blended against the supplied solid color, so
+// coverage values between 0 and 255 land on the nearest available palette
+// entry — which gives free anti-aliased grays around glyph edges.
+func drawTextGrayWithFace(frame *image.Paletted, x, y int, text string, f font.Face, idx uint8) {
+	d := &font.Drawer{
+		Dst:  frame,
+		Src:  image.NewUniform(widget.PaperPalette[idx]),
+		Face: f,
+		Dot:  fixed.P(x, y),
+	}
+	d.DrawString(text)
+}
+
 func drawTextCentered(frame *image.Paletted, x1, x2, y int, text string) {
 	tw := textWidth(defaultFace, text)
 	x := x1 + (x2-x1-tw)/2
 	drawText(frame, x, y, text)
 }
 
+func drawTextCenteredGray(frame *image.Paletted, x1, x2, y int, text string, idx uint8) {
+	tw := textWidth(defaultFace, text)
+	x := x1 + (x2-x1-tw)/2
+	drawTextGrayWithFace(frame, x, y, text, defaultFace, idx)
+}
+
 // drawLine draws a line from (x1,y1) to (x2,y2) using Bresenham's algorithm.
-func drawLine(frame *image.Paletted, x1, y1, x2, y2 int) {
+func drawLine(frame *image.Paletted, x1, y1, x2, y2 int, idx uint8) {
 	dx := abs(x2 - x1)
 	dy := abs(y2 - y1)
 	sx := 1
@@ -100,7 +107,7 @@ func drawLine(frame *image.Paletted, x1, y1, x2, y2 int) {
 	err := dx - dy
 
 	for {
-		setPixel(frame, x1, y1, 1)
+		setPixel(frame, x1, y1, idx)
 		if x1 == x2 && y1 == y2 {
 			break
 		}

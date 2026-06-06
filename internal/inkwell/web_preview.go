@@ -19,6 +19,7 @@ type WebPreview struct {
 	captured    []byte
 	mu          sync.RWMutex
 	current     *image.Paletted
+	source      *image.Paletted // high-fidelity pre-pack frame, if supplied
 	encodePNG   func(w io.Writer, m image.Image) error
 	subscribers map[chan struct{}]struct{}
 }
@@ -52,9 +53,12 @@ func (wp *WebPreview) Frame() *image.Paletted {
 }
 
 // SendCommand tracks the last command sent. On RefreshCmd, unpacks the
-// captured buffer into the current frame. Important: wp.current must only be
-// replaced (not mutated in place) so that ServeHTTP can safely read the
-// pointer under RLock without a data race on the underlying pixel data.
+// captured buffer into the current frame — but only if a higher-fidelity
+// source frame has not been supplied via SetSourceFrame. The source frame is
+// preferred because it preserves the compositor's full grayscale before the
+// device packer collapses it. Important: wp.current must only be replaced
+// (not mutated in place) so that ServeHTTP can safely read the pointer under
+// RLock without a data race on the underlying pixel data.
 func (wp *WebPreview) SendCommand(cmd byte) error {
 	if wp.profile == nil {
 		return fmt.Errorf("web preview: nil display profile")
@@ -63,7 +67,15 @@ func (wp *WebPreview) SendCommand(cmd byte) error {
 	defer wp.mu.Unlock()
 
 	wp.lastCmd = cmd
-	if cmd == wp.profile.RefreshCmd && wp.captured != nil {
+	if cmd == wp.profile.RefreshCmd {
+		if wp.source != nil {
+			wp.current = wp.source
+			wp.notifyLocked()
+			return nil
+		}
+		if wp.captured == nil {
+			return nil
+		}
 		if wp.profile.Color != BW {
 			return fmt.Errorf("web preview: unsupported color depth %v; only BW is currently supported", wp.profile.Color)
 		}
@@ -74,6 +86,23 @@ func (wp *WebPreview) SendCommand(cmd byte) error {
 		wp.notifyLocked()
 	}
 	return nil
+}
+
+// SetSourceFrame records the high-fidelity composited frame so it can be
+// served directly by ServeHTTP. The frame is copied to decouple from any
+// later compositor mutation. Implements FrameSink.
+func (wp *WebPreview) SetSourceFrame(frame *image.Paletted) {
+	if frame == nil {
+		return
+	}
+	wp.mu.Lock()
+	defer wp.mu.Unlock()
+	dup := image.NewPaletted(
+		frame.Rect,
+		append(frame.Palette[:0:0], frame.Palette...),
+	)
+	copy(dup.Pix, frame.Pix)
+	wp.source = dup
 }
 
 // SendData captures the data payload when the previous command was NewBufferCmd.
