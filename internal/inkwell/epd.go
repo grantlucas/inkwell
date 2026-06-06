@@ -171,14 +171,13 @@ func (d *EPD) sendPartialWindow(region Region) error {
 	return d.hw.SendData(windowData)
 }
 
-// Clear sets the entire display to white by sending an all-0xFF buffer
-// through the normal Display path (which handles inversion automatically).
+// Clear sets the entire display to white. The all-white sentinel is the
+// zero byte in both supported encodings: packBW sets bit 1 for black
+// (so 0=white), and packGray4 codes white as 00 (so the byte 0x00 is
+// four white pixels). Passing a zero-filled buffer through Display
+// drives the correct planes on the wire for either color depth.
 func (d *EPD) Clear() error {
-	buf := make([]byte, d.profile.BufferSize())
-	for i := range buf {
-		buf[i] = 0xFF
-	}
-	return d.Display(buf)
+	return d.Display(make([]byte, d.profile.BufferSize()))
 }
 
 // Sleep puts the display into deep sleep mode by executing the profile's
