@@ -38,12 +38,21 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	// by the widget's bounds.
 	topY := max(w.bounds.Max.Y-w.thickness, w.bounds.Min.Y)
 
+	height := w.bounds.Max.Y - topY
 	for y := w.bounds.Max.Y - 1; y >= topY; y-- {
-		idx := widget.PaperGray40
-		// Multi-row separators get a slightly darker top edge so the
-		// transition off white reads as a soft hairline.
-		if y == topY && w.bounds.Max.Y-topY > 1 {
-			idx = widget.PaperGray60
+		// 1-px strokes must be black on the device — a flat PaperGrayNN
+		// row dithers to a dashed dotted line, not a hairline.
+		// Multi-row separators can still afford a gray interior because
+		// the dither has vertical room to express a halftone pattern.
+		var idx uint8
+		switch {
+		case height == 1:
+			idx = widget.PaperBlack
+		case y == topY:
+			// Top edge of a multi-row separator: keep crisp.
+			idx = widget.PaperBlack
+		default:
+			idx = widget.PaperGray40
 		}
 		for x := w.bounds.Min.X; x < w.bounds.Max.X; x++ {
 			frame.SetColorIndex(x, y, idx)
