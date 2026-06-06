@@ -22,8 +22,13 @@ type CachedSource struct {
 	fetched  time.Time
 }
 
-// NewCachedSource wraps inner with a cache that refreshes after ttl.
+// NewCachedSource wraps inner with a cache that refreshes after ttl. A
+// nil now defaults to time.Now so a forgotten dependency doesn't panic
+// the first cache lookup.
 func NewCachedSource(inner Source, ttl time.Duration, now func() time.Time) *CachedSource {
+	if now == nil {
+		now = time.Now
+	}
 	return &CachedSource{
 		inner: inner,
 		ttl:   ttl,
@@ -32,12 +37,12 @@ func NewCachedSource(inner Source, ttl time.Duration, now func() time.Time) *Cac
 }
 
 // Forecast returns a cached forecast if fresh and for the same rounded
-// location. Otherwise it fetches from the inner source.
+// location + day count. Otherwise it fetches from the inner source.
 func (c *CachedSource) Forecast(ctx context.Context, loc Location, days int) (*Forecast, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := locationKey(loc)
+	key := cacheKey(loc, days)
 	if c.forecast != nil && c.cacheKey == key && c.now().Sub(c.fetched) < c.ttl {
 		return c.forecast, nil
 	}
@@ -56,8 +61,8 @@ func (c *CachedSource) Forecast(ctx context.Context, loc Location, days int) (*F
 	return fc, nil
 }
 
-func locationKey(loc Location) string {
+func cacheKey(loc Location, days int) string {
 	lat := math.Round(loc.Latitude*10) / 10
 	lon := math.Round(loc.Longitude*10) / 10
-	return fmt.Sprintf("%.1f,%.1f", lat, lon)
+	return fmt.Sprintf("%.1f,%.1f,%d", lat, lon, days)
 }

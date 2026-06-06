@@ -129,6 +129,31 @@ func TestCachedSource_SameRoundedLocation(t *testing.T) {
 	}
 }
 
+// Different day counts must miss the cache: asking for 1 day and then
+// 7 days should drive two inner fetches even at the same location.
+func TestCachedSource_DifferentDays(t *testing.T) {
+	now := time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC)
+	inner := &countingSource{forecast: &Forecast{Days: []DailyForecast{{High: 20}}}}
+	cached := NewCachedSource(inner, time.Hour, func() time.Time { return now })
+
+	loc := Location{Latitude: 45.4, Longitude: -75.7}
+	_, _ = cached.Forecast(context.Background(), loc, 1)
+	_, _ = cached.Forecast(context.Background(), loc, 7)
+
+	if inner.calls != 2 {
+		t.Errorf("inner called %d times, want 2 (days changed)", inner.calls)
+	}
+}
+
+// A nil now function must not panic; it should default to time.Now.
+func TestCachedSource_NilNow(t *testing.T) {
+	inner := &countingSource{forecast: &Forecast{Days: []DailyForecast{{High: 20}}}}
+	cached := NewCachedSource(inner, time.Hour, nil)
+	if _, err := cached.Forecast(context.Background(), Location{}, 1); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestCachedSource_ConcurrentAccess(t *testing.T) {
 	now := time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC)
 	inner := &countingSource{forecast: &Forecast{Days: []DailyForecast{{High: 20}}}}
