@@ -48,12 +48,21 @@ func (c *CachedSource) Events(start, end time.Time) ([]Event, error) {
 		return nil, err
 	}
 
-	c.events = events
+	// Store a defensive copy so callers can't mutate the cached slice
+	// (or rely on its identity for future hits) and we can't accidentally
+	// return aliased storage on the next refresh.
+	c.events = append(c.events[:0:0], events...)
 	c.fetched = c.now()
-	return events, nil
+
+	// Return an independent slice on the first-load path too, mirroring
+	// what filterEvents does for cache hits.
+	out := append([]Event(nil), events...)
+	return out, nil
 }
 
-// filterEvents returns cached events overlapping [start, end).
+// filterEvents returns cached events overlapping [start, end). The
+// returned slice is freshly allocated so callers can mutate it without
+// affecting subsequent cache reads.
 func (c *CachedSource) filterEvents(start, end time.Time) []Event {
 	var filtered []Event
 	for _, e := range c.events {
