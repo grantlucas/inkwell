@@ -409,6 +409,19 @@ func TestParseDateTime_TZID(t *testing.T) {
 	}
 }
 
+// An invalid datetime value paired with a recognized TZID must error
+// out via the TZID branch (rather than falling through to the
+// no-TZID parse), so this pins the TZID error wrap.
+func TestParseDateTime_TZID_InvalidValue(t *testing.T) {
+	_, _, err := parseDateTime("DTSTART;TZID=America/New_York:notadatetime")
+	if err == nil {
+		t.Fatal("expected error for invalid datetime under TZID")
+	}
+	if !strings.Contains(err.Error(), "invalid datetime") {
+		t.Errorf("error = %q, want it to mention 'invalid datetime'", err.Error())
+	}
+}
+
 func TestParseDateTime_TZID_Unknown(t *testing.T) {
 	dt, _, err := parseDateTime("DTSTART;TZID=Fake/Zone:20260429T190000")
 	if err != nil {
