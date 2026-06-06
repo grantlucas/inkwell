@@ -3,6 +3,7 @@ package weather
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 )
@@ -39,8 +40,15 @@ func (e *EnsembleSource) Forecast(ctx context.Context, loc Location, days int) (
 	wg.Wait()
 
 	var forecasts []*Forecast
-	for _, r := range results {
-		if r.err == nil && r.forecast != nil {
+	for i, r := range results {
+		if r.err != nil {
+			// Log per-source failures so a degraded "1 of 3 succeeded"
+			// result still surfaces which models dropped out, instead
+			// of silently averaging fewer sources than expected.
+			log.Printf("ensemble: source %d: %v", i, r.err)
+			continue
+		}
+		if r.forecast != nil {
 			forecasts = append(forecasts, r.forecast)
 		}
 	}

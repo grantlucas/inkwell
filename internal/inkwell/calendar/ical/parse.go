@@ -5,6 +5,7 @@ package ical
 import (
 	"fmt"
 	"io"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -150,13 +151,17 @@ func parseDateTime(line string) (time.Time, bool, error) {
 }
 
 // extractTZID extracts and loads a timezone from a TZID parameter.
-// Returns nil if no TZID is found or if the timezone is unknown.
+// Returns nil if no TZID is found or if the timezone is unknown. An
+// unknown TZID gets a log line so an operator can spot timezone bugs
+// in the feed (e.g. a Toronto event suddenly rendering in UTC) instead
+// of silently mis-bucketing the event into the wrong column.
 func extractTZID(params string) *time.Location {
 	for part := range strings.SplitSeq(params, ";") {
 		if strings.HasPrefix(part, "TZID=") {
 			name := part[5:]
 			loc, err := time.LoadLocation(name)
 			if err != nil {
+				log.Printf("ical: unknown TZID %q, treating as UTC", name)
 				return nil
 			}
 			return loc

@@ -172,17 +172,55 @@ func TestWidget_RenderWeatherError(t *testing.T) {
 	cal := &stubCalSource{events: sampleEvents()}
 	ws := &stubWeatherSource{err: context.DeadlineExceeded}
 	w := New(bounds, cal, ws, fixedClock(testTime), Config{
-		MaxEvents:    5,
-		WeekStart:    time.Monday,
-		TempUnit:     "C",
-		ShowWeather:  true,
-		Latitude:     45.4,
-		Longitude:    -75.7,
+		MaxEvents:   5,
+		WeekStart:   time.Monday,
+		TempUnit:    "C",
+		ShowWeather: true,
+		Latitude:    45.4,
+		Longitude:   -75.7,
 	})
 
 	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
+	}
+}
+
+// Stale-on-error: when the weather source returns (forecast, err) — e.g.
+// a CachedSource serving cached data because the live fetch failed — the
+// widget should render the chart with the stale data anyway. Otherwise
+// the dashboard would blank the chart any time the upstream blips, even
+// though we have perfectly usable data on hand.
+func TestWidget_RenderWeatherStaleOnError(t *testing.T) {
+	bounds := image.Rect(0, 52, 800, 480)
+	cal := &stubCalSource{events: sampleEvents()}
+	ws := &stubWeatherSource{forecast: sampleForecast(), err: context.DeadlineExceeded}
+	w := New(bounds, cal, ws, fixedClock(testTime), Config{
+		MaxEvents:   5,
+		WeekStart:   time.Monday,
+		TempUnit:    "C",
+		ShowWeather: true,
+		Latitude:    45.4,
+		Longitude:   -75.7,
+	})
+
+	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
+	if err := w.Render(frame); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	// A rendered chart should have the temperature polyline drawn in
+	// PaperBlack — if the stale forecast had been discarded the weather
+	// row would be all white.
+	chartRow := bounds.Min.Y + 56 + 80 // header + roughly mid-chart
+	hasBlack := false
+	for x := bounds.Min.X; x < bounds.Max.X; x++ {
+		if frame.ColorIndexAt(x, chartRow) == widget.PaperBlack {
+			hasBlack = true
+			break
+		}
+	}
+	if !hasBlack {
+		t.Error("stale forecast was discarded — chart row has no ink")
 	}
 }
 

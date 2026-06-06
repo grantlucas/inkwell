@@ -85,7 +85,10 @@ func (w *Widget) Render(frame *image.Paletted) error {
 			Longitude: w.config.Longitude,
 		}
 		f, err := w.weather.Forecast(ctx, loc, 7)
-		if err == nil && f != nil {
+		if err != nil {
+			log.Printf("weekly: fetch weather forecast: %v", err)
+		}
+		if f != nil {
 			forecast = f
 			weatherH = defaultWeatherH
 		}
