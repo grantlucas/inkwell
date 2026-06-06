@@ -7,8 +7,10 @@ import (
 )
 
 // unfold reads RFC 5545 content lines from r, joining continuation lines
-// (lines starting with a space or tab) back to the previous line.
-func unfold(r io.Reader) []string {
+// (lines starting with a space or tab) back to the previous line. A
+// scanner error (read failure or oversized line) is surfaced so callers
+// don't get a silently truncated parse.
+func unfold(r io.Reader) ([]string, error) {
 	var lines []string
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
@@ -22,5 +24,8 @@ func unfold(r io.Reader) []string {
 			lines = append(lines, line)
 		}
 	}
-	return lines
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return lines, nil
 }

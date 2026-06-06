@@ -12,7 +12,11 @@ func TestParse_BasicEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil {
+			t.Errorf("close fixture: %v", cerr)
+		}
+	}()
 
 	events, err := Parse(f)
 	if err != nil {
@@ -59,7 +63,11 @@ func TestParse_AllDayEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil {
+			t.Errorf("close fixture: %v", cerr)
+		}
+	}()
 
 	events, err := Parse(f)
 	if err != nil {
@@ -89,7 +97,11 @@ func TestParse_FoldedLines(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil {
+			t.Errorf("close fixture: %v", cerr)
+		}
+	}()
 
 	events, err := Parse(f)
 	if err != nil {
@@ -111,7 +123,11 @@ func TestParse_Duration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil {
+			t.Errorf("close fixture: %v", cerr)
+		}
+	}()
 
 	events, err := Parse(f)
 	if err != nil {
@@ -270,6 +286,49 @@ END:VCALENDAR
 	wantStart := time.Date(2026, 4, 25, 9, 0, 0, 0, time.UTC)
 	if !events[0].Start.Equal(wantStart) {
 		t.Errorf("Start = %v, want %v", events[0].Start, wantStart)
+	}
+}
+
+// Verify that whole-day and whole-week DURATION values produce the
+// correct End time. The old "End < 0001-01-02" sentinel hack only
+// recovered durations under 24 hours, so P1D and P1W came out wrong.
+func TestParse_DurationDaysAndWeeks(t *testing.T) {
+	cases := []struct {
+		name    string
+		dur     string
+		wantEnd time.Time
+	}{
+		{
+			name:    "one day",
+			dur:     "P1D",
+			wantEnd: time.Date(2026, 4, 26, 9, 0, 0, 0, time.UTC),
+		},
+		{
+			name:    "one week",
+			dur:     "P1W",
+			wantEnd: time.Date(2026, 5, 2, 9, 0, 0, 0, time.UTC),
+		},
+		{
+			name:    "mixed week+day",
+			dur:     "P1W2D",
+			wantEnd: time.Date(2026, 5, 4, 9, 0, 0, 0, time.UTC),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			input := "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:dur\r\nDTSTART:20260425T090000Z\r\nDURATION:" + tc.dur + "\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+			events, err := Parse(strings.NewReader(input))
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if len(events) != 1 {
+				t.Fatalf("got %d events, want 1", len(events))
+			}
+			if !events[0].End.Equal(tc.wantEnd) {
+				t.Errorf("End = %v, want %v", events[0].End, tc.wantEnd)
+			}
+		})
 	}
 }
 

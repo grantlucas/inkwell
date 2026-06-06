@@ -1,6 +1,7 @@
 package ical
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -50,7 +51,10 @@ func TestUnfold(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := unfold(strings.NewReader(tt.input))
+			got, err := unfold(strings.NewReader(tt.input))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			if len(got) != len(tt.want) {
 				t.Fatalf("got %d lines, want %d\ngot:  %q\nwant: %q", len(got), len(tt.want), got, tt.want)
 			}
@@ -60,5 +64,43 @@ func TestUnfold(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// errReader returns an error mid-stream so we can verify unfold surfaces
+// scanner failures instead of silently truncating the result.
+type errReader struct {
+	data []byte
+	pos  int
+}
+
+func (e *errReader) Read(p []byte) (int, error) {
+	if e.pos >= len(e.data) {
+		return 0, errors.New("simulated read failure")
+	}
+	n := copy(p, e.data[e.pos:])
+	e.pos += n
+	return n, nil
+}
+
+func TestUnfold_ScannerError(t *testing.T) {
+	r := &errReader{data: []byte("SUMMARY:Hello\n")}
+	_, err := unfold(r)
+	if err == nil {
+		t.Fatal("expected error from failing reader, got nil")
+	}
+	if !strings.Contains(err.Error(), "simulated read failure") {
+		t.Errorf("error = %q, want it to wrap simulated read failure", err.Error())
+	}
+}
+
+// Ensure unfold returns nil on a no-op reader without spurious error.
+func TestUnfold_EOFOnly(t *testing.T) {
+	got, err := unfold(strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != nil {
+		t.Errorf("got %q, want nil", got)
 	}
 }

@@ -14,10 +14,15 @@ import (
 // Event values, sorted by start time. Events without a DTSTART are
 // silently skipped.
 func Parse(r io.Reader) ([]Event, error) {
-	lines := unfold(r)
+	lines, err := unfold(r)
+	if err != nil {
+		return nil, fmt.Errorf("read iCal stream: %w", err)
+	}
 
 	var events []Event
 	var cur *Event
+	var curDuration time.Duration
+	var hasDuration bool
 	inEvent := false
 
 	for _, line := range lines {
@@ -25,15 +30,21 @@ func Parse(r io.Reader) ([]Event, error) {
 		case line == "BEGIN:VEVENT":
 			inEvent = true
 			cur = &Event{}
+			curDuration = 0
+			hasDuration = false
 		case line == "END:VEVENT":
 			if inEvent && cur != nil && !cur.Start.IsZero() {
-				if cur.End.IsZero() {
+				if hasDuration {
+					cur.End = cur.Start.Add(curDuration)
+				} else if cur.End.IsZero() {
 					cur.End = cur.Start
 				}
 				events = append(events, *cur)
 			}
 			inEvent = false
 			cur = nil
+			curDuration = 0
+			hasDuration = false
 		case inEvent && cur != nil:
 			name, value := splitProperty(line)
 			switch name {
@@ -61,18 +72,9 @@ func Parse(r io.Reader) ([]Event, error) {
 				if err != nil {
 					return nil, fmt.Errorf("parse DURATION: %w", err)
 				}
-				// DURATION is applied after DTSTART is known;
-				// store as End relative to zero, fix up below.
-				cur.End = time.Time{}.Add(d)
+				curDuration = d
+				hasDuration = true
 			}
-		}
-	}
-
-	// Fix up DURATION-based End times.
-	for i := range events {
-		if events[i].End.Before(time.Date(1, 1, 2, 0, 0, 0, 0, time.UTC)) && !events[i].End.IsZero() {
-			d := events[i].End.Sub(time.Time{})
-			events[i].End = events[i].Start.Add(d)
 		}
 	}
 
