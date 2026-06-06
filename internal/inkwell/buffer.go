@@ -90,6 +90,39 @@ func packGray4(profile *DisplayProfile, img image.Image) []byte {
 	return buf
 }
 
+// splitGray4Planes converts Inkwell's 2bpp Gray4 buffer into the two 1bpp
+// planes the Waveshare 7.5" V2 controller expects (one written to
+// OldBufferCmd, one to NewBufferCmd). Inkwell's pixel encoding —
+// white=00, light=01, dark=10, black=11 — makes the split fall out as
+// two bit projections: plane A carries the low bit of each pixel,
+// plane B the high bit. Together they encode the 4 shades the panel
+// physically supports in its Init4Gray mode.
+//
+// The mapping was derived from the upstream Python reference
+// (epd7in5_V2.py EPD_4Gray_Display) by inverting Waveshare's
+// truth table for our opposite-polarity encoding. Verified per-shade
+// in TestSplitGray4Planes.
+func splitGray4Planes(buf []byte) (planeA, planeB []byte) {
+	planeA = make([]byte, len(buf)/2)
+	planeB = make([]byte, len(buf)/2)
+	for i := range planeA {
+		// One output byte covers 8 pixels = 2 input bytes (4 pixels each).
+		// First input byte holds the left 4 pixels, MSB-first.
+		var a, b byte
+		for n := range 8 {
+			src := buf[i*2+(n>>2)]    // bytes 0..1 within the pair
+			shift := uint(6 - 2*(n&3)) // 6, 4, 2, 0 — pixel position
+			pix := (src >> shift) & 0b11
+			outShift := uint(7 - n) // MSB-first packing in the plane byte
+			a |= (pix & 0b01) << outShift
+			b |= ((pix >> 1) & 0b01) << outShift
+		}
+		planeA[i] = a
+		planeB[i] = b
+	}
+	return planeA, planeB
+}
+
 // UnpackBuffer converts a packed BW display buffer back to a paletted image.
 // Bit 1 → black, bit 0 → white. Inverse of packBW.
 func UnpackBuffer(profile *DisplayProfile, buf []byte) *image.Paletted {

@@ -48,37 +48,53 @@ func (d *EPD) Init(mode InitMode) error {
 }
 
 // Display sends a full frame buffer to the display and triggers a refresh.
-// The old buffer is sent inverted (XOR with 0xFF) per the display protocol,
-// then the new buffer is sent as-is. After refresh, waits for the display
-// to finish updating. Returns an error if the buffer size doesn't match
-// the profile's expected BufferSize().
+// The exact wire protocol depends on the profile's ColorDepth:
+//
+//   - BW: the buffer is sent inverted (XOR with 0xFF) to OldBufferCmd and
+//     as-is to NewBufferCmd — the controller's 1-bit refresh expects the
+//     "previous" plane inverted relative to the "new" one.
+//   - Gray4: the 2bpp buffer is split into two 1bpp planes (low bits to
+//     OldBufferCmd, high bits to NewBufferCmd) per the upstream Waveshare
+//     EPD_4Gray_Display protocol. The XOR inversion does not apply here —
+//     it's a BW-specific trick.
+//
+// After refresh, waits for the display to finish updating. Returns an
+// error if the buffer size doesn't match the profile's BufferSize() or
+// the profile uses a ColorDepth without a wire protocol implementation.
 func (d *EPD) Display(buffer []byte) error {
 	expected := d.profile.BufferSize()
 	if len(buffer) != expected {
 		return fmt.Errorf("buffer size %d does not match expected %d", len(buffer), expected)
 	}
 
-	// Send old buffer (inverted)
-	inverted := make([]byte, len(buffer))
-	for i, b := range buffer {
-		inverted[i] = ^b
+	var oldData, newData []byte
+	switch d.profile.Color {
+	case BW:
+		oldData = make([]byte, len(buffer))
+		for i, b := range buffer {
+			oldData[i] = ^b
+		}
+		newData = buffer
+	case Gray4:
+		oldData, newData = splitGray4Planes(buffer)
+	default:
+		return fmt.Errorf("Display: unsupported color depth %v", d.profile.Color)
 	}
+
 	if err := d.hw.SendCommand(d.profile.OldBufferCmd); err != nil {
 		return err
 	}
-	if err := d.hw.SendData(inverted); err != nil {
+	if err := d.hw.SendData(oldData); err != nil {
 		return err
 	}
 
-	// Send new buffer
 	if err := d.hw.SendCommand(d.profile.NewBufferCmd); err != nil {
 		return err
 	}
-	if err := d.hw.SendData(buffer); err != nil {
+	if err := d.hw.SendData(newData); err != nil {
 		return err
 	}
 
-	// Trigger refresh and wait
 	if err := d.hw.SendCommand(d.profile.RefreshCmd); err != nil {
 		return err
 	}

@@ -69,6 +69,20 @@ func smallTestProfile() *DisplayProfile {
 	}
 }
 
+// gray4DisplayProfile returns a small Gray4 profile sized for hand-verifiable
+// plane-split tests: 16x2 → 32 pixels → 8 bytes 2bpp → 4 bytes per plane.
+func gray4DisplayProfile() *DisplayProfile {
+	return &DisplayProfile{
+		Name:         "test-gray4",
+		Width:        16,
+		Height:       2,
+		Color:        Gray4,
+		OldBufferCmd: 0x10,
+		NewBufferCmd: 0x13,
+		RefreshCmd:   0x12,
+	}
+}
+
 // partialTestProfile returns a profile that supports partial refresh.
 func partialTestProfile() *DisplayProfile {
 	return &DisplayProfile{
@@ -307,6 +321,119 @@ func TestDisplaySendDataErrors(t *testing.T) {
 	// Error on second SendData (new buffer)
 	if err := NewEPD(&errorDataNthHardware{failOnCall: 2}, p).Display(buf); err == nil {
 		t.Error("expected error on new buffer SendData")
+	}
+}
+
+// --- Display (Gray4 path) ---
+
+func TestDisplayGray4CommandSequence(t *testing.T) {
+	m := &MockHardware{}
+	p := gray4DisplayProfile()
+	epd := NewEPD(m, p)
+
+	buf := make([]byte, p.BufferSize())
+	if err := epd.Display(buf); err != nil {
+		t.Fatal(err)
+	}
+
+	wantCmds := []byte{0x10, 0x13, 0x12}
+	if cmds := m.Commands(); !bytes.Equal(cmds, wantCmds) {
+		t.Errorf("commands = %#v, want %#v", cmds, wantCmds)
+	}
+}
+
+// TestDisplayGray4PlaneSplit covers the full Gray4 wire protocol end-to-end
+// with all four shades present. The buffer mirrors the upstream Waveshare
+// driver's encoding (after Inkwell's white=00, black=11 mapping) and the
+// expected plane bytes derive from the bit math: planeA = low bit per
+// pixel, planeB = high bit. A regression that swaps planes or shifts
+// shades will produce a different byte at a specific index, not a vague
+// "looks wrong on hardware".
+func TestDisplayGray4PlaneSplit(t *testing.T) {
+	m := &MockHardware{}
+	p := gray4DisplayProfile() // 16x2 = 32 px, 8 bytes 2bpp
+	epd := NewEPD(m, p)
+
+	// 32 pixels packed 2bpp into 8 bytes. The plane-split processes
+	// these in pairs (each pair → 1 byte per plane). Each pair below
+	// is constructed to exercise a known shade combination.
+	buf := []byte{
+		0x1B, 0xE4, // pair 0: mixed — w,l,d,b, b,d,l,w
+		0x00, 0xFF, // pair 1: 4 white pixels then 4 black
+		0x55, 0x55, // pair 2: 8 light-gray pixels
+		0xAA, 0xAA, // pair 3: 8 dark-gray pixels
+	}
+
+	if err := epd.Display(buf); err != nil {
+		t.Fatal(err)
+	}
+
+	dataCalls := m.DataCalls()
+	if len(dataCalls) != 2 {
+		t.Fatalf("expected 2 data calls (plane A + plane B), got %d", len(dataCalls))
+	}
+
+	wantA := []byte{0x5A, 0x0F, 0xFF, 0x00}
+	wantB := []byte{0x3C, 0x0F, 0x00, 0xFF}
+	if !bytes.Equal(dataCalls[0], wantA) {
+		t.Errorf("plane A (0x10 payload) = % X, want % X", dataCalls[0], wantA)
+	}
+	if !bytes.Equal(dataCalls[1], wantB) {
+		t.Errorf("plane B (0x13 payload) = % X, want % X", dataCalls[1], wantB)
+	}
+}
+
+func TestDisplayGray4BufferSizeValidation(t *testing.T) {
+	epd := NewEPD(&MockHardware{}, gray4DisplayProfile())
+	if err := epd.Display([]byte{0x00, 0x01}); err == nil {
+		t.Fatal("expected error for wrong buffer size")
+	}
+}
+
+func TestDisplayGray4SendCommandErrors(t *testing.T) {
+	p := gray4DisplayProfile()
+	buf := make([]byte, p.BufferSize())
+
+	// 3 SendCommand calls: OldBufferCmd, NewBufferCmd, RefreshCmd
+	for _, n := range []int{1, 2, 3} {
+		eh := &errorHardware{failOnCall: n}
+		if err := NewEPD(eh, p).Display(buf); err == nil {
+			t.Errorf("expected error on SendCommand #%d", n)
+		}
+	}
+}
+
+func TestDisplayGray4SendDataErrors(t *testing.T) {
+	p := gray4DisplayProfile()
+	buf := make([]byte, p.BufferSize())
+
+	// 2 SendData calls: plane A, plane B
+	if err := NewEPD(&errorDataHardware{}, p).Display(buf); err == nil {
+		t.Error("expected error on plane A SendData")
+	}
+	if err := NewEPD(&errorDataNthHardware{failOnCall: 2}, p).Display(buf); err == nil {
+		t.Error("expected error on plane B SendData")
+	}
+}
+
+// TestDisplayUnsupportedColorDepth locks the behaviour for color depths the
+// transport doesn't know how to drive. Color7 is declared in the ColorDepth
+// enum for future expansion but has no wire protocol implementation in
+// EPD.Display — calling Display with a Color7 profile must fail loudly
+// rather than silently sending BW-shaped data.
+func TestDisplayUnsupportedColorDepth(t *testing.T) {
+	p := &DisplayProfile{
+		Name:         "test-color7",
+		Width:        16,
+		Height:       2,
+		Color:        Color7,
+		OldBufferCmd: 0x10,
+		NewBufferCmd: 0x13,
+		RefreshCmd:   0x12,
+	}
+	buf := make([]byte, p.BufferSize())
+	if err := NewEPD(&MockHardware{}, p).Display(buf); err == nil {
+		t.Fatal("expected error for unsupported color depth, got nil")
 	}
 }
 
