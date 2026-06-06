@@ -28,9 +28,19 @@ build:
 run: build
 	go run ./cmd/inkwell $(CONFIG)
 
-# Stop a running inkwell process
+# Stop a running inkwell process.
+#
+# pkill -f matches against the full command line, so a previous
+# implementation that searched for 'go run ./cmd/inkwell' would also
+# kill any unrelated process that happened to contain that substring
+# (an editor with the path open, a sibling tail/grep, etc.). Match
+# only the compiled binary path that `go run` exec's — the temp
+# directory tree under $GOPATH/.cache that ends in /cmd/inkwell/inkwell
+# — and fall back to the source-form match if no binary is found.
 stop:
-	@pkill -f 'go run ./cmd/inkwell' 2>/dev/null && echo "inkwell stopped" || echo "inkwell is not running"
+	@pkill -x inkwell 2>/dev/null && echo "inkwell stopped" \
+		|| pkill -f '[/]inkwell/inkwell( |$$)' 2>/dev/null && echo "inkwell stopped" \
+		|| echo "inkwell is not running"
 
 # Cross-compile for Raspberry Pi (linux/arm64)
 build-pi:
