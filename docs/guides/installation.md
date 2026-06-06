@@ -28,9 +28,9 @@ On your workstation:
   `linux/arm64` Raspberry Pi OS; `linux/arm` 32-bit is also supported,
   see the cross-compile section)
 - The Waveshare 7.5" e-Paper V2 + E-Paper Driver HAT, wired and
-  powered. If you've never confirmed the panel works, run the
-  [Waveshare vendor test](../tech-specs/02-raspberry-pi-setup.md)
-  first.
+  powered. If you've never confirmed the panel works on this Pi, the
+  [Waveshare wiki](https://www.waveshare.com/wiki/7.5inch_e-Paper_HAT_Manual)
+  has the vendor Python test for hardware bringup.
 
 On the Pi:
 

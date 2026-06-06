@@ -3,7 +3,6 @@
 > **Source Documents**:
 >
 > - [Hardware Overview](docs/01-hardware-overview.md)
-> - [Raspberry Pi Setup](docs/02-raspberry-pi-setup.md)
 > - [Python Driver Architecture](docs/03-python-driver-architecture.md)
 > - [Rendering Pipeline](docs/04-rendering-pipeline.md)
 > - [SPI Command Reference](docs/05-spi-command-reference.md)

@@ -172,8 +172,6 @@ The `docs/` directory contains detailed reference material:
   - SPI command reference
   - Go implementation architecture
   - Testing strategy
-  - Optional Waveshare Python vendor test (hardware bringup only —
-    not required to run Inkwell)
 - **Demos** ([docs/demos/](docs/demos/)) — feature-level walkthroughs
   (e.g. the weekly calendar dashboard and the grayscale refresh).
 

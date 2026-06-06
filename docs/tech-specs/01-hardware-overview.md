@@ -111,6 +111,3 @@ the cleanest possible output on the hardware you have.
   deploy, configure, run as a service on the Pi.
 - [Hardware grayscale ceilings](../guides/hardware-grayscale.md) — which
   `PaperPalette` entries render as flat tone vs. stipple on this panel.
-- [Optional: Waveshare hardware bringup](02-raspberry-pi-setup.md) —
-  vendor Python test for confirming the panel/HAT before installing
-  Inkwell.
