@@ -61,10 +61,17 @@ charts). Trade-off: tiny regions (<12 px on a side) don't have enough
 pixels for the stipple to read.
 
 Either way, on the Waveshare 7.5" V2 you can also opt into the panel's
-native 4-level grayscale mode via the upcoming `color_mode: gray4`
-config knob (tracked in this project's beads workspace — run
-`bd ready` to see the active Gray4 work). Once that lands, four
-specific palette indices will map to flat native grays without dithering:
+native 4-level grayscale mode via the `color_mode: gray4` config knob.
+Set it at the top of `inkwell.yaml`:
+
+```yaml
+display: waveshare_7in5_v2
+color_mode: gray4   # default is "bw"
+```
+
+`color_mode: gray4` pins `PackImage` and the compositor onto the
+`packGray4` 2-bit path. Four specific palette indices map to flat
+native grays without dithering:
 
 | Native level | Closest `PaperPalette` index |
 |---|---|
@@ -73,8 +80,13 @@ specific palette indices will map to flat native grays without dithering:
 | Dark gray | `PaperGray60` |
 | Black | `PaperBlack` |
 
-Anything else in the palette will still dither (via the future
-`packGray4` dither path) to fake the missing intermediates.
+Anything else in the palette will still dither (via the `packGray4`
+dither path) to fake the missing intermediates.
+
+The full Gray4 device wiring — `EPD.Display` plane-split, picking
+`Init4Gray` at startup, and the WebPreview Gray4 unpacker — is still
+in flight. Run `bd ready` to see what's left; `color_mode: gray4` is
+safe to enable today with the `preview` / `image` backends.
 
 ## Strategy 2 — IT8951-controller panels (6" HD, 7.8", 9.7", 10.3", 13.3")
 
@@ -105,7 +117,7 @@ PaperPalette (12 design-time levels)
    └────────┘
         │
         ▼
-   ┌────────┐   4-level Init4Gray panel (Waveshare 7.5" V2 opt-in, future)
+   ┌────────┐   4-level Init4Gray panel (Waveshare 7.5" V2, color_mode: gray4)
    │packGray4│→ 4 device levels, future Bayer dither extends to ~16 perceived
    └────────┘
         │
@@ -127,9 +139,10 @@ specific panel's native level count.
   Bayer-4×4 makes everything readable on the device. Reach for
   `PaperWhite` / `PaperBlack` only where you specifically want flat
   high-contrast tone (large fill blocks, hard borders).
-- **Designing for a 7.5" V2 in future Gray4 mode?** Prefer `PaperWhite`,
-  `PaperGray20`, `PaperGray60`, and `PaperBlack` for flat tones; use
-  other palette entries only when you want a stipple texture instead.
+- **Designing for a 7.5" V2 with `color_mode: gray4`?** Prefer
+  `PaperWhite`, `PaperGray20`, `PaperGray60`, and `PaperBlack` for
+  flat tones; use other palette entries only when you want a stipple
+  texture instead.
 - **Designing for an IT8951 panel (when supported)?** Use the full ramp
   freely; no need to think about device collapse.
 
