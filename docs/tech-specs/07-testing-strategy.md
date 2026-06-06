@@ -7,9 +7,21 @@ the project enforces 100% statement coverage on `internal/...` in CI
 via `make coverage`. The hardware integration step then becomes a
 *deployment* concern, not a development concern.
 
-See [`internal/inkwell/`][pkg] for the live tests — every production
-file has a `_test.go` neighbour, and every widget has its own
-`testdata/` golden directory.
+See [`internal/inkwell/`][pkg] for the live tests. Most production
+packages include tests, though coverage doesn't follow a strict
+same-basename `<file>_test.go` convention — package-level files such
+as `hardware.go`, `spi_backend_hardware.go`, `widget/widget.go`,
+`calendar/event.go`, `calendar/ical/event.go`, and `weather/weather.go`
+are exercised through their callers' tests rather than dedicated
+files. The 100% statement-coverage gate enforced by `make coverage`
+is the authoritative bar.
+
+Golden-file coverage is opt-in per widget: `widgets/clock/` is the
+only widget that currently keeps a committed `testdata/` golden PNG
+(`TestWidget_GoldenFile.png`); `widgets/date/`, `widgets/separator/`,
+`widgets/weatherview/`, and `widgets/weekly/` rely on assertion-style
+tests against rendered pixels instead. Walk
+[`internal/inkwell/`][pkg] for the actual layout when in doubt.
 
 [pkg]: ../../internal/inkwell/
 
@@ -86,19 +98,20 @@ Then review the diff visually (`git diff testdata/`) before committing.
 
 ### Where Golden Files Live
 
-Each widget owns its `testdata/` directory:
+Widgets that use the helper keep their golden PNGs alongside the
+tests:
 
 ```text
 internal/inkwell/widgets/
-  clock/testdata/...png
-  weekly/testdata/...png
-  weatherview/testdata/...png
-  ...
+  clock/testdata/TestWidget_GoldenFile.png    # currently the only widget golden
 ```
 
-The widgets compare rendered output to the committed PNGs. The same
-helper is used in [`testutil/golden_test.go`][golden-test] so the
-helper itself is covered.
+Other widgets (`date/`, `separator/`, `weatherview/`, `weekly/`)
+currently use assertion-style tests that inspect rendered pixels
+directly, rather than full-image goldens. The helper itself is
+exercised in [`testutil/golden_test.go`][golden-test] (which sets up
+its own temporary fixture directories), so the helper stays covered
+even when widgets don't use it.
 
 [golden-test]: ../../internal/inkwell/testutil/golden_test.go
 
@@ -138,8 +151,9 @@ if got := mock.Commands(); !bytes.Equal(got, want) {
 ## 3. Widget Testing
 
 Each widget package is self-contained under
-[`internal/inkwell/widgets/`][widgets] and ships with both unit tests
-and golden PNGs:
+[`internal/inkwell/widgets/`][widgets] and ships with unit tests
+(some also with golden PNGs — see [Where Golden Files Live](#where-golden-files-live)
+above):
 
 - Widgets take their data dependencies via `widget.Deps` (and small
   inline accessors like a `now func() time.Time`). Tests substitute a
@@ -147,8 +161,9 @@ and golden PNGs:
 - The widget registry ([`widget/registry.go`][registry]) lets tests
   build a custom factory map and pass it via `inkwell.WithRegistry(...)`
   when constructing the `App`.
-- Golden PNGs are stored in each widget's `testdata/` directory and
-  regenerated via `-update`.
+- Widgets that use the golden-PNG helper keep them under their own
+  `testdata/` directory and regenerate via `-update`; widgets that
+  assert against rendered pixels directly skip the helper entirely.
 
 [widgets]: ../../internal/inkwell/widgets/
 [registry]: ../../internal/inkwell/widget/registry.go
