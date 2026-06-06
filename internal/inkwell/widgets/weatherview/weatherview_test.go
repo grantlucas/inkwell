@@ -98,6 +98,38 @@ func TestRenderDayWeather_CustomIconSize(t *testing.T) {
 	RenderDayWeather(frame, image.Rect(0, 0, 114, 160), day, opts)
 }
 
+// When DrawIcon fails the day cell still has to render — the rest of
+// the row (label, temps, chart) is independent of the glyph. Pin that
+// behavior by swapping in bad font data while RenderDayWeather runs.
+func TestRenderDayWeather_DrawIconErrorRendersRest(t *testing.T) {
+	orig := fontData
+	fontData = []byte("not a font")
+	defer func() { fontData = orig }()
+
+	frame := newTestFrame(114, 160)
+	day := sampleDay()
+	opts := Options{
+		TempUnit:      "C",
+		ShowLabel:     true,
+		GlobalTempMin: 5,
+		GlobalTempMax: 24,
+	}
+	RenderDayWeather(frame, image.Rect(0, 0, 114, 160), day, opts)
+
+	// The chart and temps should still produce non-white pixels even
+	// though the icon glyph failed.
+	hasInk := false
+	for _, px := range frame.Pix {
+		if px != widget.PaperWhite {
+			hasInk = true
+			break
+		}
+	}
+	if !hasInk {
+		t.Error("RenderDayWeather produced no pixels with bad font data — icon failure shouldn't blank the row")
+	}
+}
+
 func TestRenderDayWeather_SmallChart(t *testing.T) {
 	frame := newTestFrame(114, 50)
 	day := sampleDay()

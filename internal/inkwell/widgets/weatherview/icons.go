@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"log"
 	"unicode/utf8"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
@@ -45,15 +44,10 @@ func DrawIcon(frame *image.Paletted, x, y, size int, cond weather.Condition) err
 	if err != nil {
 		return err
 	}
-	defer func() {
-		// Close on an in-memory font face is unlikely to fail, but
-		// surfacing the error keeps errcheck happy and gives us a
-		// breadcrumb if the underlying opentype implementation
-		// changes.
-		if cerr := face.Close(); cerr != nil {
-			log.Printf("weatherview: close icon face: %v", cerr)
-		}
-	}()
+	// Close on an in-memory opentype face is documented to always
+	// return nil; explicitly discard so errcheck doesn't flag the
+	// deferred call, and skip the dead error-handling branch.
+	defer func() { _ = face.Close() }()
 
 	advance, ok := face.GlyphAdvance(glyph)
 	if !ok {

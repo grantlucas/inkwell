@@ -206,6 +206,36 @@ END:VCALENDAR
 	}
 }
 
+// errCloser wraps a Reader so its Close() returns a specific error.
+// This pins the per-iteration body-close error wrapping in fetchFeed.
+type errCloser struct {
+	io.Reader
+}
+
+func (errCloser) Close() error { return fmt.Errorf("simulated close failure") }
+
+func TestHTTPSource_BodyCloseErrorSurfaced(t *testing.T) {
+	client := &mockHTTPClient{
+		responses: map[string]*http.Response{
+			"https://example.com/cal.ics": {
+				StatusCode: 200,
+				Body:       errCloser{Reader: strings.NewReader(testICS)},
+			},
+		},
+	}
+	src := NewHTTPSource([]string{"https://example.com/cal.ics"}, client)
+
+	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
+	_, err := src.Events(start, end)
+	if err == nil {
+		t.Fatal("expected error from failing Body.Close")
+	}
+	if !strings.Contains(err.Error(), "simulated close failure") {
+		t.Errorf("error = %q, want it to wrap simulated close failure", err.Error())
+	}
+}
+
 func TestHTTPSource_Non200Status(t *testing.T) {
 	client := &mockHTTPClient{
 		responses: map[string]*http.Response{

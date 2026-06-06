@@ -85,11 +85,10 @@ func average(forecasts []*Forecast, loc Location) *Forecast {
 			}
 		}
 
-		// Skip days where no source had data — avoids appending a zero-value
-		// DailyForecast that no test currently expects.
-		if !condSet {
-			continue
-		}
+		// condSet is true here whenever d < maxDays: maxDays is the max
+		// of len(fc.Days) across sources, so at least one source has a
+		// Days[d] to populate condSet/date on the first hit. Skipping
+		// when condSet is false would be dead code.
 
 		df := DailyForecast{
 			Date:      date,

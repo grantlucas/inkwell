@@ -104,3 +104,17 @@ func TestUnfold_EOFOnly(t *testing.T) {
 		t.Errorf("got %q, want nil", got)
 	}
 }
+
+// Parse must surface unfold errors rather than returning a partial
+// truncated event list; this pins the error-wrapping branch added
+// alongside the scanner-error fix.
+func TestParse_PropagatesUnfoldError(t *testing.T) {
+	r := &errReader{data: []byte("SUMMARY:Hello\n")}
+	_, err := Parse(r)
+	if err == nil {
+		t.Fatal("expected error from Parse when unfold fails")
+	}
+	if !strings.Contains(err.Error(), "read iCal stream") {
+		t.Errorf("error = %q, want it to wrap 'read iCal stream'", err.Error())
+	}
+}
