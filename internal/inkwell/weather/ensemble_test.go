@@ -161,6 +161,44 @@ func TestEnsembleSource_ThreeSources(t *testing.T) {
 	}
 }
 
+// A source that returns success with an empty Days slice must not panic
+// the averaging loop when other sources have data.
+func TestEnsembleSource_EmptySuccessfulSource(t *testing.T) {
+	date := time.Date(2026, 4, 28, 0, 0, 0, 0, time.UTC)
+	empty := &stubSource{forecast: &Forecast{}}
+	withData := &stubSource{forecast: &Forecast{Days: []DailyForecast{
+		{Date: date, High: 20, Low: 10, Condition: Clear},
+	}}}
+
+	ensemble := NewEnsembleSource(empty, withData)
+	fc, err := ensemble.Forecast(context.Background(), Location{}, 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(fc.Days) != 1 {
+		t.Fatalf("got %d days, want 1", len(fc.Days))
+	}
+	if fc.Days[0].High != 20 {
+		t.Errorf("High = %v, want 20 (sole source)", fc.Days[0].High)
+	}
+}
+
+// When every source is successful but has zero forecast days, the averaged
+// output should be an empty Days slice rather than a panic or zero-value day.
+func TestEnsembleSource_AllEmptySuccess(t *testing.T) {
+	s1 := &stubSource{forecast: &Forecast{}}
+	s2 := &stubSource{forecast: &Forecast{}}
+
+	ensemble := NewEnsembleSource(s1, s2)
+	fc, err := ensemble.Forecast(context.Background(), Location{}, 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(fc.Days) != 0 {
+		t.Errorf("got %d days, want 0", len(fc.Days))
+	}
+}
+
 func TestAvgFloat_Empty(t *testing.T) {
 	got := avgFloat(nil)
 	if got != 0 {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 )
 
 // EnsembleSource combines forecasts from multiple sources by averaging
@@ -65,7 +66,7 @@ func average(forecasts []*Forecast, loc Location) *Forecast {
 		var cond Condition
 		condSet := false
 		hourlyByHour := make(map[int][]HourlyPoint)
-		var date = forecasts[0].Days[0].Date
+		var date time.Time
 
 		for _, fc := range forecasts {
 			if d >= len(fc.Days) {
@@ -82,6 +83,12 @@ func average(forecasts []*Forecast, loc Location) *Forecast {
 			for _, hp := range day.Hourly {
 				hourlyByHour[hp.Hour] = append(hourlyByHour[hp.Hour], hp)
 			}
+		}
+
+		// Skip days where no source had data — avoids appending a zero-value
+		// DailyForecast that no test currently expects.
+		if !condSet {
+			continue
 		}
 
 		df := DailyForecast{
