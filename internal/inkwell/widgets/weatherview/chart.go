@@ -70,10 +70,11 @@ func RenderHourlyChart(frame *image.Paletted, bounds image.Rectangle, hourly []w
 
 	barTop := bounds.Min.Y + tempH + sepH
 
-	// Faint axis line between the temperature curve and the precipitation
-	// bars — used to be solid black; a soft gray reads as a structural
-	// guideline without dominating the chart.
-	drawHLine(frame, bounds.Min.X, bounds.Max.X, barTop-1, widget.PaperGray30)
+	// Axis line between the temperature curve and the precipitation
+	// bars. 1-px strokes have to be PaperBlack on the device — a flat
+	// PaperGrayNN row dithers into a dashed dotted line, which read
+	// as broken instead of "soft guideline" on the panel.
+	drawHLine(frame, bounds.Min.X, bounds.Max.X, barTop-1, widget.PaperBlack)
 
 	// Soft hour-highlight band: a thin vertical fill behind the data for
 	// today's current hour. Much easier to parse than the old dashed line.
@@ -103,16 +104,18 @@ func RenderHourlyChart(frame *image.Paletted, bounds image.Rectangle, hourly []w
 		points = append(points, chartPoint{cx, cy})
 	}
 
-	// Temperature polyline in a dark — but not pure black — gray. Pairs
-	// with the faint axis and gives the curve weight without sharp glare.
+	// Temperature polyline drawn as 1-px Bresenham strokes — those have
+	// to be black on-device, otherwise the dither breaks the curve into
+	// dots that don't read as a line. Plus signs at each vertex give
+	// the curve weight without a glaring solid run.
 	for j := 1; j < len(points); j++ {
-		drawLine(frame, points[j-1].x, points[j-1].y, points[j].x, points[j].y, widget.PaperGray80)
+		drawLine(frame, points[j-1].x, points[j-1].y, points[j].x, points[j].y, widget.PaperBlack)
 	}
 	for _, p := range points {
 		for dy := -1; dy <= 1; dy++ {
 			for dx := -1; dx <= 1; dx++ {
 				if dx*dx+dy*dy <= 1 {
-					setPixel(frame, p.x+dx, p.y+dy, widget.PaperGray80)
+					setPixel(frame, p.x+dx, p.y+dy, widget.PaperBlack)
 				}
 			}
 		}
@@ -128,17 +131,20 @@ func RenderHourlyChart(frame *image.Paletted, bounds image.Rectangle, hourly []w
 			barH = 2
 		}
 		if barH > 0 {
-			// Precip bars: soft gray fill with a slightly darker top edge,
-			// so a single bar reads as a column of "weight" rather than a
-			// solid black slab. Tall bars then look like a smooth ramp.
+			// Precip bars: soft gray fill with a device-safe black top
+			// edge. The interior gets enough vertical room to dither
+			// as a halftone; a 1-px top in PaperGrayNN would just
+			// stipple, so make the cap PaperBlack to read as a crisp
+			// rim.
 			r := image.Rect(bx, barTop+barMaxH-barH, bx+barW, barTop+barMaxH)
 			fillRect(frame, r, widget.PaperGray40)
-			drawHLine(frame, r.Min.X, r.Max.X, r.Min.Y, widget.PaperGray70)
+			drawHLine(frame, r.Min.X, r.Max.X, r.Min.Y, widget.PaperBlack)
 		}
 
-		// Faint tick marks at the base of the bar gutter for x-axis grounding.
-		setPixel(frame, bx, barTop+barMaxH, widget.PaperGray60)
-		setPixel(frame, bx+barW-1, barTop+barMaxH, widget.PaperGray60)
+		// Tick marks at the base of the bar gutter for x-axis grounding.
+		// Single pixels survive only as on/off, so keep them PaperBlack.
+		setPixel(frame, bx, barTop+barMaxH, widget.PaperBlack)
+		setPixel(frame, bx+barW-1, barTop+barMaxH, widget.PaperBlack)
 	}
 
 	for _, hp := range filtered {
