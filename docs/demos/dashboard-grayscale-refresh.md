@@ -203,7 +203,6 @@ and final is much easier to read:
 
 ## Element-by-element
 
-<!-- markdownlint-disable MD013 -->
 | Element | Baseline | Refined |
 |---|---|---|
 | Today highlight | Solid black block, inverted white text | `PaperGray10` tint, black date number, `PaperGray60` hairline accent |
@@ -221,13 +220,67 @@ and final is much easier to read:
 | Event time | Bold black | `PaperGray70` muted |
 | Day-of-week + month label | Bold black | `PaperGray70` muted |
 | Font hinting | `HintingFull` (no AA) | `HintingVertical` (horizontal AA) |
-<!-- markdownlint-enable MD013 -->
 
 The rule that emerged: **headline data stays at full ink** (date numbers,
 high temps, event titles); **structural elements move to soft gray**
 (separators, dividers, axes); **secondary metadata moves to muted gray**
 (low temps, captions, labels, times). That's where the visual hierarchy
 comes from — not from font weight or size, but from luminance.
+
+## But wait — the e-paper panel is 1-bit
+
+The Waveshare 7.5" V2 panel cannot natively render 12 levels of
+grayscale. It's a 1-bit display (with an optional 4-level grayscale
+mode via `Init4Gray` that isn't wired through the SPI path yet). All
+that intermediate-gray fidelity in `PaperPalette` exists for
+*rendering* — the device buffer the panel actually receives is 1 bit
+per pixel.
+
+If `packBW` just thresholded, every soft gray would snap to either
+black or white at the device, and the entire visual hierarchy above
+would collapse on the real hardware. The today tint, the hour band,
+the column dividers, the soft chart bars — gone.
+
+The packer now uses **Bayer 4×4 ordered dithering**: each pixel's
+threshold comes from a 4×4 matrix, so a uniform gray fill turns into
+a structured halftone stipple pattern that an e-paper panel renders
+faithfully. Solid black (`PaperBlack`, Y=0) and solid white
+(`PaperWhite`, Y=255) are unaffected because they fall outside the
+threshold range — type and backgrounds stay crisp.
+
+The web preview now defaults to showing **what the device actually
+receives** (post-dither 1-bit). The high-fidelity grayscale source is
+available as a toggle on the preview page or via `?source=1` on
+`/frame.png`, but it's clearly labelled as design-intent rather than
+device-truth so nobody signs off on a design that wouldn't survive
+the trip to hardware.
+
+### Device view (default)
+
+This is the 1-bit dithered output sent to the panel:
+
+```bash {image}
+![Dithered device view: today (SAT 6) is a dense stippled tint, column dividers are dotted hairlines, precip bars are halftone patterns of varying density, the today-hour band is a clear stipple. Hierarchy survives the trip to 1-bit.](/tmp/inkwell-vis/dithered-device.png)
+```
+
+![Dithered device view: today (SAT 6) is a dense stippled tint, column dividers are dotted hairlines, precip bars are halftone patterns of varying density, the today-hour band is a clear stipple. Hierarchy survives the trip to 1-bit.](dashboard-grayscale-refresh/dithered-device.png)
+
+### Source view (design intent, opt-in)
+
+For comparison, here's the high-fidelity grayscale source the
+compositor produces before dithering — accessible via the toggle on
+the preview page or `?source=1`:
+
+```bash {image}
+![Source view: full grayscale design intent. Smooth tints, clean gray rules, anti-aliased icon curves. This is the "before dithering" view — useful for design review, not for predicting device output.](/tmp/inkwell-vis/source-design.png)
+```
+
+![Source view: full grayscale design intent. Smooth tints, clean gray rules, anti-aliased icon curves. This is the "before dithering" view — useful for design review, not for predicting device output.](dashboard-grayscale-refresh/source-design.png)
+
+The dithering trades flat tones for high-frequency stipple texture.
+At the panel's native pixel pitch (≈140 ppi on the 7.5" V2) the
+patterns read as continuous gray to the eye — it's the same technique
+newspapers and Kindle screens have used for decades.
 
 ## Reproduce locally
 
@@ -250,20 +303,26 @@ save, and watch the preview update without reloading.
 
 ## What shipped
 
-Three commits on `feat/calendar-widget`:
+Five commits on `feat/calendar-widget`:
 
 - `feat(render): move dashboard to grayscale palette with soft widget aesthetics`
 - `feat(weatherview): soften icons and weight low-temp/labels into gray`
 - `fix(weatherview): bump today-hour highlight from Gray10 to Gray20`
+- `feat(buffer): Bayer 4×4 ordered dithering in packBW`
+- `feat(preview): default to device view, opt-in source toggle`
 
 Key code touch points:
 
 - `internal/inkwell/widget/palette.go` — the new `PaperPalette` and
   named indices (`PaperWhite`, `PaperBlack`, `PaperGray05` … `PaperGray90`)
 - `internal/inkwell/compositor.go` — always renders into `PaperPalette`
+- `internal/inkwell/buffer.go` — `packBW` applies Bayer 4×4 ordered
+  dithering so soft grays survive on the 1-bit device as stipple
+  patterns
 - `internal/inkwell/hardware.go` — new `FrameSink` capability
-- `internal/inkwell/web_preview.go` — implements `FrameSink`; prefers
-  the high-fidelity source frame over the unpacked 1-bit buffer
+- `internal/inkwell/web_preview.go` — implements `FrameSink`; serves
+  the unpacked device buffer by default with `?source=1` for the
+  high-fidelity source; toggle exposed in the HTML preview UI
 - `internal/inkwell/app.go` — hands the composited frame to any backend
   that implements `FrameSink` before packing
 - `internal/inkwell/fonts/fonts.go` — `HintingVertical` is the new default
@@ -271,7 +330,9 @@ Key code touch points:
   helpers gained a `uint8` color-index parameter; widgets pick from
   the gray ramp instead of hard-coding `1`
 
-The packer is untouched: `packBW` still thresholds to 1 bit per pixel
-for the SPI buffer, `packGray4` still buckets to four levels. The
-e-paper device sees the same shape of data it always did — only the
-preview and any future grayscale device path see the richer source.
+The packer now does real work: `packBW` applies Bayer-4×4 dithering
+when emitting the 1-bit SPI buffer, `packGray4` still buckets to four
+levels when (eventually) emitting the 2-bit buffer for `Init4Gray`
+mode. The SPI buffer shape is unchanged — same 800×480/8 bytes — but
+the *contents* now encode halftone gradations instead of a flat
+threshold.
