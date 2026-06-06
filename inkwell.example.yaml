@@ -1,0 +1,31 @@
+display: waveshare_7in5_v2
+backend: preview
+preview:
+  port: 8080
+
+dashboard:
+  screens:
+    - name: weekly
+      widgets:
+        - type: date
+          bounds: [0, 0, 800, 50]
+          config:
+            format: "Monday, January 2"
+        - type: clock
+          bounds: [700, 0, 800, 50]
+          config:
+            format: "15:04"
+            align: right
+        - type: separator
+          bounds: [0, 50, 800, 52]
+        - type: weekly-calendar
+          bounds: [0, 52, 800, 480]
+          config:
+            feeds:
+              - "https://example.com/my-calendar.ics"
+            latitude: 40.7128
+            longitude: -74.0060
+            temp_unit: C
+            show_weather: true
+            show_weather_label: true
+            max_events: 5

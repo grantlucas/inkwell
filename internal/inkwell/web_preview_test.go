@@ -3,11 +3,14 @@ package inkwell
 import (
 	"errors"
 	"image"
+	"image/color"
 	"image/png"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
 func TestWebPreview_CapturesBufferOnDisplay(t *testing.T) {
@@ -222,6 +225,125 @@ func TestWebPreview_EncodeErrorReturns500(t *testing.T) {
 	}
 }
 
+func TestWebPreview_DefaultViewIsPackedDeviceBuffer(t *testing.T) {
+	// The preview must default to showing the *unpacked device buffer* —
+	// the dithered 1-bit representation that the e-paper panel actually
+	// receives — not the high-fidelity source. The source view is opt-in
+	// via ?source=1; serving source by default would mislead about how
+	// the dashboard will look on hardware.
+	p := imageTestProfile()
+	wp := NewWebPreview(p)
+
+	src := image.NewPaletted(image.Rect(0, 0, p.Width, p.Height), widget.PaperPalette)
+	src.SetColorIndex(1, 0, widget.PaperGray50)
+	wp.SetSourceFrame(src)
+
+	// Mutate the source after handing it over — the preview must hold a copy.
+	src.SetColorIndex(1, 0, widget.PaperBlack)
+
+	// All-white packed buffer means the device sees pure white everywhere.
+	buf := make([]byte, p.BufferSize())
+	sendDisplaySequence(t, wp, p, buf)
+
+	frame := wp.Frame()
+	if frame == nil {
+		t.Fatal("expected frame after display sequence, got nil")
+	}
+	r, g, b, _ := frame.At(1, 0).RGBA()
+	if r != 0xFFFF || g != 0xFFFF || b != 0xFFFF {
+		t.Errorf("pixel (1,0) RGBA = (0x%04X,0x%04X,0x%04X), want white (packed buffer, not gray source)", r, g, b)
+	}
+}
+
+func TestWebPreview_SourceViewOptIn(t *testing.T) {
+	// With ?source=1, ServeHTTP serves the high-fidelity source frame even
+	// when a packed device buffer has also been captured.
+	p := imageTestProfile()
+	wp := NewWebPreview(p)
+
+	src := image.NewPaletted(image.Rect(0, 0, p.Width, p.Height), widget.PaperPalette)
+	src.SetColorIndex(1, 0, widget.PaperGray50)
+	wp.SetSourceFrame(src)
+
+	buf := make([]byte, p.BufferSize())
+	sendDisplaySequence(t, wp, p, buf)
+
+	req := httptest.NewRequest(http.MethodGet, "/frame.png?source=1", nil)
+	rec := httptest.NewRecorder()
+	wp.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	img, err := png.Decode(rec.Body)
+	if err != nil {
+		t.Fatalf("decode PNG: %v", err)
+	}
+	want := widget.PaperPalette[widget.PaperGray50].(color.Gray)
+	gr, gg, gb, _ := img.At(1, 0).RGBA()
+	wr, wg, wb, _ := want.RGBA()
+	if gr != wr || gg != wg || gb != wb {
+		t.Errorf("?source=1 pixel (1,0) RGBA = (0x%04X,0x%04X,0x%04X), want (0x%04X,0x%04X,0x%04X) PaperGray50",
+			gr, gg, gb, wr, wg, wb)
+	}
+}
+
+func TestWebPreview_SourceViewWithoutSourceFrameReturns204(t *testing.T) {
+	// ?source=1 with no SetSourceFrame call must return 204, not the
+	// packed device buffer — otherwise the toggle would silently lie
+	// about which view the user is looking at.
+	p := imageTestProfile()
+	wp := NewWebPreview(p)
+
+	buf := make([]byte, p.BufferSize())
+	sendDisplaySequence(t, wp, p, buf) // captures a buffer, sets wp.current
+
+	req := httptest.NewRequest(http.MethodGet, "/frame.png?source=1", nil)
+	rec := httptest.NewRecorder()
+	wp.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("status = %d, want %d (no source frame supplied)", rec.Code, http.StatusNoContent)
+	}
+}
+
+func TestWebPreview_SetSourceFrameNilIgnored(t *testing.T) {
+	wp := NewWebPreview(imageTestProfile())
+	wp.SetSourceFrame(nil) // must not panic
+	if wp.source != nil {
+		t.Errorf("source = %v, want nil", wp.source)
+	}
+}
+
+func TestWebPreview_SourceFrameAloneServesWithoutPackedBuffer(t *testing.T) {
+	p := imageTestProfile()
+	wp := NewWebPreview(p)
+
+	src := image.NewPaletted(image.Rect(0, 0, p.Width, p.Height), widget.PaperPalette)
+	src.SetColorIndex(0, 0, widget.PaperBlack)
+	wp.SetSourceFrame(src)
+
+	// Trigger a refresh without ever capturing a buffer.
+	if err := wp.SendCommand(p.RefreshCmd); err != nil {
+		t.Fatalf("SendCommand(RefreshCmd): %v", err)
+	}
+	frame := wp.Frame()
+	if frame == nil {
+		t.Fatal("expected frame from source alone, got nil")
+	}
+	if got := frame.ColorIndexAt(0, 0); got != widget.PaperBlack {
+		t.Errorf("pixel (0,0) idx = %d, want %d (widget.PaperBlack)", got, widget.PaperBlack)
+	}
+}
+
+func TestWebPreview_RefreshWithoutBufferOrSourceIsNoop(t *testing.T) {
+	wp := NewWebPreview(imageTestProfile())
+	if err := wp.SendCommand(wp.profile.RefreshCmd); err != nil {
+		t.Fatalf("RefreshCmd with no captured/source: %v", err)
+	}
+	if frame := wp.Frame(); frame != nil {
+		t.Errorf("Frame = %v, want nil", frame)
+	}
+}
+
 func TestWebPreview_ReadBusyResetClose(t *testing.T) {
 	wp := NewWebPreview(imageTestProfile())
 
@@ -233,5 +355,38 @@ func TestWebPreview_ReadBusyResetClose(t *testing.T) {
 	}
 	if err := wp.Close(); err != nil {
 		t.Errorf("Close: %v", err)
+	}
+}
+
+// notifyLocked's send is non-blocking — when a subscriber's buffered
+// channel is full, the default branch must fire and the next refresh
+// must still complete. Pin the default branch by filling a
+// subscriber's channel before triggering another refresh.
+func TestWebPreview_NotifyDropsWhenSubscriberFull(t *testing.T) {
+	profile, ok := Profiles["waveshare_7in5_v2"]
+	if !ok {
+		t.Fatal("missing waveshare_7in5_v2 profile")
+	}
+	wp := NewWebPreview(profile)
+
+	// Prime: capture a buffer so SendCommand(RefreshCmd) calls notifyLocked.
+	if err := wp.SendData(make([]byte, profile.BufferSize())); err != nil {
+		t.Fatalf("SendData: %v", err)
+	}
+
+	ch := wp.Subscribe()
+	defer wp.Unsubscribe(ch)
+
+	// Fill the (cap=1) subscriber channel so the second notify hits
+	// the default-branch drop.
+	ch <- struct{}{}
+
+	if err := wp.SendCommand(profile.RefreshCmd); err != nil {
+		t.Fatalf("SendCommand: %v", err)
+	}
+	// Sanity: the subscriber should still be registered (the drop
+	// doesn't remove it).
+	if got := wp.subscriberCount(); got != 1 {
+		t.Errorf("subscriberCount = %d, want 1", got)
 	}
 }

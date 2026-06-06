@@ -1,0 +1,10 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:evt-fold@example.com
+DTSTART:20260425T090000Z
+DTEND:20260425T100000Z
+SUMMARY:A very long event summary that needs to be
+ folded across multiple lines
+END:VEVENT
+END:VCALENDAR

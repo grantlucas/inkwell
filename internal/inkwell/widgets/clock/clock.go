@@ -9,20 +9,47 @@ import (
 	"fmt"
 
 	"golang.org/x/image/font"
-	"golang.org/x/image/font/basicfont"
 	"golang.org/x/image/math/fixed"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
 // Compile-time interface check.
 var _ widget.Widget = (*Widget)(nil)
 
+var clockFace font.Face
+
+func init() {
+	clockFace = mustLoadClockFace()
+}
+
+// mustLoadClockFace is extracted so the font-load panic branch is
+// reachable from tests via fonts.SwapDataForTest. Production paths
+// invoke it once at init time.
+func mustLoadClockFace() font.Face {
+	f, err := fonts.Face(fonts.Bold, 16)
+	if err != nil {
+		panic("clock: load font: " + err.Error())
+	}
+	return f
+}
+
+// Align controls text alignment within the widget bounds.
+type Align int
+
+const (
+	AlignCenter Align = iota
+	AlignLeft
+	AlignRight
+)
+
 // Widget renders the current time into a region of the frame.
 type Widget struct {
 	bounds image.Rectangle
 	now    func() time.Time
 	format string
+	align  Align
 }
 
 // New creates a clock Widget that renders into bounds using the given time
@@ -30,12 +57,13 @@ type Widget struct {
 // displayed time; pass time.Now for live output or a fixed function for
 // deterministic tests.
 func New(bounds image.Rectangle, now func() time.Time, format string) *Widget {
-	return &Widget{bounds: bounds, now: now, format: format}
+	return &Widget{bounds: bounds, now: now, format: format, align: AlignCenter}
 }
 
 // Factory creates a clock Widget from config and dependencies.
 // Supported config keys:
 //   - format (string): Go time format string. Default: "15:04"
+//   - align (string): "center" (default), "left", or "right"
 func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
 	format := "15:04"
 	if v, ok := config["format"]; ok {
@@ -48,11 +76,30 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 		}
 		format = s
 	}
+
+	align := AlignCenter
+	if v, ok := config["align"]; ok {
+		s, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("clock: align must be a string, got %T", v)
+		}
+		switch s {
+		case "center":
+			align = AlignCenter
+		case "left":
+			align = AlignLeft
+		case "right":
+			align = AlignRight
+		default:
+			return nil, fmt.Errorf("clock: invalid align %q (must be center, left, or right)", s)
+		}
+	}
+
 	now := deps.Now
 	if now == nil {
 		now = time.Now
 	}
-	return New(bounds, now, format), nil
+	return &Widget{bounds: bounds, now: now, format: format, align: align}, nil
 }
 
 // Bounds returns the rectangle this widget occupies on the display.
@@ -60,29 +107,35 @@ func (w *Widget) Bounds() image.Rectangle {
 	return w.bounds
 }
 
-// Render draws the current time as "HH:MM" into frame using the 7×13
-// basicfont. Text is black on white, centred vertically within the bounds.
+// Render draws the current time into frame using IBM Plex Mono Bold.
 func (w *Widget) Render(frame *image.Paletted) error {
 	text := w.now().Format(w.format)
 
-	face := basicfont.Face7x13
-	advance := font.MeasureString(face, text)
+	advance := font.MeasureString(clockFace, text)
 	textW := advance.Ceil()
-	textH := face.Ascent + face.Descent
+	metrics := clockFace.Metrics()
+	textH := (metrics.Ascent + metrics.Descent).Ceil()
 
-	// Centre the text within the widget's bounds.
 	bw := w.bounds.Dx()
 	bh := w.bounds.Dy()
-	x := w.bounds.Min.X + (bw-textW)/2
-	y := w.bounds.Min.Y + (bh-textH)/2 + face.Ascent
 
-	// Fill the widget background white.
+	var x int
+	switch w.align {
+	case AlignLeft:
+		x = w.bounds.Min.X + 4
+	case AlignRight:
+		x = w.bounds.Max.X - textW - 4
+	default:
+		x = w.bounds.Min.X + (bw-textW)/2
+	}
+	y := w.bounds.Min.Y + (bh-textH)/2 + metrics.Ascent.Ceil()
+
 	draw.Draw(frame, w.bounds, image.NewUniform(color.White), image.Point{}, draw.Src)
 
 	d := &font.Drawer{
 		Dst:  frame,
 		Src:  image.NewUniform(color.Black),
-		Face: face,
+		Face: clockFace,
 		Dot:  fixed.P(x, y),
 	}
 	d.DrawString(text)

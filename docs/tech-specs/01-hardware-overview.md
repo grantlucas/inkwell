@@ -66,6 +66,29 @@ The HAT has a resistor selection for display compatibility:
 - **Bit order:** MSB first
 - **Word size:** 8 bits
 
+## Grayscale Capability Ceilings
+
+The Waveshare 7.5" V2 is a **1-bit** panel at heart. Its driver also
+supports a **4-level grayscale** mode (`Init4Gray`) — white, light
+gray, dark gray, black — driven by a different waveform LUT and a
+2-bit-per-pixel buffer.
+
+There is no native support for more than 4 grays on this panel family.
+
+For comparison, Waveshare's larger format panels (6" HD, 7.8", 9.7",
+10.3", 13.3" — anything driven by the external **IT8951** controller)
+support up to **16 native grays at 4 bits per pixel**. Inkwell does
+not currently target those panels, but the rendering pipeline is
+deliberately structured so that an IT8951 backend can plug in without
+touching the compositor or widgets.
+
+See the [Hardware Grayscale Ceilings guide][grayscale-guide] for the
+end-user implications — which `PaperPalette` entries render as flat
+tones vs. dithered stipple on each panel family, and how to design for
+the cleanest possible output on the hardware you have.
+
+[grayscale-guide]: ../guides/hardware-grayscale.md
+
 ## Important Operational Notes
 
 1. **Partial refresh safety:** After several partial refreshes, a full refresh

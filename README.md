@@ -18,7 +18,32 @@ a `DisplayProfile` with the display's resolution, color depth, and command
 sequences, and the existing driver handles the rest.
 
 Currently targets the **Waveshare 7.5" e-Paper V2** (800x480, black and white)
-on a **Raspberry Pi Zero 2 W**.
+on a **Raspberry Pi Zero 2 W**. The compositor renders into a 12-level
+grayscale canvas and the buffer packer dithers down to the 1-bit panel via
+Bayer-4×4 ordered dithering, so widgets can use soft grays and anti-aliased
+text and have them survive on the device as halftone patterns. See
+[docs/guides/hardware-grayscale.md](docs/guides/hardware-grayscale.md) for the
+rules of thumb on what reads well on the panel.
+
+## Included Widgets
+
+The default registry ships with the following widget types, all configurable
+from `inkwell.yaml`:
+
+<!-- markdownlint-disable MD013 -->
+| Type | Purpose |
+|------|---------|
+| `date` | Formatted date header (Go-format strings, e.g. `"Monday, January 2"`). |
+| `clock` | Current time, right-aligned variant available. |
+| `separator` | Soft horizontal hairline; thickness-configurable. |
+| `weekly-calendar` | 7-day calendar + weather dashboard. Fetches events from one or more iCal feeds and forecasts from an Open-Meteo ensemble (GFS / ECMWF / GEM). |
+<!-- markdownlint-enable MD013 -->
+
+The weekly calendar widget integrates a built-in iCal parser, an HTTP feed
+source with per-feed deduplication, a TTL-based cache, and per-day event /
+weather columns with a temperature polyline and precipitation bars. See
+[docs/demos/weekly-calendar-dashboard.md](docs/demos/weekly-calendar-dashboard.md)
+for the full configuration walkthrough.
 
 ## Architecture
 
@@ -66,18 +91,34 @@ Prerequisites: Go 1.25+
 ```bash
 git clone https://github.com/grantlucas/inkwell.git
 cd inkwell
+cp inkwell.example.yaml inkwell.yaml   # start from the bundled example
 go run ./cmd/inkwell
 ```
 
-Open <http://localhost:8080> to see the live web preview.
+Open <http://localhost:8080> to see the live web preview. The browser view
+defaults to the **device** rendering (post-dither, 1-bit) so what you see
+matches what would land on the panel; toggle to **source** for the smooth
+grayscale design view.
 
-The default configuration (`inkwell.yaml`) uses the preview backend:
+The bundled `inkwell.example.yaml` wires up a date header, clock, separator
+and the weekly calendar + weather widget — a working dashboard out of the
+box. Point its `feeds:` at any iCal URL and set `latitude` / `longitude` for
+your location.
+
+A minimal `inkwell.yaml` for just the preview backend looks like:
 
 ```yaml
 display: waveshare_7in5_v2
 backend: preview
 preview:
   port: 8080
+```
+
+For iterating on the calendar widget without a live feed, `cmd/testcal`
+serves a synthetic iCal endpoint locally:
+
+```bash
+go run ./cmd/testcal   # → http://localhost:9999/test.ics
 ```
 
 ## Supported Hardware
@@ -101,6 +142,9 @@ and register it in the `Profiles` map. No driver code changes are needed.
 | `make build` | Build for the host platform |
 | `make build-pi` | Cross-compile for Raspberry Pi (linux/arm64, no CGO) |
 | `make run` | Build and run locally with the preview backend |
+| `make stop` | Stop a running inkwell process (matches the binary, not the source path) |
+| `make verify` | `go mod verify` |
+| `make vet` | `go vet ./...` |
 | `make ci` | Full CI pipeline: verify, vet, coverage, build-pi |
 | `make fix` | Run `go fix` to modernize code |
 | `make lint` | Lint all markdown files |
@@ -111,12 +155,14 @@ and register it in the `Profiles` map. No driver code changes are needed.
 
 The `docs/` directory contains detailed reference material:
 
-- Hardware overview and GPIO pin mapping
+- Hardware overview, panel grayscale rules, and GPIO pin mapping
 - Raspberry Pi setup guide
-- Rendering pipeline and buffer packing
+- Rendering pipeline and buffer packing (including the Bayer dither pass)
 - SPI command reference
 - Go implementation guide
 - Testing strategy
+- Demo write-ups for the weekly calendar dashboard and the grayscale
+  refresh in [docs/demos/](docs/demos/)
 
 ## Contributing
 

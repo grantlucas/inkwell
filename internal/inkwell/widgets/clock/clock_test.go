@@ -3,10 +3,11 @@ package clock
 import (
 	"bytes"
 	"image"
-	"image/color"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
@@ -32,7 +33,7 @@ func TestWidget_RenderDrawsNonBlankOutput(t *testing.T) {
 
 	frame := image.NewPaletted(
 		image.Rect(0, 0, 200, 50),
-		color.Palette{color.White, color.Black},
+		widget.PaperPalette,
 	)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
@@ -58,7 +59,7 @@ func TestWidget_RenderDrawsNonBlankOutput(t *testing.T) {
 
 func TestWidget_DifferentTimesProduceDifferentOutput(t *testing.T) {
 	bounds := image.Rect(0, 0, 200, 50)
-	palette := color.Palette{color.White, color.Black}
+	palette := widget.PaperPalette
 
 	render := func(hour, minute int) []uint8 {
 		clk := fixedClock(time.Date(2024, 1, 1, hour, minute, 0, 0, time.UTC))
@@ -97,7 +98,7 @@ func TestFactory_DefaultFormat(t *testing.T) {
 		t.Fatalf("Factory: %v", err)
 	}
 
-	frame := image.NewPaletted(bounds, color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(bounds, widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -119,7 +120,7 @@ func TestFactory_CustomFormat(t *testing.T) {
 	fixedTime := time.Date(2024, 1, 1, 14, 30, 0, 0, time.UTC)
 	deps := widget.Deps{Now: fixedClock(fixedTime)}
 	bounds := image.Rect(0, 0, 200, 50)
-	palette := color.Palette{color.White, color.Black}
+	palette := widget.PaperPalette
 
 	w, err := Factory(bounds, map[string]any{"format": "3:04 PM"}, deps)
 	if err != nil {
@@ -181,9 +182,94 @@ func TestFactory_NilNowUsesDefault(t *testing.T) {
 		t.Fatalf("Factory: %v", err)
 	}
 	// Just verify it doesn't panic on render.
-	frame := image.NewPaletted(bounds, color.Palette{color.White, color.Black})
+	frame := image.NewPaletted(bounds, widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
+	}
+}
+
+func TestFactory_AlignRight(t *testing.T) {
+	deps := widget.Deps{Now: fixedClock(time.Date(2024, 1, 1, 14, 30, 0, 0, time.UTC))}
+	bounds := image.Rect(0, 0, 200, 50)
+
+	w, err := Factory(bounds, map[string]any{"align": "right"}, deps)
+	if err != nil {
+		t.Fatalf("Factory: %v", err)
+	}
+
+	frame := image.NewPaletted(bounds, widget.PaperPalette)
+	if err := w.Render(frame); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	rightHalf := 0
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Dx() / 2; x < bounds.Max.X; x++ {
+			if frame.ColorIndexAt(x, y) == 1 {
+				rightHalf++
+			}
+		}
+	}
+	if rightHalf == 0 {
+		t.Error("right-aligned clock has no pixels in right half")
+	}
+}
+
+func TestFactory_AlignLeft(t *testing.T) {
+	deps := widget.Deps{Now: fixedClock(time.Date(2024, 1, 1, 14, 30, 0, 0, time.UTC))}
+	bounds := image.Rect(0, 0, 200, 50)
+
+	w, err := Factory(bounds, map[string]any{"align": "left"}, deps)
+	if err != nil {
+		t.Fatalf("Factory: %v", err)
+	}
+
+	frame := image.NewPaletted(bounds, widget.PaperPalette)
+	if err := w.Render(frame); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	leftHalf := 0
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Dx()/2; x++ {
+			if frame.ColorIndexAt(x, y) == 1 {
+				leftHalf++
+			}
+		}
+	}
+	if leftHalf == 0 {
+		t.Error("left-aligned clock has no pixels in left half")
+	}
+}
+
+func TestFactory_AlignInvalid(t *testing.T) {
+	deps := widget.Deps{}
+	_, err := Factory(image.Rect(0, 0, 100, 50), map[string]any{"align": "middle"}, deps)
+	if err == nil {
+		t.Fatal("expected error for invalid align")
+	}
+}
+
+func TestFactory_AlignCenter(t *testing.T) {
+	deps := widget.Deps{Now: fixedClock(time.Date(2024, 1, 1, 14, 30, 0, 0, time.UTC))}
+	bounds := image.Rect(0, 0, 200, 50)
+
+	w, err := Factory(bounds, map[string]any{"align": "center"}, deps)
+	if err != nil {
+		t.Fatalf("Factory: %v", err)
+	}
+
+	frame := image.NewPaletted(bounds, widget.PaperPalette)
+	if err := w.Render(frame); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+}
+
+func TestFactory_AlignWrongType(t *testing.T) {
+	deps := widget.Deps{}
+	_, err := Factory(image.Rect(0, 0, 100, 50), map[string]any{"align": 42}, deps)
+	if err == nil {
+		t.Fatal("expected error for non-string align")
 	}
 }
 
@@ -194,11 +280,36 @@ func TestWidget_GoldenFile(t *testing.T) {
 
 	frame := image.NewPaletted(
 		image.Rect(0, 0, 200, 50),
-		color.Palette{color.White, color.Black},
+		widget.PaperPalette,
 	)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 
 	testutil.AssertGoldenPNG(t, frame)
+}
+
+// mustLoadClockFace is invoked at package init with valid embedded
+// fonts. Pin its panic branch by swapping in bad TTF data and
+// re-invoking it directly; the test only succeeds if the panic
+// message identifies the clock package.
+func TestMustLoadClockFace_PanicsOnFontError(t *testing.T) {
+	restore := fonts.SwapDataForTest([]byte("bad"), []byte("bad"))
+	defer restore()
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic from mustLoadClockFace")
+		}
+		msg, ok := r.(string)
+		if !ok {
+			t.Fatalf("recovered non-string panic: %T %v", r, r)
+		}
+		if !strings.Contains(msg, "clock: load font") {
+			t.Errorf("panic message = %q, want it to mention 'clock: load font'", msg)
+		}
+	}()
+
+	_ = mustLoadClockFace()
 }

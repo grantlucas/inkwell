@@ -262,9 +262,24 @@ dashboard:
 
 ## Drawing Basics
 
-The frame is a Go `image.Paletted` with a two-color palette (white at
-index 0, black at index 1). You can use any standard Go image
-operations.
+The frame is a Go `image.Paletted` backed by the 12-step
+[`PaperPalette`][palette]. Index 0 is `PaperWhite` and index 1 is
+`PaperBlack` — so legacy widget code that wrote `1` for black still
+works — and the remaining indices are a ramp of intermediate grays
+named `PaperGray05` through `PaperGray90`. The compositor always
+produces this palette regardless of the target panel; the packer
+collapses it down to what the device supports (Bayer-4×4 dithered
+1-bit on the Waveshare 7.5" V2 by default).
+
+You can use any standard Go image operations.
+
+[palette]: ../../internal/inkwell/widget/palette.go
+
+> **Designing for the cleanest output?** Different Waveshare panels
+> have different native grayscale ceilings. See the
+> [Hardware Grayscale Ceilings guide](./hardware-grayscale.md) for
+> which palette entries render as flat tones vs. dithered stipple on
+> your panel.
 
 ### Filled rectangles
 
