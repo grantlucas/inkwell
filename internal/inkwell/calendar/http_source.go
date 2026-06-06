@@ -34,30 +34,8 @@ func (s *HTTPSource) Events(start, end time.Time) ([]Event, error) {
 	var all []Event
 
 	for _, url := range s.urls {
-		resp, err := s.client.Get(url)
-		if err != nil {
-			return nil, fmt.Errorf("fetch %q: %w", url, err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("fetch %q: status %d", url, resp.StatusCode)
-		}
-
-		events, err := ical.Parse(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("parse %q: %w", url, err)
-		}
-
-		for _, e := range events {
-			if seen[e.UID] {
-				continue
-			}
-			// Filter: event overlaps [start, end) if event.Start < end && event.End > start.
-			if e.Start.Before(end) && e.End.After(start) {
-				seen[e.UID] = true
-				all = append(all, e)
-			}
+		if err := s.fetchFeed(url, start, end, seen, &all); err != nil {
+			return nil, err
 		}
 	}
 
@@ -66,4 +44,41 @@ func (s *HTTPSource) Events(start, end time.Time) ([]Event, error) {
 	})
 
 	return all, nil
+}
+
+// fetchFeed handles a single URL's request lifecycle so that resp.Body
+// is closed at the end of each iteration rather than lingering until
+// Events returns. Close errors are surfaced when no other error
+// preceded them.
+func (s *HTTPSource) fetchFeed(url string, start, end time.Time, seen map[string]bool, all *[]Event) (retErr error) {
+	resp, err := s.client.Get(url)
+	if err != nil {
+		return fmt.Errorf("fetch %q: %w", url, err)
+	}
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil && retErr == nil {
+			retErr = fmt.Errorf("close %q: %w", url, cerr)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("fetch %q: status %d", url, resp.StatusCode)
+	}
+
+	events, err := ical.Parse(resp.Body)
+	if err != nil {
+		return fmt.Errorf("parse %q: %w", url, err)
+	}
+
+	for _, e := range events {
+		if seen[e.UID] {
+			continue
+		}
+		// Filter: event overlaps [start, end) if event.Start < end && event.End > start.
+		if e.Start.Before(end) && e.End.After(start) {
+			seen[e.UID] = true
+			*all = append(*all, e)
+		}
+	}
+	return nil
 }
