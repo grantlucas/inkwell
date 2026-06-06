@@ -128,7 +128,13 @@ Bits 1-0 = pixel 3 (rightmost)
 Buffer size: `800 * 480 / 4 = 96,000 bytes`
 
 This buffer is then split into two 48,000-byte planes for commands 0x10 and
-0x13.
+0x13 — one plane per bit of the 2-bit pixel code. In Inkwell's encoding
+(white=00, light=01, dark=10, black=11), the low bit of each pixel goes to
+0x10 (Old) and the high bit to 0x13 (New); the controller recombines them
+during refresh to reproduce all four shades. See `splitGray4Planes` in
+[`internal/inkwell/buffer.go`][buffer-go].
+
+[buffer-go]: ../../internal/inkwell/buffer.go
 
 ## Timing Constraints
 

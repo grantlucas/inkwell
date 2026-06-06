@@ -300,6 +300,83 @@ func TestPackGray4_BufferLength(t *testing.T) {
 	}
 }
 
+// --- splitGray4Planes tests ---
+
+// TestSplitGray4Planes walks the upstream Waveshare display_4Gray plane
+// derivation across all four shades using Inkwell's encoding (white=00,
+// light=01, dark=10, black=11). In this encoding the plane bits fall out
+// trivially: plane A (0x10) carries the low bit of each pixel; plane B
+// (0x13) carries the high bit. Locking each shade independently — plus
+// the mixed and multi-byte cases — guards against a "levels swapped"
+// regression that buffer-level tests can't catch (packGray4 is a host-
+// side function and never runs on device).
+func TestSplitGray4Planes(t *testing.T) {
+	cases := []struct {
+		label string
+		in    []byte
+		wantA []byte
+		wantB []byte
+	}{
+		{
+			label: "all white (00) → A=0 B=0",
+			in:    []byte{0x00, 0x00},
+			wantA: []byte{0x00},
+			wantB: []byte{0x00},
+		},
+		{
+			label: "all black (11) → A=1 B=1",
+			in:    []byte{0xFF, 0xFF},
+			wantA: []byte{0xFF},
+			wantB: []byte{0xFF},
+		},
+		{
+			label: "all light gray (01) → A=1 B=0",
+			in:    []byte{0x55, 0x55},
+			wantA: []byte{0xFF},
+			wantB: []byte{0x00},
+		},
+		{
+			label: "all dark gray (10) → A=0 B=1",
+			in:    []byte{0xAA, 0xAA},
+			wantA: []byte{0x00},
+			wantB: []byte{0xFF},
+		},
+		{
+			label: "mixed w,l,d,b, b,d,l,w",
+			// byte0 = 0b00_01_10_11 = 0x1B
+			// byte1 = 0b11_10_01_00 = 0xE4
+			in:    []byte{0x1B, 0xE4},
+			wantA: []byte{0x5A}, // 0,1,0,1, 1,0,1,0
+			wantB: []byte{0x3C}, // 0,0,1,1, 1,1,0,0
+		},
+		{
+			label: "two output bytes: mixed then light+dark",
+			in:    []byte{0x1B, 0xE4, 0x55, 0xAA},
+			wantA: []byte{0x5A, 0xF0},
+			wantB: []byte{0x3C, 0x0F},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			gotA, gotB := splitGray4Planes(tc.in)
+			if len(gotA) != len(tc.wantA) || len(gotB) != len(tc.wantB) {
+				t.Fatalf("plane lengths = (%d, %d), want (%d, %d)",
+					len(gotA), len(gotB), len(tc.wantA), len(tc.wantB))
+			}
+			for i := range tc.wantA {
+				if gotA[i] != tc.wantA[i] {
+					t.Errorf("planeA[%d] = 0x%02X (0b%08b), want 0x%02X (0b%08b)",
+						i, gotA[i], gotA[i], tc.wantA[i], tc.wantA[i])
+				}
+				if gotB[i] != tc.wantB[i] {
+					t.Errorf("planeB[%d] = 0x%02X (0b%08b), want 0x%02X (0b%08b)",
+						i, gotB[i], gotB[i], tc.wantB[i], tc.wantB[i])
+				}
+			}
+		})
+	}
+}
+
 // --- UnpackBuffer tests ---
 
 func TestUnpackBuffer_RoundTrip(t *testing.T) {
