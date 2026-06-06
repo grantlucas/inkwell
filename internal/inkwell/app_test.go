@@ -850,6 +850,129 @@ func TestRun_ShutdownTimeoutFallsBackToClose(t *testing.T) {
 	}
 }
 
+func TestNewApp_ColorModeBW_LeavesProfileBW(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	mock := &MockHardware{}
+	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if app.profile.Color != BW {
+		t.Errorf("profile.Color = %v, want BW", app.profile.Color)
+	}
+	// The global Profiles entry must not be mutated.
+	if Profiles["waveshare_7in5_v2"].Color != BW {
+		t.Errorf("global profile mutated: Color = %v", Profiles["waveshare_7in5_v2"].Color)
+	}
+}
+
+func TestNewApp_ColorModeGray4_OverridesProfile(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+color_mode: gray4
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	mock := &MockHardware{}
+	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if app.profile.Color != Gray4 {
+		t.Errorf("profile.Color = %v, want Gray4", app.profile.Color)
+	}
+	// EPD and Compositor must observe the overridden profile.
+	if app.epd.profile.Color != Gray4 {
+		t.Errorf("epd profile.Color = %v, want Gray4", app.epd.profile.Color)
+	}
+	if app.comp.profile.Color != Gray4 {
+		t.Errorf("compositor profile.Color = %v, want Gray4", app.comp.profile.Color)
+	}
+	// The global Profiles entry must remain BW.
+	if Profiles["waveshare_7in5_v2"].Color != BW {
+		t.Errorf("global profile mutated: Color = %v", Profiles["waveshare_7in5_v2"].Color)
+	}
+}
+
+func TestNewApp_ColorModeGray4_UnsupportedByProfile(t *testing.T) {
+	bwOnly := DisplayProfile{
+		Name:         "bw_only_test",
+		Width:        16,
+		Height:       16,
+		Color:        BW,
+		Capabilities: Capabilities{Grayscale: false},
+		InitFull:     []Command{{0x00, nil}},
+	}
+	Profiles["bw_only_test"] = &bwOnly
+	t.Cleanup(func() { delete(Profiles, "bw_only_test") })
+
+	cfg := &Config{Display: "bw_only_test", Backend: "preview", ColorMode: "gray4"}
+	mock := &MockHardware{}
+	_, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
+	if err == nil {
+		t.Fatal("expected error for gray4 on non-grayscale profile")
+	}
+	if !strings.Contains(err.Error(), "grayscale") {
+		t.Errorf("error = %q, want mention of grayscale", err.Error())
+	}
+}
+
+func TestApplyColorMode(t *testing.T) {
+	base := &DisplayProfile{
+		Name:         "test_base",
+		Color:        BW,
+		Capabilities: Capabilities{Grayscale: true},
+	}
+
+	cases := []struct {
+		label     string
+		mode      string
+		wantColor ColorDepth
+		wantSame  bool // expect returned pointer == base (no copy)
+		wantErr   string
+	}{
+		{label: "empty defaults to bw", mode: "", wantColor: BW, wantSame: true},
+		{label: "explicit bw", mode: "bw", wantColor: BW, wantSame: true},
+		{label: "gray4 copies and overrides", mode: "gray4", wantColor: Gray4},
+		{label: "rejects unknown", mode: "color7", wantErr: "invalid color_mode"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			got, err := applyColorMode(base, tc.mode)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error mentioning %q, got nil", tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %q, want mention of %q", err.Error(), tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("applyColorMode: %v", err)
+			}
+			if got.Color != tc.wantColor {
+				t.Errorf("Color = %v, want %v", got.Color, tc.wantColor)
+			}
+			if tc.wantSame && got != base {
+				t.Errorf("expected same pointer for mode %q, got a copy", tc.mode)
+			}
+			if !tc.wantSame && got == base {
+				t.Errorf("expected a copy for mode %q, got same pointer", tc.mode)
+			}
+		})
+	}
+}
+
 func TestNewApp_DefaultBackendImage(t *testing.T) {
 	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2

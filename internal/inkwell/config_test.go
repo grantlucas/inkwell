@@ -217,4 +217,58 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Image.OutputDir != "output" {
 		t.Errorf("Image.OutputDir = %q, want output", cfg.Image.OutputDir)
 	}
+	if cfg.ColorMode != "bw" {
+		t.Errorf("ColorMode = %q, want bw", cfg.ColorMode)
+	}
+}
+
+func TestLoadConfig_ColorMode(t *testing.T) {
+	cases := []struct {
+		label   string
+		yaml    string
+		want    string
+		wantErr string
+	}{
+		{
+			label: "default omitted",
+			yaml:  "display: waveshare_7in5_v2",
+			want:  "bw",
+		},
+		{
+			label: "explicit bw",
+			yaml:  "display: waveshare_7in5_v2\ncolor_mode: bw",
+			want:  "bw",
+		},
+		{
+			label: "explicit gray4",
+			yaml:  "display: waveshare_7in5_v2\ncolor_mode: gray4",
+			want:  "gray4",
+		},
+		{
+			label:   "rejects unknown",
+			yaml:    "display: waveshare_7in5_v2\ncolor_mode: color7",
+			wantErr: "color_mode",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			cfg, err := LoadConfig(strings.NewReader(tc.yaml))
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error mentioning %q, got nil", tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %q, want mention of %q", err.Error(), tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("LoadConfig: %v", err)
+			}
+			if cfg.ColorMode != tc.want {
+				t.Errorf("ColorMode = %q, want %q", cfg.ColorMode, tc.want)
+			}
+		})
+	}
 }

@@ -210,9 +210,10 @@ See [`epd.go`][epd]. Notable behaviour:
   for the design rules.
 - **`packGray4`** (Init4Gray path): four luminance buckets
   (`white`/`light gray`/`dark gray`/`black`) packed 4 pixels per byte.
-  Reserved for the upcoming Init4Gray device wiring (`color_mode: gray4`
-  in YAML) — beads issues `inkwell-w7g`, `inkwell-usv`, `inkwell-101`,
-  `inkwell-0p7`, `inkwell-0yd` track that path.
+  Selected when `color_mode: gray4` is set in `inkwell.yaml`; the
+  Init4Gray device wiring (plane-split write, `Init4Gray` `InitMode`
+  selection at startup, WebPreview unpacker) is tracked under beads
+  issues `inkwell-usv`, `inkwell-101`, `inkwell-0p7`, `inkwell-0yd`.
 - **`Color7`** is reserved in the `ColorDepth` enum for future panels;
   there is no packer for it yet.
 
@@ -273,10 +274,12 @@ and the active beads workspace track them.
   wiring is the remaining work. Until it lands, the `spi` backend
   errors at startup on real hardware. Inkwell runs end-to-end with
   the `preview` and `image` backends today.
-- **Gray4 device path.** `packGray4` exists and is tested, but the
+- **Gray4 device path.** `packGray4` is wired (selectable via
+  `color_mode: gray4`) and produces the right buffer size, but the
   `EPD.Display` plane-split protocol that Init4Gray needs (separate
-  bit-plane writes to `0x10` and `0x13`) is not yet implemented.
-  Tracked under beads `inkwell-usv` / `inkwell-101` / `inkwell-w7g`.
+  bit-plane writes to `0x10` and `0x13`) and the matching
+  `Init4Gray` `InitMode` selection in `App.Run` are not yet
+  implemented. Tracked under beads `inkwell-usv` / `inkwell-101`.
 - **Partial refresh in the render loop.** `EPD.DisplayPartial` is
   implemented but the render loop in `App.Run` only calls
   `EPD.Display` (full refresh). Switching to partial selectively is a

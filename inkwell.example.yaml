@@ -1,5 +1,9 @@
 display: waveshare_7in5_v2
 backend: preview
+# color_mode: bw  # default; set to "gray4" for 4-level grayscale.
+#                 # Gray4 trade-offs: slower refresh, no partial refresh,
+#                 # larger framebuffer. Only opt in once you've tested it
+#                 # on real hardware.
 preview:
   port: 8080
 

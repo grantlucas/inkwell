@@ -48,6 +48,7 @@ type WidgetConfig struct {
 type Config struct {
 	Display   string          `yaml:"display"`
 	Backend   string          `yaml:"backend"`
+	ColorMode string          `yaml:"color_mode,omitempty"`
 	Preview   PreviewConfig   `yaml:"preview,omitempty"`
 	Image     ImageConfig     `yaml:"image,omitempty"`
 	Dashboard DashboardConfig `yaml:"dashboard,omitempty"`
@@ -66,10 +67,11 @@ type ImageConfig struct {
 // DefaultConfig returns a Config with all defaults applied.
 func DefaultConfig() *Config {
 	return &Config{
-		Display: "waveshare_7in5_v2",
-		Backend: "preview",
-		Preview: PreviewConfig{Port: 8080},
-		Image:   ImageConfig{OutputDir: "output"},
+		Display:   "waveshare_7in5_v2",
+		Backend:   "preview",
+		ColorMode: "bw",
+		Preview:   PreviewConfig{Port: 8080},
+		Image:     ImageConfig{OutputDir: "output"},
 	}
 }
 
@@ -91,6 +93,13 @@ func LoadConfig(r io.Reader) (*Config, error) {
 		// valid
 	default:
 		return nil, fmt.Errorf("invalid backend: %q (must be preview, image, or spi)", cfg.Backend)
+	}
+
+	switch cfg.ColorMode {
+	case "bw", "gray4":
+		// valid
+	default:
+		return nil, fmt.Errorf("invalid color_mode: %q (must be bw or gray4)", cfg.ColorMode)
 	}
 
 	if cfg.Dashboard.RotateInterval < 0 {
