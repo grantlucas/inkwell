@@ -104,3 +104,10 @@ the cleanest possible output on the hardware you have.
 
 - [7.5inch e-Paper HAT Manual](https://www.waveshare.com/wiki/7.5inch_e-Paper_HAT_Manual)
 - [E-Paper Driver HAT Wiki](https://www.waveshare.com/wiki/E-Paper_Driver_HAT)
+
+## See Also
+
+- [Inkwell install guide](../guides/installation.md) — cross-compile,
+  deploy, configure, run as a service on the Pi.
+- [Hardware grayscale ceilings](../guides/hardware-grayscale.md) — which
+  `PaperPalette` entries render as flat tone vs. stipple on this panel.

@@ -121,6 +121,13 @@ serves a synthetic iCal endpoint locally:
 go run ./cmd/testcal   # → http://localhost:9999/test.ics
 ```
 
+### Installing on a Raspberry Pi
+
+See [docs/guides/installation.md](docs/guides/installation.md) for the
+end-to-end workflow: cross-compile from your workstation, deploy the
+binary to the Pi via `scp`, configure `inkwell.yaml`, and run as a
+systemd service.
+
 ## Supported Hardware
 
 <!-- markdownlint-disable MD013 -->
@@ -155,14 +162,18 @@ and register it in the `Profiles` map. No driver code changes are needed.
 
 The `docs/` directory contains detailed reference material:
 
-- Hardware overview, panel grayscale rules, and GPIO pin mapping
-- Raspberry Pi setup guide
-- Rendering pipeline and buffer packing (including the Bayer dither pass)
-- SPI command reference
-- Go implementation guide
-- Testing strategy
-- Demo write-ups for the weekly calendar dashboard and the grayscale
-  refresh in [docs/demos/](docs/demos/)
+- **Guides** ([docs/guides/](docs/guides/)) — user-facing how-tos:
+  - [Installation on a Raspberry Pi](docs/guides/installation.md)
+  - [Building dashboards](docs/guides/building-dashboards.md)
+  - [Hardware grayscale ceilings](docs/guides/hardware-grayscale.md)
+- **Tech specs** ([docs/tech-specs/](docs/tech-specs/)) — hardware,
+  protocol, and architecture references:
+  - Hardware overview, GPIO pin mapping
+  - SPI command reference
+  - Go implementation architecture
+  - Testing strategy
+- **Demos** ([docs/demos/](docs/demos/)) — feature-level walkthroughs
+  (e.g. the weekly calendar dashboard and the grayscale refresh).
 
 ## Contributing
 

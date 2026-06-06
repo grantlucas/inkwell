@@ -1,19 +1,35 @@
 # Testing Strategy
 
-The entire display pipeline reduces to: **render an image -> pack it into
-a byte buffer -> send those bytes over SPI with the right command sequence.**
+The display pipeline reduces to: **render an image → pack it into a
+byte buffer → send those bytes over SPI with the right command
+sequence.** All three steps are 100% testable without hardware, and
+the project enforces 100% statement coverage on `internal/...` in CI
+via `make coverage`. The hardware integration step then becomes a
+*deployment* concern, not a development concern.
 
-The buffer size and command sequence are determined by the configured
-`DisplayProfile` (e.g. 48,000 bytes for the 7.5" V2 at 800x480 BW). If we can
-verify the bytes are correct on any machine, hardware integration becomes a
-deployment concern, not a development concern.
+See [`internal/inkwell/`][pkg] for the live tests. Most production
+packages include tests, though coverage doesn't follow a strict
+same-basename `<file>_test.go` convention — package-level files such
+as `hardware.go`, `spi_backend_hardware.go`, `widget/widget.go`,
+`calendar/event.go`, `calendar/ical/event.go`, and `weather/weather.go`
+are exercised through their callers' tests rather than dedicated
+files. The 100% statement-coverage gate enforced by `make coverage`
+is the authoritative bar.
+
+Golden-file coverage is opt-in per widget: `widgets/clock/` is the
+only widget that currently keeps a committed `testdata/` golden PNG
+(`TestWidget_GoldenFile.png`); `widgets/date/`, `widgets/separator/`,
+`widgets/weatherview/`, and `widgets/weekly/` rely on assertion-style
+tests against rendered pixels instead. Walk
+[`internal/inkwell/`][pkg] for the actual layout when in doubt.
+
+[pkg]: ../../internal/inkwell/
 
 ## Architecture for Testability
 
-### The Two-Interface Pattern
+### The Hardware Interface
 
 ```go
-// Hardware — low-level transport, swappable per environment
 type Hardware interface {
     SendCommand(cmd byte) error
     SendData(data []byte) error
@@ -21,17 +37,15 @@ type Hardware interface {
     Reset() error
     Close() error
 }
-
-// Display — high-level operations, built on Hardware
-type Display interface {
-    Init(mode InitMode) error
-    Clear() error
-    Display(buffer []byte) error
-    DisplayPartial(buffer []byte, x, y, w, h int) error
-    Sleep() error
-    Close() error
-}
 ```
+
+The high-level driver ([`EPD`][epd]) sits on top of this interface and
+has no awareness of SPI specifics, so swapping in a recording mock for
+tests is trivial. See [`hardware.go`][hardware] for the full interface
+(including the optional `FrameSink` capability for preview backends).
+
+[hardware]: ../../internal/inkwell/hardware.go
+[epd]: ../../internal/inkwell/epd.go
 
 ### Four Backend Implementations
 
@@ -40,371 +54,241 @@ type Display interface {
 │              Your Application Code              │
 │         (widgets, compositor, scheduler)         │
 ├─────────────────────────────────────────────────┤
-│               Display Interface                  │
+│               Hardware Interface                 │
 ├────────────┬──────────┬──────────┬──────────────┤
-│  spiHW     │  mockHW  │  imageHW │  webPreview  │
-│ (real Pi)  │ (tests)  │ (PNG)    │ (browser)    │
+│  spiHW     │  MockHW  │  ImageHW │  WebPreview  │
+│ (real Pi)  │ (tests)  │ (PNG)    │ (HTTP + SSE) │
 └────────────┴──────────┴──────────┴──────────────┘
 ```
 
-1. **`spiHardware`** — Production on Pi. Uses periph.io SPI + GPIO.
-2. **`mockHardware`** — Unit tests. Records every command/data call. Assert
-   exact sequences.
-3. **`imageBackend`** — Writes PNG to disk on each `Display()` call. For
-   manual visual inspection during development.
-4. **`webPreview`** — Serves live preview in browser. Fastest feedback loop.
+1. **`spiHardware`** ([`spi_hardware.go`][spi]) — production on Pi.
+   Build-tagged `//go:build hardware` so it never compiles into host
+   builds. Tests use `WithSPIConn(...)` and `WithGPIOPins(...)`
+   options to inject periph.io test doubles.
+2. **`MockHardware`** ([`mock_hardware.go`][mock]) — appends every
+   call (`command` / `data` / `busy` / `reset` / `close`) to a `Calls`
+   slice. Exposes `Commands()` / `DataCalls()` helpers for quick
+   assertions, and a `BusyCount` field that flips `ReadBusy` from
+   `false → true` after N reads to simulate the real busy-wait loop.
+3. **`ImageBackend`** ([`image_backend.go`][img]) — writes a sequenced
+   PNG (`frame_NNN.png`) into the configured `output_dir` on each
+   refresh cycle.
+4. **`WebPreview`** ([`web_preview.go`][web]) — serves the live frame
+   over HTTP with an SSE stream for browser auto-refresh.
+
+[spi]: ../../internal/inkwell/spi_hardware.go
+[mock]: ../../internal/inkwell/mock_hardware.go
+[img]: ../../internal/inkwell/image_backend.go
+[web]: ../../internal/inkwell/web_preview.go
 
 ## 1. Golden File Testing (Primary Verification)
 
-Compare rendered buffers against known-good reference files.
+The shared helper [`testutil.AssertGoldenPNG`][golden-go] compares a
+rendered `image.Paletted` against a committed `testdata/<name>.png`.
+Tests run with `-update` regenerate the golden file in place:
+
+```bash
+# Regenerate golden files after intentional changes
+go test ./internal/inkwell/widgets/... -update
+```
+
+Then review the diff visually (`git diff testdata/`) before committing.
+
+[golden-go]: ../../internal/inkwell/testutil/golden.go
+
+### Where Golden Files Live
+
+Widgets that use the helper keep their golden PNGs alongside the
+tests:
+
+```text
+internal/inkwell/widgets/
+  clock/testdata/TestWidget_GoldenFile.png    # currently the only widget golden
+```
+
+Other widgets (`date/`, `separator/`, `weatherview/`, `weekly/`)
+currently use assertion-style tests that inspect rendered pixels
+directly, rather than full-image goldens. The helper itself is
+exercised in [`testutil/golden_test.go`][golden-test] (which sets up
+its own temporary fixture directories), so the helper stays covered
+even when widgets don't use it.
+
+[golden-test]: ../../internal/inkwell/testutil/golden_test.go
 
 ### Raw Buffer Comparison
 
-The authoritative test: compare the exact 48,000-byte buffer.
+When you need to assert exactly what bytes a profile would push to the
+panel — distinct from what the source frame looked like — call
+`PackImage(profile, frame)` and compare the returned byte slice
+directly. See [`buffer_test.go`][buffer-test] for examples of asserting
+specific bytes / dither patterns against fixed inputs.
 
-```go
-var update = flag.Bool("update", false, "update golden files")
-
-func TestClockWidget(t *testing.T) {
-    profile := &inkwell.Waveshare7in5V2 // or any profile
-    frame := image.NewPaletted(
-        image.Rect(0, 0, profile.Width, profile.Height),
-        color.Palette{color.White, color.Black},
-    )
-
-    widget := NewClockWidget(fixedTime("14:30:00"))
-    widget.Render(frame)
-
-    buf := PackImage(profile, frame)
-    golden := filepath.Join("testdata", t.Name()+".bin")
-
-    if *update {
-        os.WriteFile(golden, buf, 0644)
-        return
-    }
-
-    expected, _ := os.ReadFile(golden)
-    if !bytes.Equal(buf, expected) {
-        t.Errorf("buffer mismatch — run with -update to regenerate")
-    }
-}
-```
-
-### Visual Golden Files (For Code Review)
-
-Store PNGs alongside the `.bin` files so reviewers can see what changed:
-
-```go
-func saveGoldenPNG(t *testing.T, buf []byte) {
-    img := UnpackBuffer(buf) // 48k bytes -> image.Paletted
-    golden := filepath.Join("testdata", t.Name()+".png")
-    f, _ := os.Create(golden)
-    defer f.Close()
-    png.Encode(f, img)
-}
-```
-
-### File Structure
-
-```text
-testdata/
-├── TestClockWidget/14_30.bin       # Raw buffer (authoritative)
-├── TestClockWidget/14_30.png       # Visual reference (for humans)
-├── TestCalendarWidget/3_events.bin
-├── TestCalendarWidget/3_events.png
-├── TestFullDashboard/normal.bin
-└── TestFullDashboard/normal.png
-```
-
-Update workflow:
-
-```bash
-# Regenerate all golden files after intentional changes
-go test ./... -update
-
-# Review the PNGs in a diff tool or git diff
-git diff --stat testdata/
-```
+[buffer-test]: ../../internal/inkwell/buffer_test.go
 
 ## 2. Command Sequence Testing
 
-Verify the exact SPI commands sent during init, display, and sleep.
+`MockHardware` records every SPI/GPIO call, so tests can assert exact
+init / display / sleep sequences without hardware. See
+[`epd_test.go`][epd-test] for the canonical pattern: drive `EPD.Init`
+or `EPD.Display`, then assert on `mock.Calls` (full call log) or
+`mock.Commands()` (just the command bytes).
 
 ```go
-func TestInitSequence(t *testing.T) {
-    mock := &MockHardware{}
-    epd := NewEPD(mock, &inkwell.Waveshare7in5V2)
-    epd.Init(InitFull)
+mock := &inkwell.MockHardware{}
+epd := inkwell.NewEPD(mock, &inkwell.Waveshare7in5V2)
+_ = epd.Init(inkwell.InitFull)
 
-    expected := []Call{
-        {Type: "reset"},
-        {Type: "cmd", Data: []byte{0x06}},
-        {Type: "data", Data: []byte{0x17, 0x17, 0x28, 0x17}},
-        {Type: "cmd", Data: []byte{0x01}},
-        {Type: "data", Data: []byte{0x07, 0x07, 0x28, 0x17}},
-        {Type: "cmd", Data: []byte{0x04}},
-        {Type: "busy"},
-        // ... etc
-    }
-
-    if diff := cmp.Diff(expected, mock.Calls); diff != "" {
-        t.Errorf("init sequence mismatch:\n%s", diff)
-    }
+want := []byte{
+    0x06, 0x01, 0x04, 0x00, 0x61, 0x15, 0x50, 0x60,
+}
+if got := mock.Commands(); !bytes.Equal(got, want) {
+    t.Errorf("InitFull commands: got %x want %x", got, want)
 }
 ```
 
-This catches regressions in the command sequences without needing hardware.
+[epd-test]: ../../internal/inkwell/epd_test.go
 
-### periph.io's Built-in Test Helpers
+## 3. Widget Testing
 
-periph.io provides `spitest.Record` and `spitest.Playback`:
+Each widget package is self-contained under
+[`internal/inkwell/widgets/`][widgets] and ships with unit tests
+(some also with golden PNGs — see [Where Golden Files Live](#where-golden-files-live)
+above):
 
-```go
-import "periph.io/x/conn/v3/spi/spitest"
+- Widgets take their data dependencies via `widget.Deps` (and small
+  inline accessors like a `now func() time.Time`). Tests substitute a
+  fixed clock or a stub `CalendarSource` / `weather.Source`.
+- The widget registry ([`widget/registry.go`][registry]) lets tests
+  build a custom factory map and pass it via `inkwell.WithRegistry(...)`
+  when constructing the `App`.
+- Widgets that use the golden-PNG helper keep them under their own
+  `testdata/` directory and regenerate via `-update`; widgets that
+  assert against rendered pixels directly skip the helper entirely.
 
-// Record a real SPI session on the Pi, save to file
-// Then replay in tests on any machine
-playback := &spitest.Playback{
-    Playback: conntest.Playback{
-        Ops: []conntest.IO{
-            {W: []byte{0x06}, R: nil},
-            {W: []byte{0x17, 0x17, 0x28, 0x17}, R: nil},
-        },
-    },
-}
-```
+[widgets]: ../../internal/inkwell/widgets/
+[registry]: ../../internal/inkwell/widget/registry.go
 
-## 3. Widget/Component Testing
+## 4. Web Preview Server (Dev Feedback Loop)
 
-Each widget is tested in isolation with its own golden files.
+The web preview is the fastest iteration loop and is the default
+backend in [`inkwell.example.yaml`][example]. See
+[`web_preview.go`][web] and [`web_preview_test.go`][web-test] /
+[`web_preview_sse_test.go`][web-sse-test] for the implementation and
+its tests.
 
-```go
-func TestCalendarWidget(t *testing.T) {
-    tests := []struct {
-        name   string
-        events []CalendarEvent
-    }{
-        {"empty", nil},
-        {"single_event", []CalendarEvent{{Title: "Standup", Time: "09:00"}}},
-        {"three_events", threeEvents()},
-        {"overflow", tenEvents()}, // More than fit in the widget
-    }
-
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            widget := NewCalendarWidget(tt.events)
-            bounds := widget.Bounds()
-
-            // Create an image sized to just this widget
-            frame := image.NewPaletted(bounds, bwPalette)
-            widget.Render(frame)
-
-            assertGolden(t, frame)
-        })
-    }
-}
-```
-
-Widgets never need to know about SPI. They just draw pixels.
-
-## 4. Web Preview Server (Development Feedback Loop)
-
-The fastest way to iterate: change code, see the result in your browser
-instantly.
-
-### How It Works
+[example]: ../../inkwell.example.yaml
+[web-test]: ../../internal/inkwell/web_preview_test.go
+[web-sse-test]: ../../internal/inkwell/web_preview_sse_test.go
 
 ```text
-┌──────────────┐     SSE: "new frame"     ┌───────────────┐
-│  Go process  │ ────────────────────────► │    Browser     │
-│              │                           │                │
-│  /frame.png  │ ◄──── GET /frame.png ──── │  <img> reload  │
+┌──────────────┐     SSE: "refresh"        ┌───────────────┐
+│  Go process  │ ────────────────────────► │    Browser    │
+│              │                           │               │
+│  /frame.png  │ ◄──── GET /frame.png ──── │ <img> reload  │
 └──────────────┘                           └───────────────┘
 ```
 
 ### Endpoints
 
-- **`GET /`** — HTML page with `<img>` and SSE listener JavaScript
-- **`GET /frame.png`** — Current display buffer rendered as PNG
-- **`GET /events`** — SSE stream, pushes `"refresh"` when frame updates
-- **`GET /frame.png?scale=3`** — Scaled up for high-DPI screens
+<!-- markdownlint-disable MD013 -->
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /` | HTML page with `<img>`, view toggle, and SSE listener |
+| `GET /frame.png` | Current frame as PNG (device buffer by default) |
+| `GET /frame.png?scale=N` | 1–10× nearest-neighbor upscale |
+| `GET /frame.png?source=1` | Pre-pack grayscale source frame (design intent) |
+| `GET /events` | SSE stream — pushes `"refresh"` on every frame update |
+<!-- markdownlint-enable MD013 -->
 
-### SSE Auto-Refresh
+### Device vs. source view
 
-The server-sent events pattern is simpler than WebSocket for one-way
-notifications:
+`WebPreview` implements `FrameSink` so [`app.go`][app] can hand it the
+composited grayscale frame before `PackImage` runs. On every refresh
+the backend stores both:
 
-```go
-func (s *PreviewServer) handleEvents(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "text/event-stream")
-    w.Header().Set("Cache-Control", "no-cache")
-    flusher := w.(http.Flusher)
+- **`current`** — the *post-dither* device buffer unpacked back to an
+  `image.Paletted`. This is what `/frame.png` returns by default and
+  matches what the panel would physically show.
+- **`source`** — the high-fidelity grayscale paletted frame, served
+  when the client requests `?source=1` (e.g. by toggling the radio in
+  the browser UI).
 
-    ch := s.Subscribe()
-    defer s.Unsubscribe(ch)
+This is what keeps the preview honest: design decisions that only read
+in the source view will be visible to reviewers as a real regression
+on the device view.
 
-    for {
-        select {
-        case <-ch:
-            fmt.Fprintf(w, "data: refresh\n\n")
-            flusher.Flush()
-        case <-r.Context().Done():
-            return
-        }
-    }
-}
-```
+[app]: ../../internal/inkwell/app.go
 
-Client-side JavaScript (~10 lines):
+## 5. Real-Hardware Integration
 
-```javascript
-const source = new EventSource('/events');
-const img = document.getElementById('display');
-source.onmessage = () => {
-    img.src = '/frame.png?t=' + Date.now();
-};
-```
-
-### Simulating Partial Refresh
-
-The web preview can visually indicate partial refresh regions:
-
-- Overlay a highlighted rectangle (colored border, semi-transparent tint) on
-  the affected region
-- Fade it after a short delay
-- This makes it immediately obvious which region was updated vs. full refresh
-
-### Build Tag Separation
-
-```go
-//go:build !hardware
-
-// preview.go — web preview backend, included in dev builds
-```
-
-```go
-//go:build hardware
-
-// spi.go — real hardware backend, only compiled for Pi
-```
-
-## 5. Integration Testing on the Pi
-
-For the rare cases where you need real hardware:
-
-```go
-//go:build hardware
-
-func TestRealDisplay(t *testing.T) {
-    if testing.Short() {
-        t.Skip("skipping hardware test in short mode")
-    }
-
-    epd := NewEPD(NewSPIHardware(), &inkwell.Waveshare7in5V2)
-    defer epd.Close()
-
-    epd.Init(InitFull)
-    epd.Clear()
-
-    // Display a test pattern
-    buf := makeCheckerboard()
-    epd.Display(buf)
-
-    // Visual confirmation required
-    t.Log("Check display shows checkerboard pattern")
-    time.Sleep(5 * time.Second)
-
-    epd.Sleep()
-}
-```
-
-Run on the Pi:
+The SPI backend is built-tagged so it never compiles into host or CI
+builds:
 
 ```bash
-go test ./... -tags hardware -run TestRealDisplay
+# Build for Pi with SPI compiled in
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
+  go build -tags hardware -o inkwell ./cmd/inkwell
+
+# Smoke test on the Pi
+ssh pi@<ip> './inkwell inkwell.yaml'
 ```
+
+`spi_hardware_test.go` exercises the SPI backend code paths using
+`WithSPIConn` and `WithGPIOPins` option injection — those tests run on
+your dev machine without hardware. The end-to-end *real-hardware*
+verification step (driving the panel from a deployed binary) lives in
+the install guide: see
+[`docs/guides/installation.md`](../guides/installation.md).
 
 ## 6. CI Pipeline (GitHub Actions)
 
-Everything runs without hardware:
+Everything runs without hardware. See
+[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) for the
+live workflow; the `make` targets it invokes are:
 
-```yaml
-name: CI
-on: [push, pull_request]
+<!-- markdownlint-disable MD013 -->
+| Target | What it does |
+|--------|--------------|
+| `make verify` | `go mod verify` |
+| `make vet` | `go vet ./...` |
+| `make coverage` | Runs tests with race detector and `-coverprofile`, fails if coverage drops below 100% |
+| `make build-pi` | Cross-compiles for `linux/arm64` (no SPI tag) |
+<!-- markdownlint-enable MD013 -->
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
-      - run: go test ./...
-      - run: go vet ./...
-
-  cross-compile:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
-      - run: GOOS=linux GOARCH=arm64 go build ./...
-```
+The Go version is read from [`go.mod`](../../go.mod) (currently 1.25+).
 
 ### What Runs Where
 
 <!-- markdownlint-disable MD013 -->
-| Test Type | Dev Machine (macOS) | CI (ubuntu x86_64) | Pi (linux arm64) |
+| Test Type | Dev Machine (macOS) | CI (Ubuntu x86_64) | Pi (linux arm64) |
 |-----------|--------------------|--------------------|------------------|
 | Golden file / buffer tests | Yes | Yes | Yes |
 | Command sequence tests | Yes | Yes | Yes |
 | Widget rendering tests | Yes | Yes | Yes |
-| Web preview | Yes (interactive) | No | No |
+| Web preview (live) | Yes (interactive) | No | Yes (after deploy) |
 | Real hardware tests | No | No | Yes (`-tags hardware`) |
-| Cross-compile check | Yes | Yes | N/A (native) |
+| Cross-compile check | Yes | Yes (`make build-pi`) | N/A (native) |
 <!-- markdownlint-enable MD013 -->
 
-## 7. Development Workflow
+## 7. Development Workflow (TDD)
 
-### Daily Loop
+Per `CLAUDE.md`, feature and bug fix work uses the `/tdd` skill
+(red-green-refactor). The typical inner loop:
 
-```text
-1. Write/modify widget code
-2. Run `go test ./...` — golden file comparison
-3. If golden files changed intentionally: `go test ./... -update`
-4. Open web preview: `go run ./cmd/preview/`
-5. See result in browser at localhost:8080
-6. Iterate on rendering
-7. When satisfied: cross-compile and scp to Pi
-8. Run hardware integration test on Pi
-```
-
-### First-Time Setup on Pi
-
-```bash
-# One-time: verify SPI and GPIO work
-scp go-e-ink pi@<ip>:~/
-ssh pi@<ip>
-./go-e-ink -test-hardware   # Quick init -> clear -> sleep cycle
-```
-
-After this works once, all further development happens on your dev machine
-with the web preview and golden file tests.
+1. Write a failing test for the smallest behavioural change.
+2. Make it green with the smallest possible implementation.
+3. Run `make coverage` — keep statement coverage at 100%.
+4. Open the live web preview at `http://localhost:8080/` to confirm
+   the change reads correctly on the *device view* (post-dither).
+5. If it's a visual change, regenerate the relevant golden PNGs with
+   `go test ./... -update` and review the diff visually.
+6. Run `make fix` to apply Go modernisations before committing.
+7. Commit immediately to checkpoint progress.
 
 ## 8. Font Rendering
 
-Use Go's built-in font rasterization (pure Go, no CGO):
-
-```go
-import (
-    "golang.org/x/image/font"
-    "golang.org/x/image/font/opentype"
-    "golang.org/x/image/math/fixed"
-)
-```
-
-Load a TTF/OTF font, create a `font.Face`, use `font.Drawer` to render text
-into an `image.Paletted`. All platform-independent and testable via golden
-files.
+Pure Go via `golang.org/x/image/font` and
+`golang.org/x/image/font/opentype` — no CGO. Widgets load TTFs from
+[`internal/inkwell/fonts/`](../../internal/inkwell/fonts/) and render
+into the compositor's paletted frame, so the entire glyph path is
+testable with golden files.

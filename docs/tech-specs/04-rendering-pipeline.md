@@ -1,7 +1,39 @@
-# Rendering Pipeline: From Pixels to E-Ink
+# Rendering Pipeline: From Pixels to E-Ink (Historical Reference)
 
-This document explains exactly how an image goes from Python code to physical
-pixels on the e-ink display.
+> **This documents the *Waveshare-provided Python rendering pipeline*,
+> not Inkwell's pipeline.** Inkwell's actual rendering path is implemented
+> in Go and differs in important ways from the description below — most
+> notably, Inkwell composites into a 12-level grayscale
+> [`PaperPalette`][palette-go] canvas first and *then* dithers to 1-bit
+> via Bayer-4×4 ordered dithering in [`packBW`][buffer-go]. The Python
+> pipeline below has no dithering step — it relies on PIL's built-in
+> 1-bit conversion.
+>
+> For the current Go pipeline, read:
+>
+> - [`internal/inkwell/compositor.go`][compositor-go] — composes widgets
+>   into a paletted source frame.
+> - [`internal/inkwell/buffer.go`][buffer-go] — `PackImage` / `packBW`
+>   (Bayer-4×4 dither) / `packGray4` (Init4Gray luminance buckets).
+> - [`internal/inkwell/epd.go`][epd-go] — `Display` / `DisplayPartial`
+>   send sequences (the SPI command flow described below is preserved
+>   verbatim in the `Waveshare7in5V2` profile).
+> - [`docs/guides/hardware-grayscale.md`][grayscale-guide] — what the
+>   panel can actually show and how the packer collapses the 12-level
+>   palette down to it.
+>
+> The Python pipeline is kept here as a reference for the **SPI command
+> sequence** the Waveshare driver issues — that part is identical
+> between Python and Inkwell because both drive the same controller IC.
+
+[palette-go]: ../../internal/inkwell/widget/palette.go
+[buffer-go]: ../../internal/inkwell/buffer.go
+[compositor-go]: ../../internal/inkwell/compositor.go
+[epd-go]: ../../internal/inkwell/epd.go
+[grayscale-guide]: ../guides/hardware-grayscale.md
+
+This document explains exactly how an image goes from Python code to
+physical pixels on the e-ink display.
 
 ## Overview
 
