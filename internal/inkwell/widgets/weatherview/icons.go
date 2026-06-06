@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"log"
+	"unicode/utf8"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"golang.org/x/image/font"
@@ -43,7 +45,15 @@ func DrawIcon(frame *image.Paletted, x, y, size int, cond weather.Condition) err
 	if err != nil {
 		return err
 	}
-	defer face.Close()
+	defer func() {
+		// Close on an in-memory font face is unlikely to fail, but
+		// surfacing the error keeps errcheck happy and gives us a
+		// breadcrumb if the underlying opentype implementation
+		// changes.
+		if cerr := face.Close(); cerr != nil {
+			log.Printf("weatherview: close icon face: %v", cerr)
+		}
+	}()
 
 	advance, ok := face.GlyphAdvance(glyph)
 	if !ok {
@@ -63,7 +73,12 @@ func DrawIcon(frame *image.Paletted, x, y, size int, cond weather.Condition) err
 		Face: face,
 		Dot:  fixed.P(drawX, drawY),
 	}
-	d.DrawBytes([]byte(string(glyph)))
+	// utf8.EncodeRune avoids the [] byte (string(glyph)) double-conversion
+	// allocation. Worst case a 4-byte buffer is plenty for any valid
+	// rune.
+	var buf [utf8.UTFMax]byte
+	n := utf8.EncodeRune(buf[:], glyph)
+	d.DrawBytes(buf[:n])
 
 	return nil
 }

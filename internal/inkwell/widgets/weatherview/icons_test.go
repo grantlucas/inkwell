@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
 func TestDrawIcon_AllConditions(t *testing.T) {
@@ -26,10 +27,13 @@ func TestDrawIcon_AllConditions(t *testing.T) {
 			continue
 		}
 
+		// Look up the semantic black index instead of hardcoding
+		// `1`; the palette layout is allowed to shift and tests
+		// shouldn't pin to its current numeric address.
 		hasBlack := false
 		for y := range 40 {
 			for x := range 40 {
-				if frame.ColorIndexAt(x, y) == 1 {
+				if frame.ColorIndexAt(x, y) == widget.PaperBlack {
 					hasBlack = true
 					break
 				}
@@ -68,7 +72,9 @@ func TestIconFace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("iconFace: %v", err)
 	}
-	f.Close()
+	if cerr := f.Close(); cerr != nil {
+		t.Errorf("close face: %v", cerr)
+	}
 }
 
 func TestDrawIcon_BadFontData(t *testing.T) {
@@ -94,12 +100,22 @@ func TestIconFace_BadFontData(t *testing.T) {
 	}
 }
 
+// iconFace clamps size to a minimum of 1, so a zero-size request must
+// succeed and return a usable face. Accepting either branch (as the
+// previous test did) meant the assertion didn't actually pin down
+// behavior; a future regression that started returning an error here
+// would have slipped past silently.
 func TestIconFace_ZeroSize(t *testing.T) {
 	f, err := iconFace(0)
 	if err != nil {
-		return
+		t.Fatalf("iconFace(0): unexpected error %v", err)
 	}
-	f.Close()
+	if f == nil {
+		t.Fatal("iconFace(0): face is nil")
+	}
+	if cerr := f.Close(); cerr != nil {
+		t.Errorf("close face: %v", cerr)
+	}
 }
 
 func TestDrawIcon_GlyphNotFound(t *testing.T) {
