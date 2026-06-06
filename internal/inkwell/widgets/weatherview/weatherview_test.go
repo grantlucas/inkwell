@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
 func sampleDay() weather.DailyForecast {
@@ -42,7 +43,7 @@ func TestRenderDayWeather_Basic(t *testing.T) {
 	blackCount := 0
 	for y := range 160 {
 		for x := range 114 {
-			if frame.ColorIndexAt(x, y) == 1 {
+			if frame.ColorIndexAt(x, y) == widget.PaperBlack {
 				blackCount++
 			}
 		}

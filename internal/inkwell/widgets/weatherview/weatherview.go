@@ -6,6 +6,7 @@ package weatherview
 import (
 	"fmt"
 	"image"
+	"log"
 	"math"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
@@ -74,7 +75,12 @@ func RenderDayWeather(frame *image.Paletted, bounds image.Rectangle, day weather
 
 	iconX := bounds.Min.X + 4
 	iconY := bounds.Min.Y + (condRowH-iconSize)/2
-	_ = DrawIcon(frame, iconX, iconY, iconSize, day.Condition)
+	if err := DrawIcon(frame, iconX, iconY, iconSize, day.Condition); err != nil {
+		// Log instead of bubbling — the rest of the day cell (label,
+		// temps, chart) is still useful even when the glyph itself
+		// can't be rendered.
+		log.Printf("weatherview: draw icon for condition %d: %v", day.Condition, err)
+	}
 
 	textX := iconX + iconSize + 3
 	hi := day.High
