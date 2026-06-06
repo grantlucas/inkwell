@@ -1,0 +1,39 @@
+name: Release
+run-name: "Release ${{ github.event.release.tag_name }}"
+
+# Triggered when a draft release created by on-pull-request-close.yml is
+# published. Builds linux arm64 / armv7 / armv6 binaries with the `hardware`
+# build tag (so the SPI backend is included) and uploads them as tarball
+# assets on the existing release.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    name: Build and upload release assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

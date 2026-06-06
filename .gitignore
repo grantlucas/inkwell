@@ -2,6 +2,9 @@
 /inkwell
 *.exe
 
+# GoReleaser local snapshot output
+/dist/
+
 # Test binary
 *.test
 
