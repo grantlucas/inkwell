@@ -1,6 +1,7 @@
 package calendar
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,8 +17,9 @@ type mockHTTPClient struct {
 	getCalls  int
 }
 
-func (m *mockHTTPClient) Get(url string) (*http.Response, error) {
+func (m *mockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	m.getCalls++
+	url := req.URL.String()
 	if err, ok := m.errors[url]; ok {
 		return nil, err
 	}
@@ -64,7 +66,7 @@ func TestHTTPSource_SingleFeed(t *testing.T) {
 
 	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
-	events, err := src.Events(start, end)
+	events, err := src.Events(context.Background(), start, end)
 	if err != nil {
 		t.Fatalf("Events: %v", err)
 	}
@@ -90,7 +92,7 @@ func TestHTTPSource_MultipleFeeds(t *testing.T) {
 
 	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
-	events, err := src.Events(start, end)
+	events, err := src.Events(context.Background(), start, end)
 	if err != nil {
 		t.Fatalf("Events: %v", err)
 	}
@@ -120,7 +122,7 @@ func TestHTTPSource_DeduplicatesByUID(t *testing.T) {
 
 	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
-	events, err := src.Events(start, end)
+	events, err := src.Events(context.Background(), start, end)
 	if err != nil {
 		t.Fatalf("Events: %v", err)
 	}
@@ -154,7 +156,7 @@ END:VCALENDAR
 
 	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
-	events, err := src.Events(start, end)
+	events, err := src.Events(context.Background(), start, end)
 	if err != nil {
 		t.Fatalf("Events: %v", err)
 	}
@@ -176,7 +178,7 @@ func TestHTTPSource_HTTPError(t *testing.T) {
 
 	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
-	_, err := src.Events(start, end)
+	_, err := src.Events(context.Background(), start, end)
 	if err == nil {
 		t.Fatal("expected error for HTTP failure")
 	}
@@ -200,7 +202,7 @@ END:VCALENDAR
 
 	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
-	_, err := src.Events(start, end)
+	_, err := src.Events(context.Background(), start, end)
 	if err == nil {
 		t.Fatal("expected error for invalid ICS content")
 	}
@@ -227,13 +229,66 @@ func TestHTTPSource_BodyCloseErrorSurfaced(t *testing.T) {
 
 	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
-	_, err := src.Events(start, end)
+	_, err := src.Events(context.Background(), start, end)
 	if err == nil {
 		t.Fatal("expected error from failing Body.Close")
 	}
 	if !strings.Contains(err.Error(), "simulated close failure") {
 		t.Errorf("error = %q, want it to wrap simulated close failure", err.Error())
 	}
+}
+
+// Build-request error path is unreachable in production because the
+// feed URL is opaque to the source — http.NewRequestWithContext only
+// rejects URLs with invalid method/control characters, neither of
+// which we generate. Exercise it via the newRequestWithContext hook
+// for coverage parity with weather/openmeteo.
+func TestHTTPSource_BuildRequestError(t *testing.T) {
+	orig := newRequestWithContext
+	newRequestWithContext = func(_ context.Context, _, _ string, _ io.Reader) (*http.Request, error) {
+		return nil, fmt.Errorf("synthetic build-request error")
+	}
+	defer func() { newRequestWithContext = orig }()
+
+	client := &mockHTTPClient{}
+	src := NewHTTPSource([]string{"https://example.com/cal.ics"}, client)
+
+	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
+	_, err := src.Events(context.Background(), start, end)
+	if err == nil {
+		t.Fatal("expected build-request error")
+	}
+	if !strings.Contains(err.Error(), "build request") {
+		t.Errorf("error = %q, want it to mention 'build request'", err.Error())
+	}
+}
+
+// Ctx cancellation flows through to the HTTP client now that the
+// Source carries it. A client that returns req.Context().Err()
+// simulates a transport honoring the deadline.
+func TestHTTPSource_HonorsContextCancellation(t *testing.T) {
+	client := &ctxAwareCalClient{}
+	src := NewHTTPSource([]string{"https://example.com/cal.ics"}, client)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
+	_, err := src.Events(ctx, start, end)
+	if err == nil {
+		t.Fatal("expected ctx cancellation error")
+	}
+}
+
+type ctxAwareCalClient struct{}
+
+func (c *ctxAwareCalClient) Do(req *http.Request) (*http.Response, error) {
+	if err := req.Context().Err(); err != nil {
+		return nil, err
+	}
+	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(""))}, nil
 }
 
 func TestHTTPSource_Non200Status(t *testing.T) {
@@ -249,7 +304,7 @@ func TestHTTPSource_Non200Status(t *testing.T) {
 
 	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
-	_, err := src.Events(start, end)
+	_, err := src.Events(context.Background(), start, end)
 	if err == nil {
 		t.Fatal("expected error for non-200 status")
 	}

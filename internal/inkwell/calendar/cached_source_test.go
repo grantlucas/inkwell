@@ -1,6 +1,7 @@
 package calendar
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -15,7 +16,7 @@ type countingSource struct {
 	err    error
 }
 
-func (s *countingSource) Events(start, end time.Time) ([]Event, error) {
+func (s *countingSource) Events(_ context.Context, _, _ time.Time) ([]Event, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls++
@@ -40,7 +41,7 @@ func TestCachedSource_CachesWithinTTL(t *testing.T) {
 	end := now.Add(24 * time.Hour)
 
 	// First call should fetch.
-	got, err := src.Events(start, end)
+	got, err := src.Events(context.Background(), start, end)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +53,7 @@ func TestCachedSource_CachesWithinTTL(t *testing.T) {
 	}
 
 	// Second call within TTL should use cache.
-	got, err = src.Events(start, end)
+	got, err = src.Events(context.Background(), start, end)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +79,7 @@ func TestCachedSource_RefetchesAfterTTL(t *testing.T) {
 	end := now.Add(24 * time.Hour)
 
 	// First call.
-	_, _ = src.Events(start, end)
+	_, _ = src.Events(context.Background(), start, end)
 	if inner.callCount() != 1 {
 		t.Fatalf("inner calls = %d, want 1", inner.callCount())
 	}
@@ -86,7 +87,7 @@ func TestCachedSource_RefetchesAfterTTL(t *testing.T) {
 	// Advance time past TTL.
 	currentTime = now.Add(16 * time.Minute)
 
-	_, _ = src.Events(start, end)
+	_, _ = src.Events(context.Background(), start, end)
 	if inner.callCount() != 2 {
 		t.Fatalf("inner calls = %d, want 2 (should have re-fetched)", inner.callCount())
 	}
@@ -106,7 +107,7 @@ func TestCachedSource_ReturnsStaleCacheOnError(t *testing.T) {
 	end := now.Add(24 * time.Hour)
 
 	// First call succeeds.
-	_, _ = src.Events(start, end)
+	_, _ = src.Events(context.Background(), start, end)
 
 	// Make inner return error and advance past TTL.
 	inner.mu.Lock()
@@ -114,7 +115,7 @@ func TestCachedSource_ReturnsStaleCacheOnError(t *testing.T) {
 	inner.mu.Unlock()
 	currentTime = now.Add(16 * time.Minute)
 
-	got, err := src.Events(start, end)
+	got, err := src.Events(context.Background(), start, end)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -134,7 +135,7 @@ func TestCachedSource_FirstCallError(t *testing.T) {
 
 	start := now
 	end := now.Add(24 * time.Hour)
-	got, err := src.Events(start, end)
+	got, err := src.Events(context.Background(), start, end)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -157,7 +158,7 @@ func TestCachedSource_ConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 	for range 10 {
 		wg.Go(func() {
-			_, _ = src.Events(start, end)
+			_, _ = src.Events(context.Background(), start, end)
 		})
 	}
 	wg.Wait()

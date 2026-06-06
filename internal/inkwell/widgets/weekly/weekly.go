@@ -66,11 +66,17 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	weekStart := today
 	weekEnd := today.AddDate(0, 0, 7)
 
+	// One render-scope context shared by calendar + weather fetches.
+	// A slow upstream on either side won't stall the render loop past
+	// the timeout now that both HTTP paths honor ctx.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	// A calendar fetch failure (network, parse, etc.) shouldn't blank
 	// the dashboard — render with whatever events made it through (or
 	// an empty list) but log so the failure shows up in the operator's
 	// terminal instead of being silently dropped.
-	events, err := w.cal.Events(weekStart, weekEnd)
+	events, err := w.cal.Events(ctx, weekStart, weekEnd)
 	if err != nil {
 		log.Printf("weekly: fetch calendar events: %v", err)
 	}
@@ -78,8 +84,6 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	var forecast *weather.Forecast
 	weatherH := 0
 	if w.config.ShowWeather && w.weather != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
 		loc := weather.Location{
 			Latitude:  w.config.Latitude,
 			Longitude: w.config.Longitude,

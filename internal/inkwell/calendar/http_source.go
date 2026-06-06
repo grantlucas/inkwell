@@ -1,6 +1,7 @@
 package calendar
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"sort"
@@ -10,9 +11,16 @@ import (
 )
 
 // HTTPClient is the subset of *http.Client needed for fetching calendar feeds.
+// Modeled on http.Client.Do so the request carries its context and
+// Source.Events(ctx, …) can actually honor cancellation.
 type HTTPClient interface {
-	Get(url string) (*http.Response, error)
+	Do(req *http.Request) (*http.Response, error)
 }
+
+// newRequestWithContext is the indirection over http.NewRequestWithContext
+// that tests override to exercise the otherwise-unreachable "build request"
+// error branch. Production paths go straight through.
+var newRequestWithContext = http.NewRequestWithContext
 
 // HTTPSource fetches and parses iCal feeds from a list of URLs.
 // It merges events from all feeds, deduplicates by UID, and filters
@@ -28,13 +36,13 @@ func NewHTTPSource(urls []string, client HTTPClient) *HTTPSource {
 }
 
 // Events fetches all feeds, merges, deduplicates, filters to [start, end),
-// and returns events sorted by start time.
-func (s *HTTPSource) Events(start, end time.Time) ([]Event, error) {
+// and returns events sorted by start time. ctx bounds each fetch.
+func (s *HTTPSource) Events(ctx context.Context, start, end time.Time) ([]Event, error) {
 	seen := make(map[string]bool)
 	var all []Event
 
 	for _, url := range s.urls {
-		if err := s.fetchFeed(url, start, end, seen, &all); err != nil {
+		if err := s.fetchFeed(ctx, url, start, end, seen, &all); err != nil {
 			return nil, err
 		}
 	}
@@ -50,8 +58,12 @@ func (s *HTTPSource) Events(start, end time.Time) ([]Event, error) {
 // is closed at the end of each iteration rather than lingering until
 // Events returns. Close errors are surfaced when no other error
 // preceded them.
-func (s *HTTPSource) fetchFeed(url string, start, end time.Time, seen map[string]bool, all *[]Event) (retErr error) {
-	resp, err := s.client.Get(url)
+func (s *HTTPSource) fetchFeed(ctx context.Context, url string, start, end time.Time, seen map[string]bool, all *[]Event) (retErr error) {
+	req, err := newRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("build request %q: %w", url, err) //nolint:goerr113 // only reachable via test override
+	}
+	resp, err := s.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("fetch %q: %w", url, err)
 	}

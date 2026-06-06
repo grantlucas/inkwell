@@ -22,7 +22,7 @@ type stubCalSource struct {
 	err    error
 }
 
-func (s *stubCalSource) Events(start, end time.Time) ([]ical.Event, error) {
+func (s *stubCalSource) Events(_ context.Context, start, end time.Time) ([]ical.Event, error) {
 	if s.err != nil {
 		return s.events, s.err
 	}
@@ -686,6 +686,6 @@ func TestFactory_InvalidConfig(t *testing.T) {
 // stubHTTPClient satisfies calendar.HTTPClient.
 type stubHTTPClient struct{}
 
-func (s *stubHTTPClient) Get(_ string) (*nethttp.Response, error) {
+func (s *stubHTTPClient) Do(_ *nethttp.Request) (*nethttp.Response, error) {
 	return nil, context.DeadlineExceeded
 }

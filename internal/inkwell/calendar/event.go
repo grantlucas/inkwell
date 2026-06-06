@@ -3,6 +3,7 @@
 package calendar
 
 import (
+	"context"
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar/ical"
@@ -15,5 +16,7 @@ type Event = ical.Event
 // Implementations must be safe for concurrent use.
 type Source interface {
 	// Events returns events overlapping [start, end), sorted by Start time.
-	Events(start, end time.Time) ([]Event, error)
+	// ctx bounds any underlying I/O — implementations that perform HTTP or
+	// other cancellable work must honor it.
+	Events(ctx context.Context, start, end time.Time) ([]Event, error)
 }

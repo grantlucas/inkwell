@@ -1,6 +1,7 @@
 package calendar
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -30,8 +31,9 @@ func NewCachedSource(inner Source, ttl time.Duration, now func() time.Time) *Cac
 
 // Events returns events in [start, end). If the cache is fresh, it returns
 // cached events. Otherwise it fetches from the inner source. On error with
-// a populated cache, returns stale events and the error.
-func (c *CachedSource) Events(start, end time.Time) ([]Event, error) {
+// a populated cache, returns stale events and the error. ctx bounds the
+// underlying fetch; cache hits return immediately without touching ctx.
+func (c *CachedSource) Events(ctx context.Context, start, end time.Time) ([]Event, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -39,7 +41,7 @@ func (c *CachedSource) Events(start, end time.Time) ([]Event, error) {
 		return c.filterEvents(start, end), nil
 	}
 
-	events, err := c.inner.Events(start, end)
+	events, err := c.inner.Events(ctx, start, end)
 	if err != nil {
 		if c.events != nil {
 			// Return stale data with the error.
