@@ -52,13 +52,14 @@ func (wp *WebPreview) Frame() *image.Paletted {
 	return frame
 }
 
-// SendCommand tracks the last command sent. On RefreshCmd, unpacks the
-// captured buffer into the current frame — but only if a higher-fidelity
-// source frame has not been supplied via SetSourceFrame. The source frame is
-// preferred because it preserves the compositor's full grayscale before the
-// device packer collapses it. Important: wp.current must only be replaced
-// (not mutated in place) so that ServeHTTP can safely read the pointer under
-// RLock without a data race on the underlying pixel data.
+// SendCommand tracks the last command sent. On RefreshCmd it unpacks the
+// captured device buffer into wp.current so ServeHTTP can show what the
+// e-paper panel actually receives — i.e. the post-dither, 1-bit version,
+// not the rich grayscale source. The high-fidelity source frame (set via
+// SetSourceFrame) is kept on wp.source and served when the client opts in
+// with ?source=1. Important: wp.current must only be replaced (not mutated
+// in place) so that ServeHTTP can read the pointer under RLock without a
+// data race on the underlying pixel data.
 func (wp *WebPreview) SendCommand(cmd byte) error {
 	if wp.profile == nil {
 		return fmt.Errorf("web preview: nil display profile")
@@ -68,22 +69,24 @@ func (wp *WebPreview) SendCommand(cmd byte) error {
 
 	wp.lastCmd = cmd
 	if cmd == wp.profile.RefreshCmd {
-		if wp.source != nil {
-			wp.current = wp.source
+		if wp.captured != nil {
+			if wp.profile.Color != BW {
+				return fmt.Errorf("web preview: unsupported color depth %v; only BW is currently supported", wp.profile.Color)
+			}
+			if expected := wp.profile.BufferSize(); len(wp.captured) != expected {
+				return fmt.Errorf("web preview: buffer size %d does not match expected %d", len(wp.captured), expected)
+			}
+			wp.current = UnpackBuffer(wp.profile, wp.captured)
 			wp.notifyLocked()
 			return nil
 		}
-		if wp.captured == nil {
-			return nil
+		// No packed buffer captured yet (e.g. tests that exercise the
+		// FrameSink path in isolation). Fall back to the source frame so
+		// /frame.png still returns something useful.
+		if wp.source != nil {
+			wp.current = wp.source
+			wp.notifyLocked()
 		}
-		if wp.profile.Color != BW {
-			return fmt.Errorf("web preview: unsupported color depth %v; only BW is currently supported", wp.profile.Color)
-		}
-		if expected := wp.profile.BufferSize(); len(wp.captured) != expected {
-			return fmt.Errorf("web preview: buffer size %d does not match expected %d", len(wp.captured), expected)
-		}
-		wp.current = UnpackBuffer(wp.profile, wp.captured)
-		wp.notifyLocked()
 	}
 	return nil
 }
@@ -130,15 +133,26 @@ func (wp *WebPreview) Reset() error { return nil }
 func (wp *WebPreview) Close() error { return nil }
 
 // ServeHTTP serves the current display frame as a PNG image.
-// Supports an optional ?scale=N query parameter (1–10) for nearest-neighbor upscaling.
+// Supports two optional query parameters:
+//   - scale=N (1–10): nearest-neighbor upscale for legibility.
+//   - source=1: serve the pre-pack high-fidelity source frame (full grayscale,
+//     for design review) instead of the unpacked device buffer (post-dither,
+//     1-bit — what the panel actually shows). Default is the device view.
 func (wp *WebPreview) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
+	wantSource := r.URL.Query().Get("source") == "1"
+
 	wp.mu.RLock()
-	frame := wp.current
+	var frame *image.Paletted
+	if wantSource {
+		frame = wp.source
+	} else {
+		frame = wp.current
+	}
 	wp.mu.RUnlock()
 
 	if frame == nil {
@@ -222,12 +236,24 @@ func (wp *WebPreview) serveHTML(w http.ResponseWriter, _ *http.Request) {
 
 const htmlPage = `<!DOCTYPE html>
 <html><head><title>Inkwell Preview</title></head>
-<body style="background:#333;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0">
+<body style="background:#333;color:#ddd;font:13px system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;margin:0;gap:10px;padding-top:14px">
+<div>
+  <label><input type="radio" name="view" value="device" checked> Device (post-dither, what the e-paper panel shows)</label>
+  &nbsp;&nbsp;
+  <label><input type="radio" name="view" value="source"> Source (full grayscale, design intent)</label>
+</div>
 <img id="frame" src="/frame.png?scale=2" style="image-rendering:pixelated">
 <script>
-new EventSource("/events").onmessage = function() {
-  document.getElementById("frame").src = "/frame.png?scale=2&t=" + Date.now();
-};
+function currentSrc() {
+  var v = document.querySelector('input[name=view]:checked').value;
+  var q = v === 'source' ? '&source=1' : '';
+  return '/frame.png?scale=2' + q + '&t=' + Date.now();
+}
+function refresh() { document.getElementById('frame').src = currentSrc(); }
+document.querySelectorAll('input[name=view]').forEach(function(el) {
+  el.addEventListener('change', refresh);
+});
+new EventSource('/events').onmessage = refresh;
 </script>
 </body></html>`
 

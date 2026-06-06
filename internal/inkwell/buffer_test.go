@@ -123,6 +123,96 @@ func TestPackBW_Checkerboard(t *testing.T) {
 	}
 }
 
+func TestPackBW_DitherProducesPattern_MidGray(t *testing.T) {
+	// A solid mid-gray (Y=128) should produce a stipple pattern: about
+	// half the pixels black, half white. Pure threshold would yield either
+	// all-white or all-black. We expect *some* set bits and *some* clear
+	// bits, and the count to be close to 50%.
+	p := bwTestProfile()
+	img := solidImage(16, 16, color.Gray{Y: 128})
+	buf, err := PackImage(p, img)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var set int
+	for _, b := range buf {
+		for i := range 8 {
+			if b&(1<<i) != 0 {
+				set++
+			}
+		}
+	}
+	total := 16 * 16
+	if set == 0 || set == total {
+		t.Fatalf("mid-gray packed to %d/%d set bits — dithering not engaged", set, total)
+	}
+	// Bayer-4×4 with threshold = m*16 + 8 produces 8 of 16 cells with
+	// threshold > 128, so a uniform Y=128 fill yields exactly 50% black.
+	if set != total/2 {
+		t.Errorf("Y=128 fill set bits = %d, want %d (50%%)", set, total/2)
+	}
+}
+
+func TestPackBW_DitherProducesPattern_LightGray(t *testing.T) {
+	// PaperGray20 (Y=0xCC, 204) is used for the today-hour highlight band.
+	// Without dithering it threshold-snaps to white and the band vanishes.
+	// With Bayer-4×4 it should yield a sparse stipple (a handful of black
+	// pixels per 4×4 cell).
+	p := bwTestProfile()
+	img := solidImage(16, 16, color.Gray{Y: 0xCC})
+	buf, err := PackImage(p, img)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var set int
+	for _, b := range buf {
+		for i := range 8 {
+			if b&(1<<i) != 0 {
+				set++
+			}
+		}
+	}
+	if set == 0 {
+		t.Fatal("PaperGray20 collapsed to pure white — band would vanish on device")
+	}
+	// Threshold = m*16+8 > 204 only for m ∈ {13, 14, 15} → 3 of 16 cells,
+	// so a uniform fill yields 3/16 of the pixels black.
+	want := 16 * 16 * 3 / 16
+	if set != want {
+		t.Errorf("Y=204 (Gray20) fill set bits = %d, want %d", set, want)
+	}
+}
+
+func TestPackBW_DitherProducesPattern_DarkGray(t *testing.T) {
+	// PaperGray80 (Y=0x33, 51) is used for the temperature polyline.
+	// Plain threshold lands it at black (it's < 128 so it'd be 100%).
+	// Bayer-4×4 should leave a small fraction of white pixels poking
+	// through, giving the curve a slight gray weight.
+	p := bwTestProfile()
+	img := solidImage(16, 16, color.Gray{Y: 0x33})
+	buf, err := PackImage(p, img)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var set int
+	for _, b := range buf {
+		for i := range 8 {
+			if b&(1<<i) != 0 {
+				set++
+			}
+		}
+	}
+	total := 16 * 16
+	if set == total {
+		t.Fatal("Gray80 collapsed to pure black — no halftone weight")
+	}
+	// Threshold > 51 for m ∈ {3..15} → 13 of 16 cells. 13/16 = ~81% black.
+	want := total * 13 / 16
+	if set != want {
+		t.Errorf("Y=51 (Gray80) fill set bits = %d, want %d", set, want)
+	}
+}
+
 func TestPackBW_BufferLength(t *testing.T) {
 	p := bwTestProfile()
 	img := solidImage(16, 16, color.White)

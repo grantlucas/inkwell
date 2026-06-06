@@ -225,11 +225,15 @@ func TestWebPreview_EncodeErrorReturns500(t *testing.T) {
 	}
 }
 
-func TestWebPreview_SetSourceFramePrefersOverPackedBuffer(t *testing.T) {
+func TestWebPreview_DefaultViewIsPackedDeviceBuffer(t *testing.T) {
+	// The preview must default to showing the *unpacked device buffer* —
+	// the dithered 1-bit representation that the e-paper panel actually
+	// receives — not the high-fidelity source. The source view is opt-in
+	// via ?source=1; serving source by default would mislead about how
+	// the dashboard will look on hardware.
 	p := imageTestProfile()
 	wp := NewWebPreview(p)
 
-	// Supply a high-fidelity source frame with a mid-gray pixel at (1, 0).
 	src := image.NewPaletted(image.Rect(0, 0, p.Width, p.Height), widget.PaperPalette)
 	src.SetColorIndex(1, 0, widget.PaperGray50)
 	wp.SetSourceFrame(src)
@@ -237,8 +241,7 @@ func TestWebPreview_SetSourceFramePrefersOverPackedBuffer(t *testing.T) {
 	// Mutate the source after handing it over — the preview must hold a copy.
 	src.SetColorIndex(1, 0, widget.PaperBlack)
 
-	// Send a packed buffer of all-white; the source frame should take
-	// precedence on RefreshCmd and yield mid-gray, not white.
+	// All-white packed buffer means the device sees pure white everywhere.
 	buf := make([]byte, p.BufferSize())
 	sendDisplaySequence(t, wp, p, buf)
 
@@ -246,13 +249,59 @@ func TestWebPreview_SetSourceFramePrefersOverPackedBuffer(t *testing.T) {
 	if frame == nil {
 		t.Fatal("expected frame after display sequence, got nil")
 	}
-	got, ok := frame.At(1, 0).(color.Gray)
-	if !ok {
-		t.Fatalf("pixel (1,0) is %T, want color.Gray", frame.At(1, 0))
+	r, g, b, _ := frame.At(1, 0).RGBA()
+	if r != 0xFFFF || g != 0xFFFF || b != 0xFFFF {
+		t.Errorf("pixel (1,0) RGBA = (0x%04X,0x%04X,0x%04X), want white (packed buffer, not gray source)", r, g, b)
+	}
+}
+
+func TestWebPreview_SourceViewOptIn(t *testing.T) {
+	// With ?source=1, ServeHTTP serves the high-fidelity source frame even
+	// when a packed device buffer has also been captured.
+	p := imageTestProfile()
+	wp := NewWebPreview(p)
+
+	src := image.NewPaletted(image.Rect(0, 0, p.Width, p.Height), widget.PaperPalette)
+	src.SetColorIndex(1, 0, widget.PaperGray50)
+	wp.SetSourceFrame(src)
+
+	buf := make([]byte, p.BufferSize())
+	sendDisplaySequence(t, wp, p, buf)
+
+	req := httptest.NewRequest(http.MethodGet, "/frame.png?source=1", nil)
+	rec := httptest.NewRecorder()
+	wp.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	img, err := png.Decode(rec.Body)
+	if err != nil {
+		t.Fatalf("decode PNG: %v", err)
 	}
 	want := widget.PaperPalette[widget.PaperGray50].(color.Gray)
-	if got.Y != want.Y {
-		t.Errorf("pixel (1,0) Y = 0x%02X, want 0x%02X (widget.PaperGray50)", got.Y, want.Y)
+	gr, gg, gb, _ := img.At(1, 0).RGBA()
+	wr, wg, wb, _ := want.RGBA()
+	if gr != wr || gg != wg || gb != wb {
+		t.Errorf("?source=1 pixel (1,0) RGBA = (0x%04X,0x%04X,0x%04X), want (0x%04X,0x%04X,0x%04X) PaperGray50",
+			gr, gg, gb, wr, wg, wb)
+	}
+}
+
+func TestWebPreview_SourceViewWithoutSourceFrameReturns204(t *testing.T) {
+	// ?source=1 with no SetSourceFrame call must return 204, not the
+	// packed device buffer — otherwise the toggle would silently lie
+	// about which view the user is looking at.
+	p := imageTestProfile()
+	wp := NewWebPreview(p)
+
+	buf := make([]byte, p.BufferSize())
+	sendDisplaySequence(t, wp, p, buf) // captures a buffer, sets wp.current
+
+	req := httptest.NewRequest(http.MethodGet, "/frame.png?source=1", nil)
+	rec := httptest.NewRecorder()
+	wp.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("status = %d, want %d (no source frame supplied)", rec.Code, http.StatusNoContent)
 	}
 }
 
