@@ -377,6 +377,99 @@ func TestSplitGray4Planes(t *testing.T) {
 	}
 }
 
+// --- joinGray4Planes tests ---
+
+// TestJoinGray4Planes covers the inverse of splitGray4Planes. Joining
+// the two 1bpp planes recovers the original 2bpp buffer because plane A
+// is the low bit and plane B is the high bit of each pixel — the
+// projection is information-preserving. The same shade table as
+// TestSplitGray4Planes runs here to make the symmetry visible.
+func TestJoinGray4Planes(t *testing.T) {
+	cases := []struct {
+		label  string
+		planeA []byte
+		planeB []byte
+		want   []byte
+	}{
+		{
+			label:  "all white",
+			planeA: []byte{0x00},
+			planeB: []byte{0x00},
+			want:   []byte{0x00, 0x00},
+		},
+		{
+			label:  "all black",
+			planeA: []byte{0xFF},
+			planeB: []byte{0xFF},
+			want:   []byte{0xFF, 0xFF},
+		},
+		{
+			label:  "all light gray (low bit set)",
+			planeA: []byte{0xFF},
+			planeB: []byte{0x00},
+			want:   []byte{0x55, 0x55},
+		},
+		{
+			label:  "all dark gray (high bit set)",
+			planeA: []byte{0x00},
+			planeB: []byte{0xFF},
+			want:   []byte{0xAA, 0xAA},
+		},
+		{
+			label:  "mixed w,l,d,b, b,d,l,w",
+			planeA: []byte{0x5A},
+			planeB: []byte{0x3C},
+			want:   []byte{0x1B, 0xE4},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			got := joinGray4Planes(tc.planeA, tc.planeB)
+			if len(got) != len(tc.want) {
+				t.Fatalf("len = %d, want %d", len(got), len(tc.want))
+			}
+			for i := range tc.want {
+				if got[i] != tc.want[i] {
+					t.Errorf("byte[%d] = 0x%02X, want 0x%02X", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
+// TestSplitJoinGray4PlanesRoundTrip exercises both helpers as inverses
+// using a packGray4 output as input — the most realistic source of
+// 2bpp buffers in production. If either function develops a bit-order
+// regression, the round-trip catches it without needing a hardware
+// re-derivation.
+func TestSplitJoinGray4PlanesRoundTrip(t *testing.T) {
+	p := &DisplayProfile{Name: "rt", Width: 16, Height: 4, Color: Gray4}
+	img := image.NewGray(image.Rect(0, 0, 16, 4))
+	// Sprinkle all four shades so the buffer has non-trivial bits set.
+	shades := []uint8{0xFF, 0xC0, 0x80, 0x00}
+	for y := range 4 {
+		for x := range 16 {
+			img.Set(x, y, color.Gray{Y: shades[(x+y)%4]})
+		}
+	}
+	orig, err := PackImage(p, img)
+	if err != nil {
+		t.Fatalf("PackImage: %v", err)
+	}
+
+	a, b := splitGray4Planes(orig)
+	back := joinGray4Planes(a, b)
+	if len(back) != len(orig) {
+		t.Fatalf("round-trip length = %d, want %d", len(back), len(orig))
+	}
+	for i := range orig {
+		if back[i] != orig[i] {
+			t.Errorf("byte[%d] = 0x%02X, want 0x%02X (round-trip lost)",
+				i, back[i], orig[i])
+		}
+	}
+}
+
 // --- UnpackBuffer tests ---
 
 func TestUnpackBuffer_RoundTrip(t *testing.T) {
@@ -426,5 +519,139 @@ func TestUnpackBuffer_KnownBuffer(t *testing.T) {
 		if c.Y < 128 {
 			t.Errorf("pixel (%d,0): Y=%d, want white (>=128)", x, c.Y)
 		}
+	}
+}
+
+// TestUnpackBuffer_Gray4 validates the inverse of packGray4: a 2bpp
+// buffer decodes back to a 4-colour paletted image with the four
+// canonical luminances. The pixel codes in Inkwell's encoding
+// (white=00, light=01, dark=10, black=11) align with the palette
+// indices so the byte 0x1B = 0b00_01_10_11 unpacks to
+// white,light,dark,black left-to-right.
+func TestUnpackBuffer_Gray4(t *testing.T) {
+	p := &DisplayProfile{Name: "test", Width: 4, Height: 1, Color: Gray4}
+	buf := []byte{0x1B} // w, l, d, b
+	img := UnpackBuffer(p, buf)
+
+	wantY := []uint8{0xFF, 0xC0, 0x80, 0x00}
+	for x, want := range wantY {
+		got := color.GrayModel.Convert(img.At(x, 0)).(color.Gray)
+		if got.Y != want {
+			t.Errorf("pixel (%d,0): Y=0x%02X, want 0x%02X", x, got.Y, want)
+		}
+	}
+	// The palette must have exactly 4 entries so PNG encoding picks the
+	// right bit depth and clients see four distinct shades.
+	if len(img.Palette) != 4 {
+		t.Errorf("palette len = %d, want 4", len(img.Palette))
+	}
+}
+
+func TestUnpackBuffer_Gray4_RoundTrip(t *testing.T) {
+	p := &DisplayProfile{Name: "rt", Width: 16, Height: 4, Color: Gray4}
+	img := image.NewGray(image.Rect(0, 0, 16, 4))
+	shades := []uint8{0xFF, 0xC0, 0x80, 0x00}
+	for y := range 4 {
+		for x := range 16 {
+			img.Set(x, y, color.Gray{Y: shades[(x+y)%4]})
+		}
+	}
+	buf, err := PackImage(p, img)
+	if err != nil {
+		t.Fatalf("PackImage: %v", err)
+	}
+	got := UnpackBuffer(p, buf)
+	for y := range 4 {
+		for x := range 16 {
+			origY := color.GrayModel.Convert(img.At(x, y)).(color.Gray).Y
+			gotY := color.GrayModel.Convert(got.At(x, y)).(color.Gray).Y
+			if origY != gotY {
+				t.Errorf("pixel (%d,%d): orig=0x%02X got=0x%02X", x, y, origY, gotY)
+			}
+		}
+	}
+}
+
+// --- reconstructFrame tests ---
+//
+// reconstructFrame is the shared helper that capture backends
+// (WebPreview, ImageBackend) use to turn the two on-wire planes back
+// into a viewable image. It dispatches on profile.Color so each
+// backend's per-frame handling stays a one-liner.
+
+func TestReconstructFrame_BW(t *testing.T) {
+	p := bwTestProfile()
+	// Single black pixel at (0,0); rest white.
+	pack := make([]byte, p.BufferSize())
+	pack[0] = 0x80
+	// The "old" plane is whatever Display sent — by convention ~pack —
+	// but reconstructFrame for BW must ignore it and use only pack.
+	old := make([]byte, p.BufferSize())
+	for i, b := range pack {
+		old[i] = ^b
+	}
+
+	img, err := reconstructFrame(p, old, pack)
+	if err != nil {
+		t.Fatalf("reconstructFrame: %v", err)
+	}
+	c := color.GrayModel.Convert(img.At(0, 0)).(color.Gray)
+	if c.Y >= 128 {
+		t.Errorf("pixel (0,0) Y=%d, want black", c.Y)
+	}
+}
+
+func TestReconstructFrame_Gray4(t *testing.T) {
+	// 16 pixels = 4 bytes 2bpp → 2 bytes per plane.
+	p := &DisplayProfile{Name: "test", Width: 16, Height: 1, Color: Gray4}
+	full := []byte{0x1B, 0xE4, 0x55, 0xAA} // w,l,d,b, b,d,l,w, then 4 light, 4 dark
+	planeA, planeB := splitGray4Planes(full)
+
+	img, err := reconstructFrame(p, planeA, planeB)
+	if err != nil {
+		t.Fatalf("reconstructFrame: %v", err)
+	}
+	wantY := []uint8{0xFF, 0xC0, 0x80, 0x00} // first 4 pixels: w, l, d, b
+	for x, want := range wantY {
+		got := color.GrayModel.Convert(img.At(x, 0)).(color.Gray).Y
+		if got != want {
+			t.Errorf("pixel (%d,0) Y=0x%02X, want 0x%02X", x, got, want)
+		}
+	}
+}
+
+func TestReconstructFrame_SizeMismatch(t *testing.T) {
+	cases := []struct {
+		label   string
+		profile *DisplayProfile
+		old     []byte
+		new     []byte
+	}{
+		{
+			label:   "BW: new plane wrong size",
+			profile: bwTestProfile(),
+			old:     make([]byte, 32),
+			new:     make([]byte, 31),
+		},
+		{
+			label:   "Gray4: planes mismatched",
+			profile: &DisplayProfile{Name: "t", Width: 16, Height: 2, Color: Gray4},
+			old:     make([]byte, 4),
+			new:     make([]byte, 3),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			if _, err := reconstructFrame(tc.profile, tc.old, tc.new); err == nil {
+				t.Error("expected error, got nil")
+			}
+		})
+	}
+}
+
+func TestReconstructFrame_UnsupportedColorDepth(t *testing.T) {
+	p := &DisplayProfile{Name: "c7", Width: 16, Height: 2, Color: Color7}
+	if _, err := reconstructFrame(p, nil, nil); err == nil {
+		t.Error("expected error for Color7, got nil")
 	}
 }

@@ -123,9 +123,49 @@ func splitGray4Planes(buf []byte) (planeA, planeB []byte) {
 	return planeA, planeB
 }
 
-// UnpackBuffer converts a packed BW display buffer back to a paletted image.
-// Bit 1 → black, bit 0 → white. Inverse of packBW.
+// joinGray4Planes reverses splitGray4Planes: given the two 1bpp planes
+// the controller saw on the wire, reconstruct the original 2bpp buffer.
+// Plane A holds the low bit of each pixel and plane B the high bit, so
+// the join is a per-bit OR with the right shifts. Used by capture
+// backends (WebPreview, ImageBackend) that observe the SPI traffic and
+// want to render what the panel would show.
+func joinGray4Planes(planeA, planeB []byte) []byte {
+	buf := make([]byte, len(planeA)*2)
+	for i := range planeA {
+		a, b := planeA[i], planeB[i]
+		var b0, b1 byte
+		for n := range 8 {
+			inShift := uint(7 - n)
+			pixA := (a >> inShift) & 1
+			pixB := (b >> inShift) & 1
+			pix := (pixB << 1) | pixA
+			// Pixels 0..3 → b0 (bits 7-6, 5-4, 3-2, 1-0); pixels 4..7 → b1.
+			outShift := uint(6 - 2*(n&3))
+			if n < 4 {
+				b0 |= pix << outShift
+			} else {
+				b1 |= pix << outShift
+			}
+		}
+		buf[i*2] = b0
+		buf[i*2+1] = b1
+	}
+	return buf
+}
+
+// UnpackBuffer converts a packed display buffer back into a paletted
+// image. The decoding tracks the profile's ColorDepth:
+//
+//   - BW: bit 1 → black, bit 0 → white (inverse of packBW).
+//   - Gray4: each 2-bit code maps to one of four canonical luminances
+//     (white=00, light=01, dark=10, black=11), inverse of packGray4.
+//
+// The returned image's palette indices line up with the pixel codes so
+// downstream encoders (PNG, scaling) preserve the four distinct shades.
 func UnpackBuffer(profile *DisplayProfile, buf []byte) *image.Paletted {
+	if profile.Color == Gray4 {
+		return unpackGray4(profile, buf)
+	}
 	palette := color.Palette{color.White, color.Black}
 	img := image.NewPaletted(image.Rect(0, 0, profile.Width, profile.Height), palette)
 	w := profile.Width
@@ -140,4 +180,58 @@ func UnpackBuffer(profile *DisplayProfile, buf []byte) *image.Paletted {
 		}
 	}
 	return img
+}
+
+// gray4Palette maps Inkwell's 2-bit pixel codes to canonical luminances.
+// Index = pixel code, so SetColorIndex(x, y, code) does the right thing.
+var gray4Palette = color.Palette{
+	color.Gray{Y: 0xFF}, // 00 white
+	color.Gray{Y: 0xC0}, // 01 light gray
+	color.Gray{Y: 0x80}, // 10 dark gray
+	color.Gray{Y: 0x00}, // 11 black
+}
+
+func unpackGray4(profile *DisplayProfile, buf []byte) *image.Paletted {
+	img := image.NewPaletted(image.Rect(0, 0, profile.Width, profile.Height), gray4Palette)
+	w := profile.Width
+	h := profile.Height
+	for y := range h {
+		for x := range w {
+			p := y*w + x
+			shift := uint(6 - (p%4)*2)
+			code := (buf[p/4] >> shift) & 0b11
+			img.SetColorIndex(x, y, code)
+		}
+	}
+	return img
+}
+
+// reconstructFrame turns the two on-wire planes captured by a Hardware
+// backend back into a viewable image. The behaviour depends on
+// profile.Color:
+//
+//   - BW: the "old" plane is just ~"new" so we ignore it and unpack the
+//     new plane directly.
+//   - Gray4: the buffer was split into two 1bpp planes for the wire;
+//     join them to recover the 2bpp buffer, then unpack.
+//
+// Returns an error if the plane sizes don't match the profile or the
+// color depth isn't supported by capture backends.
+func reconstructFrame(profile *DisplayProfile, planeOld, planeNew []byte) (*image.Paletted, error) {
+	switch profile.Color {
+	case BW:
+		if expected := profile.BufferSize(); len(planeNew) != expected {
+			return nil, fmt.Errorf("BW buffer size %d does not match expected %d", len(planeNew), expected)
+		}
+		return UnpackBuffer(profile, planeNew), nil
+	case Gray4:
+		expected := profile.BufferSize() / 2
+		if len(planeOld) != expected || len(planeNew) != expected {
+			return nil, fmt.Errorf("Gray4 plane sizes (%d, %d) do not match expected (%d, %d)",
+				len(planeOld), len(planeNew), expected, expected)
+		}
+		return UnpackBuffer(profile, joinGray4Planes(planeOld, planeNew)), nil
+	default:
+		return nil, fmt.Errorf("reconstructFrame: unsupported color depth %v", profile.Color)
+	}
 }
