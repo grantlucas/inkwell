@@ -92,6 +92,43 @@ func TestParse_AllDayEvent(t *testing.T) {
 	}
 }
 
+// All-day VEVENTs without DTEND default to DTSTART+1 day per RFC 5545
+// §3.6.1. The previous behavior of End == Start would drop the event
+// from filterEventsForDay (which checks End.After(start)), making the
+// event invisible on the dashboard.
+func TestParse_AllDayEventNoDTEND(t *testing.T) {
+	f, err := os.Open("testdata/allday_no_dtend.ics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if cerr := f.Close(); cerr != nil {
+			t.Errorf("close fixture: %v", cerr)
+		}
+	}()
+
+	events, err := Parse(f)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+
+	e := events[0]
+	if !e.AllDay {
+		t.Error("AllDay = false, want true")
+	}
+	wantStart := time.Date(2026, 6, 6, 0, 0, 0, 0, time.UTC)
+	if !e.Start.Equal(wantStart) {
+		t.Errorf("Start = %v, want %v", e.Start, wantStart)
+	}
+	wantEnd := wantStart.AddDate(0, 0, 1)
+	if !e.End.Equal(wantEnd) {
+		t.Errorf("End = %v, want %v (Start+1 day)", e.End, wantEnd)
+	}
+}
+
 func TestParse_FoldedLines(t *testing.T) {
 	f, err := os.Open("testdata/folded.ics")
 	if err != nil {

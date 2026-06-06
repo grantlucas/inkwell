@@ -35,9 +35,16 @@ func Parse(r io.Reader) ([]Event, error) {
 			hasDuration = false
 		case line == "END:VEVENT":
 			if inEvent && cur != nil && !cur.Start.IsZero() {
-				if hasDuration {
+				switch {
+				case hasDuration:
 					cur.End = cur.Start.Add(curDuration)
-				} else if cur.End.IsZero() {
+				case cur.End.IsZero() && cur.AllDay:
+					// RFC 5545 §3.6.1: an all-day VEVENT without DTEND
+					// or DURATION ends at DTSTART + 1 day. Defaulting
+					// to Start would otherwise drop the event from
+					// filterEventsForDay's End.After(start) check.
+					cur.End = cur.Start.AddDate(0, 0, 1)
+				case cur.End.IsZero():
 					cur.End = cur.Start
 				}
 				events = append(events, *cur)
