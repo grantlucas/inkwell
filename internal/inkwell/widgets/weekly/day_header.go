@@ -40,9 +40,11 @@ func init() {
 func renderDayHeader(frame *image.Paletted, bounds image.Rectangle, day time.Time, isToday bool) {
 	if isToday {
 		fillRect(frame, bounds, widget.PaperGray10)
-		// Hairline accent at the bottom of the today cell to ground it
-		// visually now that it no longer has an inverse-block edge.
-		drawHLine(frame, bounds.Min.X, bounds.Max.X, bounds.Max.Y-1, widget.PaperGray60)
+		// 1-px underline grounding the today cell. PaperBlack is the
+		// only device-safe choice for a 1-pixel stroke — a flat
+		// PaperGray60 row dithers into a dashed dotted line, which
+		// reads as broken rather than as a "subtle hairline".
+		drawHLine(frame, bounds.Min.X, bounds.Max.X, bounds.Max.Y-1, widget.PaperBlack)
 	}
 
 	dayAbbr := strings.ToUpper(day.Format("Mon"))
