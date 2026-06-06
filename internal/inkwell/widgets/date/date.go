@@ -36,8 +36,13 @@ type Widget struct {
 	format string
 }
 
-// New creates a date widget.
+// New creates a date widget. A nil now falls back to time.Now so the
+// widget renders something reasonable when callers wire it up without
+// an explicit clock.
 func New(bounds image.Rectangle, now func() time.Time, format string) *Widget {
+	if now == nil {
+		now = time.Now
+	}
 	return &Widget{bounds: bounds, now: now, format: format}
 }
 

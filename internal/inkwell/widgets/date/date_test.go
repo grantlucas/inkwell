@@ -93,3 +93,13 @@ func TestFactory_NilNow(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 }
+
+// Direct callers of New must also survive a nil clock; the constructor
+// defaults to time.Now rather than crashing the first Render call.
+func TestNew_NilNow(t *testing.T) {
+	w := New(image.Rect(0, 0, 800, 50), nil, "Monday")
+	frame := image.NewPaletted(image.Rect(0, 0, 800, 50), widget.PaperPalette)
+	if err := w.Render(frame); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+}
