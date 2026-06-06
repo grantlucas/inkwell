@@ -1,105 +1,105 @@
 # Installing Inkwell on a Raspberry Pi
 
 This guide walks you from a fresh Raspberry Pi to a running Inkwell
-service that drives your e-paper panel. The development flow is to
-**cross-compile on your workstation, copy the resulting binary to the
-Pi, and run it as a systemd service** — no Go toolchain on the Pi
-itself.
+service that drives your e-paper panel. The supported flow is to
+**download a published release binary, copy it to the Pi, and run it
+as a systemd service** — no Go toolchain, no compiler, no source
+checkout required on either machine.
 
 > **About the SPI backend.** Inkwell currently ships two production
 > backends: `preview` (HTTP + SSE preview that you can hit from your
 > network) and `image` (PNG snapshots on disk). The `spi` backend is
 > wired up in code but its periph.io `host.Init()` bootstrap is still
-> stubbed — building Inkwell with `-tags hardware` and choosing
-> `backend: spi` will error at startup until that integration lands
-> (see [Known gaps][gaps]). The instructions below give you a working
-> end-to-end install with the `preview` backend today, and call out
-> the extra steps for the `spi` backend once it's available. Beads
-> tracks the SPI integration work via `bd ready`.
+> stubbed — choosing `backend: spi` will error at startup until that
+> integration lands (see [Known gaps][gaps]). The instructions below
+> give you a working end-to-end install with the `preview` backend
+> today; once the SPI integration lands, switching is a one-line
+> config change. Beads tracks the SPI integration work via
+> `bd ready`.
 
 [gaps]: ../tech-specs/06-go-implementation-guide.md#known-gaps
 
 ## Prerequisites
 
-On your workstation:
-
-- Go 1.25+ (matches [`go.mod`](../../go.mod))
-- An SSH-accessible Raspberry Pi (Zero 2 W, 3, 4 — anything that runs
-  `linux/arm64` Raspberry Pi OS; `linux/arm` 32-bit is also supported,
-  see the cross-compile section)
-- The Waveshare 7.5" e-Paper V2 + E-Paper Driver HAT, wired and
-  powered. If you've never confirmed the panel works on this Pi, the
-  [Waveshare wiki](https://www.waveshare.com/wiki/7.5inch_e-Paper_HAT_Manual)
-  has the vendor Python test for hardware bringup.
-
 On the Pi:
 
-- Raspberry Pi OS (64-bit recommended)
+- Raspberry Pi OS (64-bit recommended; 32-bit is also supported).
 - SPI enabled via `sudo raspi-config → Interfacing Options → SPI → Yes`
   (then reboot). Verify with `ls /dev/spi*` — you should see
   `/dev/spidev0.0`.
-- The `pi` user (or whatever user you'll run Inkwell as) is in the
-  `gpio` and `spi` groups so it can open `/dev/gpiochip0` and
-  `/dev/spidev0.0` without root:
+- The user that will run Inkwell is in the `gpio` and `spi` groups so
+  it can open `/dev/gpiochip0` and `/dev/spidev0.0` without root:
 
   ```bash
   sudo usermod -aG gpio,spi pi
   # Log out and back in for group membership to take effect.
   ```
 
-## 1. Cross-Compile the Binary
+You don't need Go, Python, or any build tools on the Pi.
 
-From the repo root on your workstation:
+## 1. Pick Your Architecture
 
-```bash
-# 64-bit Raspberry Pi OS (Pi Zero 2 W, 3, 4, 5)
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
-  go build -o build/inkwell-arm64 ./cmd/inkwell
-
-# 32-bit Raspberry Pi OS (older Pis or 32-bit images)
-GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 \
-  go build -o build/inkwell-armv7 ./cmd/inkwell
-```
-
-To compile the SPI backend in (once the real-hardware path is wired —
-see [Known gaps][gaps]), add `-tags hardware`:
+Check what your Pi is running:
 
 ```bash
-GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
-  go build -tags hardware -o build/inkwell-arm64 ./cmd/inkwell
+uname -m
 ```
 
-`CGO_ENABLED=0` keeps the binary statically linked against musl-free
-Go — no glibc / libgpiod surprises when you copy it to the Pi.
+<!-- markdownlint-disable MD013 -->
+| `uname -m` says | Download asset suffix | Typical hardware |
+|-----------------|-----------------------|------------------|
+| `aarch64`       | `linux-arm64`         | 64-bit Raspberry Pi OS on Pi Zero 2 W, 3, 4, 5 |
+| `armv7l`        | `linux-armv7`         | 32-bit Raspberry Pi OS on Pi 2, 3, 4, Zero 2 W |
+| `armv6l`        | `linux-armv6`         | 32-bit Raspberry Pi OS on the original Pi Zero / Pi 1 |
+<!-- markdownlint-enable MD013 -->
 
-There's a `make build-pi` target that does the no-tags arm64 build
-into the working directory; the explicit form above is more useful
-when you want to manage build artifacts in `build/`.
+If you're not sure, install the 64-bit Raspberry Pi OS image and use
+`linux-arm64` — it's the actively-tested target.
 
-## 2. Copy the Binary to the Pi
+## 2. Download the Latest Release
+
+On the Pi (or on your workstation if you'd rather `scp` the result):
 
 ```bash
-scp build/inkwell-arm64 pi@inkwell.local:~/inkwell
+# Pick your arch from the table above
+ARCH=linux-arm64
+
+# Always-latest URL — GitHub redirects to the most recent published
+# release. The asset name does not include the version, so this URL
+# stays stable across releases.
+curl -L -o inkwell.tar.gz \
+  "https://github.com/grantlucas/inkwell/releases/latest/download/inkwell-${ARCH}.tar.gz"
+
+tar -xzf inkwell.tar.gz
+chmod +x inkwell
+./inkwell --help 2>&1 | head -1 || echo "binary is in place"
 ```
 
-Substitute the Pi's hostname / IP for `inkwell.local`. If you're new
-to a Pi and haven't set a custom hostname, `raspberrypi.local` is the
-default.
+To pin to a specific tagged version instead of `latest`:
+
+```bash
+VERSION=v0.5.0
+curl -L -o inkwell.tar.gz \
+  "https://github.com/grantlucas/inkwell/releases/download/${VERSION}/inkwell-${ARCH}.tar.gz"
+```
+
+Find published versions on the
+[releases page](https://github.com/grantlucas/inkwell/releases).
 
 ## 3. Write a Config File
 
 Inkwell reads its config from `inkwell.yaml` next to the binary (or
 from a path passed as the first CLI argument). Start from the bundled
-example:
+example, which lives in the release archive:
 
 ```bash
-scp inkwell.example.yaml pi@inkwell.local:~/inkwell.yaml
-ssh pi@inkwell.local
+# inkwell.example.yaml is included in the tarball
+cp inkwell.example.yaml inkwell.yaml
 ```
 
-On the Pi, edit `~/inkwell.yaml` to suit your setup. The example wires
-up a full dashboard (date header, clock, separator, weekly calendar +
-weather). The most important fields to review:
+Edit `inkwell.yaml` to suit your setup. The example wires up a full
+dashboard (date header, clock, separator, weekly calendar + weather).
+The most important fields to review:
 
 ```yaml
 display: waveshare_7in5_v2     # Profile name — leave as-is for the V2
@@ -149,20 +149,20 @@ dashboard:
 ## 4. First Run (Foreground)
 
 ```bash
-ssh pi@inkwell.local
 ./inkwell inkwell.yaml
 ```
 
 If the config parses and the `preview` backend starts, you'll see the
-process come up and serve on the port you configured. From your
-workstation, point a browser at the Pi:
+process come up and serve on the port you configured. From another
+machine on the same network:
 
 ```text
-http://inkwell.local:8080/
+http://<pi-host>:8080/
 ```
 
-You should see the rendered dashboard, with the device-view radio
-toggle for switching to the source (pre-dither) view. Every render
+You should see the rendered dashboard, with a radio toggle for
+switching between the device view (post-dither, what the panel would
+show) and the source view (pre-dither grayscale design). Every render
 tick (default: 60 seconds) the SSE stream pushes a refresh and the
 browser updates automatically.
 
@@ -170,8 +170,18 @@ Press Ctrl-C to stop the foreground process before moving on.
 
 ## 5. Install as a Systemd Service
 
-For unattended operation, run Inkwell as a systemd unit. Create
-`/etc/systemd/system/inkwell.service` on the Pi:
+For unattended operation, run Inkwell as a systemd unit. Move the
+binary and config to stable paths, then create the unit file. Below
+assumes the `pi` user owns the install — adjust `User=` / `Group=` /
+paths to match your setup.
+
+```bash
+sudo install -m 0755 -o pi -g pi inkwell /usr/local/bin/inkwell
+sudo install -d -o pi -g pi /etc/inkwell
+sudo install -m 0644 -o pi -g pi inkwell.yaml /etc/inkwell/inkwell.yaml
+```
+
+Create `/etc/systemd/system/inkwell.service`:
 
 ```ini
 [Unit]
@@ -182,8 +192,7 @@ After=network.target
 Type=simple
 User=pi
 Group=pi
-WorkingDirectory=/home/pi
-ExecStart=/home/pi/inkwell /home/pi/inkwell.yaml
+ExecStart=/usr/local/bin/inkwell /etc/inkwell/inkwell.yaml
 Restart=on-failure
 RestartSec=5s
 
@@ -208,7 +217,7 @@ sudo systemctl status inkwell.service
 Useful commands while iterating:
 
 ```bash
-journalctl -u inkwell -f      # Tail logs
+journalctl -u inkwell -f       # Tail logs
 sudo systemctl restart inkwell # Apply config edits
 sudo systemctl stop inkwell    # Stop the service
 ```
@@ -217,13 +226,13 @@ sudo systemctl stop inkwell    # Stop the service
 
 With the service running:
 
-1. **Web preview reachable?** Open `http://<pi-host>:8080/` from a
-   workstation on the same LAN. The page should render the dashboard
-   at 2× scale.
+1. **Web preview reachable?** Open `http://<pi-host>:8080/` from
+   another machine on the same LAN. The page should render the
+   dashboard at 2× scale.
 2. **Logs healthy?** `journalctl -u inkwell -f` should show no
    repeated error messages, no crash loops.
-3. **Updates flowing?** Watch the browser preview across at least one
-   render-loop tick (default 60s) and confirm the SSE stream is
+3. **Updates flowing?** Watch the browser preview across at least
+   one render-loop tick (default 60s) and confirm the SSE stream is
    pushing refreshes.
 
 Once the SPI backend is enabled and you switch `backend: spi`, the
@@ -234,15 +243,16 @@ and `journalctl -u inkwell -f` will surface any `EPD.Init` /
 
 ## 7. Updating
 
-Re-running steps 1 and 2 (`go build` → `scp`) replaces the binary on
-the Pi. Then:
+To move to a newer release, download the new tarball (step 2), drop
+the new binary in place, and restart the service:
 
 ```bash
+sudo install -m 0755 -o pi -g pi inkwell /usr/local/bin/inkwell
 sudo systemctl restart inkwell
 ```
 
-Config-only changes don't need a fresh binary — edit
-`~/inkwell.yaml` and restart the service.
+Config-only changes don't need a new binary — edit
+`/etc/inkwell/inkwell.yaml` and restart the service.
 
 ## Troubleshooting
 
@@ -256,13 +266,32 @@ can bind the port (no firewall, port not already in use). `ss -lntp`
 on the Pi will show what's listening.
 
 **`spi backend requires building with -tags hardware`** — your binary
-was cross-compiled without the build tag. Re-run `go build` with
-`-tags hardware` and re-deploy.
+was built without the SPI backend compiled in. Release binaries
+should include it; if you see this with an official release, file an
+issue.
 
-**`real hardware init not available in test-only builds`** — you
-built with `-tags hardware` but Inkwell's real-hardware periph.io
-bootstrap is still stubbed. See [Known gaps][gaps]; stay on the
-`preview` backend until that work lands.
+**`real hardware init not available in test-only builds`** — the SPI
+backend's real-hardware periph.io bootstrap is still stubbed. See
+[Known gaps][gaps]; stay on the `preview` backend until that work
+lands.
+
+## Building from Source (Advanced)
+
+If you need to run an unreleased commit or target an architecture
+that the official releases don't cover, you can cross-compile from a
+workstation that has Go 1.25+ installed:
+
+```bash
+git clone https://github.com/grantlucas/inkwell.git
+cd inkwell
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
+  go build -tags hardware -o inkwell ./cmd/inkwell
+scp inkwell pi@inkwell.local:~/
+```
+
+Then continue from step 3 above. This path is intended for
+development, not production installs — official releases are the
+supported install method.
 
 ## Where to Go Next
 
