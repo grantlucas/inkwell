@@ -138,10 +138,13 @@ func TestSelfUpdater_E2E_TamperedChecksumAborts(t *testing.T) {
 	f.start(t)
 	defer f.srv.Close()
 
-	originalBytes, _ := os.ReadFile(f.target)
+	originalBytes, err := os.ReadFile(f.target)
+	if err != nil {
+		t.Fatalf("read original target: %v", err)
+	}
 
 	var out bytes.Buffer
-	err := f.updater(t).Run(nil, &out)
+	err = f.updater(t).Run(nil, &out)
 	if err == nil {
 		t.Fatal("expected checksum mismatch error")
 	}
@@ -149,7 +152,10 @@ func TestSelfUpdater_E2E_TamperedChecksumAborts(t *testing.T) {
 		t.Errorf("error = %q, want mention of checksum", err.Error())
 	}
 
-	got, _ := os.ReadFile(f.target)
+	got, err := os.ReadFile(f.target)
+	if err != nil {
+		t.Fatalf("read target after failure: %v", err)
+	}
 	if !bytes.Equal(got, originalBytes) {
 		t.Errorf("target was modified despite checksum mismatch: %q", got)
 	}
