@@ -22,9 +22,9 @@ func writeFixtureBinary(t *testing.T, dir, name string, content []byte, mode os.
 func TestReplaceAt_SuccessfullySwaps(t *testing.T) {
 	dir := t.TempDir()
 	old := []byte("OLD binary content")
-	new := []byte("NEW binary content from update")
+	updated := []byte("NEW binary content from update")
 	target := writeFixtureBinary(t, dir, "inkwell", old, 0o755)
-	src := writeFixtureBinary(t, t.TempDir(), "inkwell-update", new, 0o755)
+	src := writeFixtureBinary(t, t.TempDir(), "inkwell-update", updated, 0o755)
 
 	r := NewReplacer()
 	if err := r.ReplaceAt(target, src); err != nil {
@@ -35,8 +35,8 @@ func TestReplaceAt_SuccessfullySwaps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read swapped target: %v", err)
 	}
-	if string(got) != string(new) {
-		t.Errorf("target content = %q, want %q", got, new)
+	if string(got) != string(updated) {
+		t.Errorf("target content = %q, want %q", got, updated)
 	}
 	st, err := os.Stat(target)
 	if err != nil {
