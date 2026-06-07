@@ -236,6 +236,26 @@ func TestDownloadVerifyExtract_MalformedTarball(t *testing.T) {
 	}
 }
 
+// failingReader returns an error on every Read so the scanner inside
+// parseChecksumFor surfaces a scan error instead of running to EOF.
+type failingReader struct{}
+
+func (failingReader) Read([]byte) (int, error) { return 0, fmt.Errorf("simulated read failure") }
+
+// TestParseChecksumFor_ScannerError covers the scanner.Err() branch
+// in parseChecksumFor — unreachable from production code (bytes.Reader
+// never errors) but a real failure mode if a caller ever wires a
+// streaming network reader through this path.
+func TestParseChecksumFor_ScannerError(t *testing.T) {
+	_, err := parseChecksumFor(failingReader{}, "inkwell-linux-arm64.tar.gz")
+	if err == nil {
+		t.Fatal("expected scan error")
+	}
+	if !strings.Contains(err.Error(), "read checksums") {
+		t.Errorf("error = %q, want \"read checksums\"", err.Error())
+	}
+}
+
 // TestNewDownloader_NilDefaults confirms the constructor tolerates a
 // nil http.Client and substitutes a timeout-bounded client rather
 // than http.DefaultClient — the default client has no timeout, so a

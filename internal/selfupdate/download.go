@@ -3,6 +3,7 @@ package selfupdate
 import (
 	"archive/tar"
 	"bufio"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -99,15 +100,25 @@ func (d *Downloader) FetchVerifyExtract(assetURL, checksumsURL, assetName string
 }
 
 // fetchExpectedHash downloads checksums.txt and returns the sha256
-// recorded for assetName. Lines are "<sha>  <name>" (two spaces, per
-// GoReleaser); the function is permissive — any whitespace-split
-// 2-token line counts.
+// recorded for assetName.
 func (d *Downloader) fetchExpectedHash(url, assetName string) (string, error) {
 	body, err := d.fetch(url)
 	if err != nil {
 		return "", err
 	}
-	scanner := bufio.NewScanner(strings.NewReader(string(body)))
+	return parseChecksumFor(bytes.NewReader(body), assetName)
+}
+
+// parseChecksumFor walks a checksums.txt stream and returns the
+// sha256 recorded for assetName. Lines are "<sha>  <name>" (two
+// spaces, per GoReleaser); permissive on the whitespace count —
+// strings.Fields collapses any run of spaces/tabs. Split into its
+// own function (taking io.Reader rather than []byte) so a
+// pathological reader can be injected to exercise the scanner.Err()
+// branch — bytes.Reader itself never returns scan errors, so
+// without DI that branch is unreachable.
+func parseChecksumFor(r io.Reader, assetName string) (string, error) {
+	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
 		if len(fields) != 2 {
@@ -116,6 +127,9 @@ func (d *Downloader) fetchExpectedHash(url, assetName string) (string, error) {
 		if fields[1] == assetName {
 			return fields[0], nil
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("read checksums: %w", err)
 	}
 	return "", fmt.Errorf("no checksum entry for %s", assetName)
 }
@@ -159,7 +173,7 @@ func (d *Downloader) fetch(url string) ([]byte, error) {
 // regardless of which entry it is, since the tarball itself is then
 // untrustworthy.
 func extractInkwellBinary(gzBytes []byte) ([]byte, error) {
-	gz, err := gzip.NewReader(strings.NewReader(string(gzBytes)))
+	gz, err := gzip.NewReader(bytes.NewReader(gzBytes))
 	if err != nil {
 		return nil, fmt.Errorf("decompress tarball: %w", err)
 	}
