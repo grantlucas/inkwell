@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bufio"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -30,11 +31,14 @@ type Downloader struct {
 }
 
 // NewDownloader constructs a Downloader using the given HTTP client.
-// Pass http.DefaultClient (or a client with a sane timeout) in
-// production; tests inject httptest.NewServer.Client().
+// Pass an *http.Client with a sane Timeout in production; tests
+// inject httptest.NewServer.Client(). When hc is nil we fall back to
+// a client with a 30s timeout rather than http.DefaultClient (which
+// has no timeout and would let a stalled connection hang the
+// updater forever).
 func NewDownloader(hc *http.Client) *Downloader {
 	if hc == nil {
-		hc = http.DefaultClient
+		hc = &http.Client{Timeout: defaultHTTPTimeout}
 	}
 	return &Downloader{hc: hc, writeFile: os.WriteFile}
 }
@@ -128,9 +132,17 @@ func (d *Downloader) fetchAndHash(url string) ([]byte, string, error) {
 }
 
 // fetch is a tiny http.Get wrapper that surfaces non-200 statuses as
-// errors so callers don't have to repeat that check.
+// errors so callers don't have to repeat that check. Uses
+// NewRequestWithContext so the call respects cancellation /
+// deadlines from the caller's context; the orchestrator currently
+// passes context.Background(), but a future --timeout flag can plumb
+// a real deadline through without changing this signature.
 func (d *Downloader) fetch(url string) ([]byte, error) {
-	resp, err := d.hc.Get(url)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := d.hc.Do(req)
 	if err != nil {
 		return nil, err
 	}

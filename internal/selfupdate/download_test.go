@@ -237,12 +237,17 @@ func TestDownloadVerifyExtract_MalformedTarball(t *testing.T) {
 }
 
 // TestNewDownloader_NilDefaults confirms the constructor tolerates a
-// nil http.Client and falls back to http.DefaultClient — keeps
-// production callers from having to special-case the default.
+// nil http.Client and substitutes a timeout-bounded client rather
+// than http.DefaultClient — the default client has no timeout, so a
+// stalled network connection would otherwise hang the updater
+// indefinitely.
 func TestNewDownloader_NilDefaults(t *testing.T) {
 	d := NewDownloader(nil)
 	if d.hc == nil {
-		t.Fatal("hc must default to http.DefaultClient")
+		t.Fatal("hc must be substituted, not left nil")
+	}
+	if d.hc.Timeout == 0 {
+		t.Errorf("nil-client fallback must set a timeout; got 0")
 	}
 	if d.writeFile == nil {
 		t.Fatal("writeFile must have a default")
@@ -301,9 +306,9 @@ func TestDownloadVerifyExtract_WriteFileFails(t *testing.T) {
 	}
 }
 
-// TestDownloadVerifyExtract_NetworkFailure covers the http.Get error
-// branch (different from the non-200 status branch already tested
-// by ChecksumsFetchFailure / AssetFetchFailure).
+// TestDownloadVerifyExtract_NetworkFailure covers the http.Client.Do
+// error branch (different from the non-200 status branch already
+// tested by ChecksumsFetchFailure / AssetFetchFailure).
 func TestDownloadVerifyExtract_NetworkFailure(t *testing.T) {
 	d := NewDownloader(&http.Client{})
 	_, err := d.FetchVerifyExtract(
@@ -313,6 +318,21 @@ func TestDownloadVerifyExtract_NetworkFailure(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("expected network error")
+	}
+}
+
+// TestDownloadVerifyExtract_InvalidURL covers the
+// http.NewRequestWithContext error branch — an unparseable URL fails
+// before any network call.
+func TestDownloadVerifyExtract_InvalidURL(t *testing.T) {
+	d := NewDownloader(&http.Client{})
+	_, err := d.FetchVerifyExtract(
+		"http://invalid\x00host/asset",
+		"http://invalid\x00host/checksums",
+		"inkwell-linux-arm64.tar.gz",
+	)
+	if err == nil {
+		t.Fatal("expected invalid-URL error")
 	}
 }
 
