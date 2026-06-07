@@ -104,18 +104,20 @@ func looksLikePath(head string) bool {
 }
 
 // invoke calls handler, surfaces any error on stderr, and returns the
-// matching exit code.
+// matching exit code. The fmt.Fprintf return is intentionally
+// discarded — if writing to stderr fails the process is already in a
+// bad state and there's nowhere useful to report it.
 func invoke(stderr io.Writer, handler func() error) int {
 	if err := handler(); err != nil {
-		fmt.Fprintf(stderr, "inkwell: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "inkwell: %v\n", err)
 		return 1
 	}
 	return 0
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "usage: inkwell [config.yaml]")
-	fmt.Fprintln(w, "       inkwell self-update [--check] [--force]")
-	fmt.Fprintln(w, "       inkwell version")
-	fmt.Fprintln(w, "       inkwell --version | -v")
+	_, _ = fmt.Fprintln(w, "usage: inkwell [config.yaml]")
+	_, _ = fmt.Fprintln(w, "       inkwell self-update [--check] [--force]")
+	_, _ = fmt.Fprintln(w, "       inkwell version")
+	_, _ = fmt.Fprintln(w, "       inkwell --version | -v")
 }
