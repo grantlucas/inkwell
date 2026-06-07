@@ -252,12 +252,15 @@ tarball, sha256-verifies it against `checksums.txt`, and atomically
 replaces the running binary:
 
 ```bash
-inkwell --version                  # short form (grep-friendly)
-inkwell version                    # long form: commit, build date, runtime
+inkwell --version                  # version + commit + build date + runtime
 sudo inkwell self-update --check   # see what's available, no writes
 sudo inkwell self-update           # apply the latest release
 sudo systemctl restart inkwell     # bring the new binary up
 ```
+
+`inkwell --version` and `-v` print the same multi-line block; the
+first line is always `inkwell vX.Y.Z` so shell scripts can grep it
+without a separate one-line form.
 
 `sudo` is needed because the installed binary at
 `/usr/local/bin/inkwell` is owned by root by default. If you'd

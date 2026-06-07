@@ -11,13 +11,11 @@ import (
 // invoked and with what args, so tests can assert dispatch behavior
 // without involving the real handlers.
 type capture struct {
-	calledApp         bool
-	appConfigPath     string
-	calledSelfUpdate  bool
-	selfUpdateArgs    []string
-	calledShort       bool
-	calledLong        bool
-	longVersionArgs   []string
+	calledApp        bool
+	appConfigPath    string
+	calledSelfUpdate bool
+	selfUpdateArgs   []string
+	calledVersion    bool
 }
 
 func captureOpts(c *capture, stdout, stderr *bytes.Buffer) Options {
@@ -34,13 +32,8 @@ func captureOpts(c *capture, stdout, stderr *bytes.Buffer) Options {
 			c.selfUpdateArgs = args
 			return nil
 		},
-		VersionShort: func() error {
-			c.calledShort = true
-			return nil
-		},
-		VersionLong: func(args []string) error {
-			c.calledLong = true
-			c.longVersionArgs = args
+		Version: func() error {
+			c.calledVersion = true
 			return nil
 		},
 	}
@@ -55,8 +48,6 @@ func TestRun_Dispatch(t *testing.T) {
 		wantSelfUpdate bool
 		wantSelfArgs   []string
 		wantVersion    bool
-		wantLong       bool
-		wantVerArgs    []string
 		wantExit       int
 		wantStderrSub  string
 	}{
@@ -83,13 +74,6 @@ func TestRun_Dispatch(t *testing.T) {
 			args:           []string{"self-update", "--check"},
 			wantSelfUpdate: true,
 			wantSelfArgs:   []string{"--check"},
-		},
-		{
-			label:        "version subcommand dispatches to long form",
-			args:         []string{"version"},
-			wantVersion:  true,
-			wantLong:     true,
-			wantVerArgs:  []string{},
 		},
 		{
 			label:         "unknown subcommand exits non-zero with usage",
@@ -126,12 +110,8 @@ func TestRun_Dispatch(t *testing.T) {
 			if tc.wantSelfUpdate && !stringSliceEq(c.selfUpdateArgs, tc.wantSelfArgs) {
 				t.Errorf("selfUpdateArgs = %v, want %v", c.selfUpdateArgs, tc.wantSelfArgs)
 			}
-			gotVersion := c.calledShort || c.calledLong
-			if gotVersion != tc.wantVersion {
-				t.Errorf("called Version = %v, want %v", gotVersion, tc.wantVersion)
-			}
-			if tc.wantLong && !stringSliceEq(c.longVersionArgs, tc.wantVerArgs) {
-				t.Errorf("longVersionArgs = %v, want %v", c.longVersionArgs, tc.wantVerArgs)
+			if c.calledVersion != tc.wantVersion {
+				t.Errorf("called Version = %v, want %v", c.calledVersion, tc.wantVersion)
 			}
 			if tc.wantStderrSub != "" && !strings.Contains(stderr.String(), tc.wantStderrSub) {
 				t.Errorf("stderr = %q, want substring %q", stderr.String(), tc.wantStderrSub)
@@ -175,11 +155,8 @@ func TestRun_VersionFlagShortCircuits(t *testing.T) {
 			if got != 0 {
 				t.Errorf("exit = %d, want 0", got)
 			}
-			if !c.calledShort {
-				t.Errorf("expected VersionShort handler to be called")
-			}
-			if c.calledLong {
-				t.Errorf("VersionLong should not be called for flag form")
+			if !c.calledVersion {
+				t.Errorf("expected Version handler to be called")
 			}
 		})
 	}

@@ -72,16 +72,10 @@ func (i Info) Platform() string {
 	return i.GOOS + "/" + arch
 }
 
-// ShortLine is the one-line summary printed by `inkwell --version`.
-// First token after the program name is always the version, so shell
-// scripts can grep for it.
-func (i Info) ShortLine() string {
-	return fmt.Sprintf("inkwell %s (%s)", i.Version, i.Platform())
-}
-
-// LongBlock is the multi-line block printed by `inkwell version`.
-// Includes every field — copy-pasting this into a bug report should
-// fully identify the binary.
+// LongBlock is the multi-line block printed by `inkwell --version`.
+// First line is `inkwell vX.Y.Z` so shell scripts can grep for the
+// version; the remaining fields (commit, build date, Go runtime,
+// platform) make the output copy-paste-able into a bug report.
 func (i Info) LongBlock() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "inkwell %s\n", i.Version)

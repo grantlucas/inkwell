@@ -22,12 +22,11 @@ const repoSlug = "grantlucas/inkwell"
 
 func main() {
 	os.Exit(cli.Run(os.Args[1:], cli.Options{
-		Stdout:       os.Stdout,
-		Stderr:       os.Stderr,
-		RunApp:       runApp,
-		SelfUpdate:   selfUpdate,
-		VersionShort: func() error { return cli.PrintVersionShort(os.Stdout) },
-		VersionLong:  func([]string) error { return cli.PrintVersionLong(os.Stdout) },
+		Stdout:     os.Stdout,
+		Stderr:     os.Stderr,
+		RunApp:     runApp,
+		SelfUpdate: selfUpdate,
+		Version:    func() error { return cli.PrintVersion(os.Stdout) },
 	}))
 }
 

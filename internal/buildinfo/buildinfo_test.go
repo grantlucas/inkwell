@@ -75,22 +75,10 @@ func TestInfo_Platform(t *testing.T) {
 	}
 }
 
-// TestInfo_ShortLine is what `inkwell --version` prints. The format
-// is stable enough to grep — first token after the program name is
-// always the version, and the platform is parenthesized at the end.
-func TestInfo_ShortLine(t *testing.T) {
-	info := Info{Version: "v1.2.3", GOOS: "linux", GOARCH: "arm64"}
-	got := info.ShortLine()
-	if !strings.HasPrefix(got, "inkwell v1.2.3 ") {
-		t.Errorf("ShortLine() = %q, want prefix \"inkwell v1.2.3 \"", got)
-	}
-	if !strings.Contains(got, "(linux/arm64)") {
-		t.Errorf("ShortLine() = %q, want it to contain platform \"(linux/arm64)\"", got)
-	}
-}
-
-// TestInfo_LongBlock is what `inkwell version` prints. Every labelled
-// field has to appear so a bug report copy-paste includes them all.
+// TestInfo_LongBlock is what `inkwell --version` prints. Every
+// labelled field has to appear so a bug report copy-paste includes
+// them all, and the first line must start with `inkwell vX.Y.Z` so
+// scripts can grep the version.
 func TestInfo_LongBlock(t *testing.T) {
 	info := Info{
 		Version: "v1.2.3",

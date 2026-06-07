@@ -29,15 +29,11 @@ type Options struct {
 	// the handler.
 	SelfUpdate func(args []string) error
 
-	// VersionShort handles the `--version` / `-v` flag form, which
-	// prints a one-line summary suitable for shell scripts.
-	VersionShort func() error
-
-	// VersionLong handles the `version` subcommand, which prints a
-	// multi-line block with commit, build date, go runtime, and
-	// platform. Receives any args after the subcommand (currently
-	// unused but reserved for future flags like --json).
-	VersionLong func(args []string) error
+	// Version handles `--version` / `-v`. Prints the build metadata
+	// block (version, commit, build date, runtime, platform) — the
+	// first token is always `inkwell vX.Y.Z` so shell scripts can
+	// grep the version without a separate one-line form.
+	Version func() error
 }
 
 const defaultConfigPath = "inkwell.yaml"
@@ -59,14 +55,14 @@ const defaultConfigPath = "inkwell.yaml"
 //
 //  1. `--version` / `-v` anywhere → Version handler.
 //  2. No args → RunApp with the default config path.
-//  3. First arg is `self-update` or `version` → subcommand handler.
+//  3. First arg is `self-update` → subcommand handler.
 //  4. First arg looks like a path → RunApp.
 //  5. First arg starts with `-` → unknown flag → usage error.
 //  6. Anything else → unknown subcommand → usage error.
 func Run(args []string, opts Options) int {
 	for _, a := range args {
 		if a == "--version" || a == "-v" {
-			return invoke(opts.Stderr, opts.VersionShort)
+			return invoke(opts.Stderr, opts.Version)
 		}
 	}
 
@@ -77,11 +73,8 @@ func Run(args []string, opts Options) int {
 	head := args[0]
 	rest := args[1:]
 
-	switch head {
-	case "self-update":
+	if head == "self-update" {
 		return invoke(opts.Stderr, func() error { return opts.SelfUpdate(rest) })
-	case "version":
-		return invoke(opts.Stderr, func() error { return opts.VersionLong(rest) })
 	}
 
 	if looksLikePath(head) {
@@ -118,6 +111,5 @@ func invoke(stderr io.Writer, handler func() error) int {
 func printUsage(w io.Writer) {
 	_, _ = fmt.Fprintln(w, "usage: inkwell [config.yaml]")
 	_, _ = fmt.Fprintln(w, "       inkwell self-update [--check] [--force]")
-	_, _ = fmt.Fprintln(w, "       inkwell version")
 	_, _ = fmt.Fprintln(w, "       inkwell --version | -v")
 }
