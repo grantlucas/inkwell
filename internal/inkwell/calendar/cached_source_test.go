@@ -144,6 +144,54 @@ func TestCachedSource_FirstCallError(t *testing.T) {
 	}
 }
 
+// TestCachedSource_ExpandsRecurringEvents confirms the cache layer
+// runs RRULE expansion at filter time. A real feed contains a master
+// recurring event; the dashboard wants concrete occurrences per its
+// requested window. Without this wiring, only the master DTSTART
+// would surface and a weekly standup would appear exactly once.
+func TestCachedSource_ExpandsRecurringEvents(t *testing.T) {
+	now := time.Date(2026, 4, 27, 0, 0, 0, 0, time.UTC) // Monday
+	master := Event{
+		UID:     "weekly",
+		Summary: "Standup",
+		Start:   time.Date(2026, 4, 27, 9, 0, 0, 0, time.UTC),
+		End:     time.Date(2026, 4, 27, 9, 30, 0, 0, time.UTC),
+		Recurrence: &Recurrence{
+			Freq:  FreqDaily,
+			Count: 5,
+		},
+	}
+	inner := &countingSource{events: []Event{master}}
+	src := NewCachedSource(inner, 15*time.Minute, func() time.Time { return now })
+
+	got, err := src.Events(context.Background(), now, now.Add(7*24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// COUNT=5 fits inside a 7-day window → 5 expanded occurrences.
+	if len(got) != 5 {
+		t.Fatalf("got %d, want 5 (%v)", len(got), got)
+	}
+	// Assert actual instants, not just count — a count-only check
+	// would pass even if expansion emitted five wrong/duplicate days.
+	baseStart := time.Date(2026, 4, 27, 9, 0, 0, 0, time.UTC)
+	baseEnd := time.Date(2026, 4, 27, 9, 30, 0, 0, time.UTC)
+	for i, e := range got {
+		wantStart := baseStart.AddDate(0, 0, i)
+		wantEnd := baseEnd.AddDate(0, 0, i)
+		if !e.Start.Equal(wantStart) || !e.End.Equal(wantEnd) {
+			t.Errorf("occ[%d] = [%s,%s), want [%s,%s)", i, e.Start, e.End, wantStart, wantEnd)
+		}
+	}
+	// Each occurrence must be flattened (no Recurrence pointer leaking
+	// downstream — widgets would otherwise re-expand recursively).
+	for i, e := range got {
+		if e.Recurrence != nil {
+			t.Errorf("occ[%d] still has Recurrence", i)
+		}
+	}
+}
+
 func TestCachedSource_ConcurrentAccess(t *testing.T) {
 	now := time.Date(2026, 4, 25, 9, 0, 0, 0, time.UTC)
 	events := []Event{

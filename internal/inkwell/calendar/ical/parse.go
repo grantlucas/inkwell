@@ -35,6 +35,15 @@ func Parse(r io.Reader) ([]Event, error) {
 			hasDuration = false
 		case line == "END:VEVENT":
 			if inEvent && cur != nil && !cur.Start.IsZero() {
+				// EXDATE without RRULE would otherwise leave a
+				// Recurrence with Freq=0; Occurrences would route the
+				// event through expand(), the switch on Freq would
+				// match no case, and the event would vanish silently.
+				// Orphan EXDATEs have no meaning per RFC 5545 — drop
+				// the recurrence metadata and keep the single instance.
+				if cur.Recurrence != nil && cur.Recurrence.Freq == 0 {
+					cur.Recurrence = nil
+				}
 				switch {
 				case hasDuration:
 					cur.End = cur.Start.Add(curDuration)
@@ -82,6 +91,37 @@ func Parse(r io.Reader) ([]Event, error) {
 				}
 				curDuration = d
 				hasDuration = true
+			case "RRULE":
+				rule, err := parseRRULE(value)
+				if err != nil {
+					return nil, fmt.Errorf("parse RRULE: %w", err)
+				}
+				// Carry forward any EXDATEs that arrived before this
+				// RRULE — Google Calendar emits EXDATE-before-RRULE.
+				if cur.Recurrence != nil {
+					rule.ExDates = append(rule.ExDates, cur.Recurrence.ExDates...)
+				}
+				cur.Recurrence = &rule
+			case "EXDATE":
+				// EXDATE may appear multiple times and each line may
+				// carry a comma-separated list. The full property line
+				// (not just value) is needed so the TZID parameter
+				// anchors naive datetimes to the right zone — without
+				// this, a "EXDATE;TZID=America/Los_Angeles:..." would
+				// parse as UTC and fail to match the corresponding
+				// TZID-anchored occurrence instant.
+				params, _, _ := strings.Cut(line, ":")
+				loc := extractTZID(params)
+				for v := range strings.SplitSeq(value, ",") {
+					t, err := parseICSTime(v, loc)
+					if err != nil {
+						return nil, fmt.Errorf("parse EXDATE %q: %w", v, err)
+					}
+					if cur.Recurrence == nil {
+						cur.Recurrence = &Recurrence{}
+					}
+					cur.Recurrence.ExDates = append(cur.Recurrence.ExDates, t)
+				}
 			}
 		}
 	}
