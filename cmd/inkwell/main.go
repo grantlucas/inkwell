@@ -3,13 +3,22 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 
+	"github.com/grantlucas/inkwell/internal/buildinfo"
 	"github.com/grantlucas/inkwell/internal/cli"
 	inkwell "github.com/grantlucas/inkwell/internal/inkwell"
+	"github.com/grantlucas/inkwell/internal/selfupdate"
 )
+
+// repoSlug is the GitHub owner/repo the self-update flow pulls
+// releases from. Captured here rather than in selfupdate so the
+// updater package stays generic.
+const repoSlug = "grantlucas/inkwell"
 
 func main() {
 	os.Exit(cli.Run(os.Args[1:], cli.Options{
@@ -51,10 +60,24 @@ func runApp(path string) error {
 	return app.Run(ctx)
 }
 
-// selfUpdate is the entrypoint for `inkwell self-update`. Wired in a
-// later commit; for now it returns a clear "not yet wired" error so
-// the router still has a real handler to dispatch into.
+// selfUpdate is the entrypoint for `inkwell self-update`. Wires the
+// orchestrator to the production implementations of the three
+// injected dependencies (GitHub client, downloader, replacer) and
+// passes the parsed args through.
 func selfUpdate(args []string) error {
-	_ = args
-	return fmt.Errorf("self-update is not wired in this build")
+	info := buildinfo.Get()
+	gh := selfupdate.NewGitHubClient(repoSlug)
+	dl := selfupdate.NewDownloader(http.DefaultClient)
+	rp := selfupdate.NewReplacer()
+
+	u := &selfupdate.SelfUpdater{
+		CurrentVer:    info.Version,
+		GOOS:          runtime.GOOS,
+		GOARCH:        runtime.GOARCH,
+		GOARM:         info.GOARM,
+		FetchLatest:   gh.LatestRelease,
+		FetchAsset:    dl.FetchVerifyExtract,
+		ReplaceBinary: rp.Replace,
+	}
+	return u.Run(args, os.Stdout)
 }
