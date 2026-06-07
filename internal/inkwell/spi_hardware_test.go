@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"periph.io/x/conn/v3"
 	"periph.io/x/conn/v3/gpio"
 	"periph.io/x/conn/v3/gpio/gpiotest"
 	"periph.io/x/conn/v3/physic"
@@ -224,6 +225,90 @@ func TestSPIHardware_SendData_SetsDCHigh(t *testing.T) {
 		t.Errorf("SPI write = %#v, want %#v", record.Ops[0].W, data)
 	}
 }
+
+func TestSPIHardware_SendData_ChunksOverKernelBufLimit(t *testing.T) {
+	// Reproduces what the Pi sees with default spidev.bufsiz=4096:
+	// the BW frame is 48000 bytes; periph.io's sysfs-spi backend
+	// rejects any single Tx larger than the kernel buffer. SendData
+	// must split into spiTxChunkSize-byte chunks so we never hand
+	// the kernel a single oversize transfer.
+	hw, record, _, _, _, _ := newTestSPIHardware(t)
+
+	data := make([]byte, spiTxChunkSize*2+100)
+	for i := range data {
+		data[i] = byte(i)
+	}
+
+	if err := hw.SendData(data); err != nil {
+		t.Fatalf("SendData: %v", err)
+	}
+
+	if got, want := len(record.Ops), 3; got != want {
+		t.Fatalf("SPI ops = %d, want %d (two full chunks + trailing partial)", got, want)
+	}
+	for i, op := range record.Ops {
+		wantSize := spiTxChunkSize
+		if i == len(record.Ops)-1 {
+			wantSize = 100
+		}
+		if len(op.W) != wantSize {
+			t.Errorf("op %d size = %d, want %d", i, len(op.W), wantSize)
+		}
+		if len(op.W) > spiTxChunkSize {
+			t.Errorf("op %d exceeded chunk cap: %d > %d", i, len(op.W), spiTxChunkSize)
+		}
+	}
+	// Reassembled payload must match the original.
+	var joined []byte
+	for _, op := range record.Ops {
+		joined = append(joined, op.W...)
+	}
+	if !bytes.Equal(joined, data) {
+		t.Error("reassembled chunks do not match original payload")
+	}
+}
+
+func TestSPIHardware_SendData_TxError(t *testing.T) {
+	conn := &failingTxConn{err: errors.New("spi tx boom")}
+	hw, err := NewSPIHardware(
+		WithSPIConn(conn),
+		WithGPIOPins(
+			&gpiotest.Pin{N: "RST"},
+			&gpiotest.Pin{N: "DC"},
+			&gpiotest.Pin{N: "BUSY"},
+			&gpiotest.Pin{N: "PWR"},
+		),
+	)
+	if err != nil {
+		t.Fatalf("NewSPIHardware: %v", err)
+	}
+
+	sendErr := hw.SendData(make([]byte, spiTxChunkSize+1))
+	if !errors.Is(sendErr, conn.err) {
+		t.Fatalf("SendData err = %v, want to wrap %v", sendErr, conn.err)
+	}
+	if conn.calls != 1 {
+		t.Errorf("Tx calls = %d, want 1 (loop should bail on first error)", conn.calls)
+	}
+}
+
+// failingTxConn implements spi.Conn and returns err from every Tx.
+// Used to cover the error branch inside SendData's chunk loop.
+type failingTxConn struct {
+	err   error
+	calls int
+}
+
+func (f *failingTxConn) Tx(_, _ []byte) error {
+	f.calls++
+	return f.err
+}
+
+func (f *failingTxConn) Duplex() conn.Duplex { return conn.Full }
+
+func (f *failingTxConn) String() string { return "failingTxConn" }
+
+func (f *failingTxConn) TxPackets(_ []spi.Packet) error { return f.err }
 
 func TestSPIHardware_ReadBusy_HighMeansIdle(t *testing.T) {
 	hw, _, _, _, busyPin, _ := newTestSPIHardware(t)

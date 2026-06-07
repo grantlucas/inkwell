@@ -281,6 +281,15 @@ service user can read it (group `gpio` after re-login); (3) the
 `journalctl -u inkwell` logs for `periph host init` errors that would
 indicate the kernel GPIO driver failed to load.
 
+**`sysfs-spi: maximum Tx length is 4096, got 48000 bytes`** — fixed in
+v0.6.1+. On older binaries (v0.6.0), the SPI backend handed full
+800×480 frames to the kernel's `spidev` driver in a single transfer
+and the kernel rejects anything bigger than its `bufsiz` buffer
+(default 4 KB). If you can't upgrade, raise the kernel buffer once
+at boot: append `spidev.bufsiz=65536` to `/boot/firmware/cmdline.txt`
+(`/boot/cmdline.txt` on older Raspberry Pi OS), reboot, and verify
+with `cat /sys/module/spidev/parameters/bufsiz`.
+
 ## Building from Source (Advanced)
 
 If you need to run an unreleased commit or target an architecture
