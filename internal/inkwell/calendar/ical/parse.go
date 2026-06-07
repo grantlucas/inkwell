@@ -82,6 +82,31 @@ func Parse(r io.Reader) ([]Event, error) {
 				}
 				curDuration = d
 				hasDuration = true
+			case "RRULE":
+				r, err := parseRRULE(value)
+				if err != nil {
+					return nil, fmt.Errorf("parse RRULE: %w", err)
+				}
+				if cur.Recurrence == nil {
+					cur.Recurrence = &Recurrence{}
+				}
+				// Preserve any ExDates that arrived before RRULE.
+				existingExDates := cur.Recurrence.ExDates
+				*cur.Recurrence = r
+				cur.Recurrence.ExDates = append(cur.Recurrence.ExDates, existingExDates...)
+			case "EXDATE":
+				// EXDATE may appear multiple times and may carry a
+				// comma-separated list of values. Collect them all.
+				for v := range strings.SplitSeq(value, ",") {
+					t, err := parseICSTime(v)
+					if err != nil {
+						return nil, fmt.Errorf("parse EXDATE %q: %w", v, err)
+					}
+					if cur.Recurrence == nil {
+						cur.Recurrence = &Recurrence{}
+					}
+					cur.Recurrence.ExDates = append(cur.Recurrence.ExDates, t)
+				}
 			}
 		}
 	}

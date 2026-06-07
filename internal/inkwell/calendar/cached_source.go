@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/calendar/ical"
 )
 
 // CachedSource wraps a Source with a time-based cache. It re-fetches from
@@ -56,21 +58,17 @@ func (c *CachedSource) Events(ctx context.Context, start, end time.Time) ([]Even
 	c.events = append(c.events[:0:0], events...)
 	c.fetched = c.now()
 
-	// Return an independent slice on the first-load path too, mirroring
-	// what filterEvents does for cache hits.
-	out := append([]Event(nil), events...)
-	return out, nil
+	// Run RRULE expansion + window filter through the same path as
+	// cache hits — otherwise the first call returns master recurrences
+	// while subsequent cache-hit calls return expanded occurrences,
+	// surprising callers who'd see different shapes for the same input.
+	return c.filterEvents(start, end), nil
 }
 
-// filterEvents returns cached events overlapping [start, end). The
-// returned slice is freshly allocated so callers can mutate it without
-// affecting subsequent cache reads.
+// filterEvents returns cached events overlapping [start, end). Both
+// non-recurring overlap and recurring-event expansion happen inside
+// ical.Occurrences; the returned slice is freshly allocated so callers
+// can mutate it without affecting subsequent cache reads.
 func (c *CachedSource) filterEvents(start, end time.Time) []Event {
-	var filtered []Event
-	for _, e := range c.events {
-		if e.Start.Before(end) && e.End.After(start) {
-			filtered = append(filtered, e)
-		}
-	}
-	return filtered
+	return ical.Occurrences(c.events, start, end)
 }
