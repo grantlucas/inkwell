@@ -6,18 +6,14 @@ service that drives your e-paper panel. The supported flow is to
 as a systemd service** — no Go toolchain, no compiler, no source
 checkout required on either machine.
 
-> **About the SPI backend.** Inkwell currently ships two production
-> backends: `preview` (HTTP + SSE preview that you can hit from your
-> network) and `image` (PNG snapshots on disk). The `spi` backend is
-> wired up in code but its periph.io `host.Init()` bootstrap is still
-> stubbed — choosing `backend: spi` will error at startup until that
-> integration lands (see [Known gaps][gaps]). The instructions below
-> give you a working end-to-end install with the `preview` backend
-> today; once the SPI integration lands, switching is a one-line
-> config change. Beads tracks the SPI integration work via
-> `bd ready`.
-
-[gaps]: ../tech-specs/06-go-implementation-guide.md#known-gaps
+> **About the SPI backend.** Inkwell ships three production backends:
+> `preview` (HTTP + SSE preview that you can hit from your network),
+> `image` (PNG snapshots on disk), and `spi` (drives the panel
+> directly over the Pi's SPI/GPIO header via periph.io). Released
+> binaries include the SPI backend; switching from `preview` to `spi`
+> is a one-line `inkwell.yaml` change. The instructions below default
+> to `preview` for first-run smoke testing — once the page renders in
+> a browser, you flip `backend: spi` and restart the service.
 
 ## Prerequisites
 
@@ -103,7 +99,7 @@ The most important fields to review:
 
 ```yaml
 display: waveshare_7in5_v2     # Profile name — leave as-is for the V2
-backend: preview               # Use 'preview' today; 'spi' when SPI lands
+backend: preview               # Start with 'preview'; flip to 'spi' for the panel
 preview:
   port: 8080                   # HTTP preview port
 
@@ -235,11 +231,13 @@ With the service running:
    one render-loop tick (default 60s) and confirm the SSE stream is
    pushing refreshes.
 
-Once the SPI backend is enabled and you switch `backend: spi`, the
-verification step extends to **looking at the panel itself** — the
-first full refresh should land within a few seconds of service start,
-and `journalctl -u inkwell -f` will surface any `EPD.Init` /
-`EPD.Display` errors.
+Once you switch `backend: spi`, the verification step extends to
+**looking at the panel itself** — the first full refresh should land
+within a few seconds of service start, and `journalctl -u inkwell -f`
+will surface any `EPD.Init` / `EPD.Display` errors. If the panel
+stays blank, double-check that SPI is enabled
+(`ls /dev/spi*` → `/dev/spidev0.0`) and that the service user has
+`gpio` and `spi` group membership.
 
 ## 7. Updating
 
@@ -267,13 +265,18 @@ on the Pi will show what's listening.
 
 **`spi backend requires building with -tags hardware`** — your binary
 was built without the SPI backend compiled in. Release binaries
-should include it; if you see this with an official release, file an
-issue.
+include it; if you see this with an official release, file an issue.
 
-**`real hardware init not available in test-only builds`** — the SPI
-backend's real-hardware periph.io bootstrap is still stubbed. See
-[Known gaps][gaps]; stay on the `preview` backend until that work
-lands.
+**`open spi port /dev/spidev0.0: …`** — SPI is not enabled on the Pi
+or the service user cannot reach the device node. Verify
+`ls /dev/spi*` shows `/dev/spidev0.0` and that the user running
+Inkwell is in the `spi` group (`groups` after re-login).
+
+**`gpio pin GPIO… not found`** — the periph.io GPIO driver was not
+loaded. Re-check `sudo raspi-config` enabled the GPIO peripherals and
+that you are running on a supported Raspberry Pi (the BCM pin map in
+[`docs/tech-specs/01-hardware-overview.md`](../tech-specs/01-hardware-overview.md)
+assumes the standard 40-pin header).
 
 ## Building from Source (Advanced)
 

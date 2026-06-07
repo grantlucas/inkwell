@@ -6,6 +6,7 @@ require (
 	golang.org/x/image v0.41.0
 	gopkg.in/yaml.v3 v3.0.1
 	periph.io/x/conn/v3 v3.7.3
+	periph.io/x/host/v3 v3.8.5
 )
 
 require (

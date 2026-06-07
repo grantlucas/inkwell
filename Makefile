@@ -1,4 +1,4 @@
-.PHONY: all test vet coverage build build-pi run stop verify fix lint ci clean help
+.PHONY: all test vet coverage build build-pi build-pi-hw run stop verify fix lint ci clean help
 
 # Default target
 all: ci
@@ -42,9 +42,15 @@ stop:
 		|| pkill -f '[/]inkwell/inkwell( |$$)' 2>/dev/null && echo "inkwell stopped" \
 		|| echo "inkwell is not running"
 
-# Cross-compile for Raspberry Pi (linux/arm64)
+# Cross-compile for Raspberry Pi (linux/arm64) — no SPI backend, matches CI smoke build.
 build-pi:
 	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...
+
+# Cross-compile a deployable Pi binary with the SPI backend wired in.
+# Mirrors what the release pipeline produces; output: ./inkwell.
+build-pi-hw:
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
+		go build -tags hardware -o inkwell ./cmd/inkwell
 
 # Verify module dependencies
 verify:
@@ -71,7 +77,8 @@ help:
 	@echo "  make vet        - Run go vet"
 	@echo "  make coverage   - Run tests and check 100% coverage on internal packages"
 	@echo "  make build      - Build for host platform"
-	@echo "  make build-pi   - Cross-compile for Raspberry Pi (linux/arm64)"
+	@echo "  make build-pi   - Cross-compile for Raspberry Pi (linux/arm64, no SPI backend)"
+	@echo "  make build-pi-hw - Cross-compile a Pi binary with the SPI backend (-tags hardware)"
 	@echo "  make run        - Run locally (copy inkwell.example.yaml to inkwell.yaml, or CONFIG=path make run)"
 	@echo "  make stop       - Stop a running inkwell process"
 	@echo "  make verify     - Verify module dependencies"

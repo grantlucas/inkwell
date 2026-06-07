@@ -78,7 +78,7 @@ flowchart TB
     HW --> Mock[MockHardware\nTest double]
     HW --> Img[ImageBackend\nPNG output]
     HW --> Web[WebPreview\nHTTP + SSE]
-    HW --> SPI[SPIHardware\nperiph.io\nplanned]
+    HW --> SPI[SPIHardware\nperiph.io]
 ```
 
 All source lives in `internal/inkwell/`. The entry point is `cmd/inkwell/main.go`.
