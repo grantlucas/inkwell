@@ -80,11 +80,13 @@ Direct dependencies (see [`go.mod`](../../go.mod)):
 
 ```text
 periph.io/x/conn/v3
+periph.io/x/host/v3
 ```
 
-Real-hardware bringup additionally needs `periph.io/x/host/v3` (this is
-brought in when the SPI backend's real-hardware path is finalized; see
-the **Known gaps** section below).
+`host/v3` registers the Linux SPI/GPIO drivers that
+[`spiHardware.initRealHardware`][spi] calls into; without it the
+process would have no `/dev/spidev0.0` opener and no resolver for
+`GPIO17`/`GPIO18`/`GPIO24`/`GPIO25`.
 
 ### Libraries to Avoid
 
@@ -249,9 +251,10 @@ as a fatal config error.
 GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./...
 ```
 
-That covers the default *without* SPI. To include the SPI backend you
-add the build tag — see [`docs/guides/installation.md`](../guides/installation.md)
-for the full install + service workflow.
+That covers the default *without* SPI. To include the SPI backend
+that actually drives the panel, add the `hardware` build tag — this
+is what the [release pipeline](../../.goreleaser.yaml) does for the
+published `linux-arm64` / `linux-armv7` / `linux-armv6` binaries.
 
 ```bash
 # Includes the SPI backend
@@ -268,12 +271,6 @@ These pieces are designed but not fully wired in the current tree.
 The execution plan in [`inkwell-execution-plan.md`](../../inkwell-execution-plan.md)
 and the active beads workspace track them.
 
-- **Real-hardware SPI init.** `spiHardware.initRealHardware()` in
-  [`spi_hardware.go`][spi] is currently a stub returning an error;
-  the live periph.io `host.Init()` + `spireg.Open` + `gpioreg.ByName`
-  wiring is the remaining work. Until it lands, the `spi` backend
-  errors at startup on real hardware. Inkwell runs end-to-end with
-  the `preview` and `image` backends today.
 - **Gray4 device path.** Fully wired host-side: `packGray4` produces the
   2bpp buffer, `EPD.Display` splits it into two 1bpp planes (low bit →
   `0x10`, high bit → `0x13`), `App.Run` selects `Init4Gray` for the

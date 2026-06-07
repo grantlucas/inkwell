@@ -8,7 +8,44 @@ import (
 	"time"
 
 	"periph.io/x/conn/v3/gpio"
+	"periph.io/x/conn/v3/gpio/gpioreg"
+	"periph.io/x/conn/v3/physic"
 	"periph.io/x/conn/v3/spi"
+	"periph.io/x/conn/v3/spi/spireg"
+	"periph.io/x/host/v3"
+)
+
+// Pin and bus identifiers for the Waveshare E-Paper Driver HAT
+// connected to a Raspberry Pi via the 40-pin GPIO header. BCM pin
+// numbers match the Python reference driver (epdconfig.py) and the
+// Waveshare wiki. CS is wired directly to SPI CE0; SendCommand /
+// SendData do not toggle it manually because periph.io's spi.Conn
+// drives CS as part of every Tx.
+const (
+	spiPortName = "/dev/spidev0.0"
+	spiSpeed    = 4 * physic.MegaHertz
+
+	pinNameRST  = "GPIO17" // active-low reset
+	pinNameDC   = "GPIO25" // data (HIGH) / command (LOW)
+	pinNameBUSY = "GPIO24" // HIGH = idle, LOW = busy
+	pinNamePWR  = "GPIO18" // HIGH = panel powered on
+)
+
+// Injection seams for the periph.io entry points. Tests on non-Pi
+// hosts override these to avoid touching real device nodes; the
+// defaults call straight into periph.io.
+//
+// These are package-level mutables for symmetry with createSPIBackendFn
+// in app.go. They are NOT goroutine-safe — tests that swap them must
+// not run with t.Parallel(), and production code must treat them as
+// read-only after init.
+var (
+	hostInitFn = func() error {
+		_, err := host.Init()
+		return err
+	}
+	spiOpenFn    = spireg.Open
+	gpioByNameFn = gpioreg.ByName
 )
 
 // spiHardware drives a real e-paper display via SPI and GPIO using periph.io.
@@ -73,16 +110,74 @@ func (h *spiHardware) validate() error {
 	return nil
 }
 
-// initRealHardware opens the real SPI bus and GPIO pins via periph.io.
+// initRealHardware brings up periph.io drivers, opens the SPI port at
+// /dev/spidev0.0 (4 MHz, mode 0, 8-bit), resolves the four GPIO pins
+// the HAT exposes, and powers the panel on. The Waveshare reference
+// driver leaves CS to be driven implicitly by the SPI peripheral; we
+// do the same — there is no SendCommand/SendData toggle of CS.
 func (h *spiHardware) initRealHardware() error {
-	// Import these only in the real-hardware path to keep test fakes clean.
-	// Lazy imports are not possible in Go, so the build tag gates the entire
-	// file; this method exists to keep the constructor tidy.
+	if err := hostInitFn(); err != nil {
+		return fmt.Errorf("periph host init: %w", err)
+	}
 
-	// host.Init() and spireg/gpioreg usage is deferred to
-	// spi_backend_hardware.go's init function or called here.
-	return fmt.Errorf("real hardware init not available in test-only builds; " +
-		"use WithSPIConn and WithGPIOPins options")
+	port, err := spiOpenFn(spiPortName)
+	if err != nil {
+		return fmt.Errorf("open spi port %s: %w", spiPortName, err)
+	}
+
+	conn, err := port.Connect(spiSpeed, spi.Mode0, 8)
+	if err != nil {
+		_ = port.Close()
+		return fmt.Errorf("configure spi port: %w", err)
+	}
+
+	rst, err := resolvePin(pinNameRST)
+	if err != nil {
+		_ = port.Close()
+		return err
+	}
+	dc, err := resolvePin(pinNameDC)
+	if err != nil {
+		_ = port.Close()
+		return err
+	}
+	busy, err := resolvePin(pinNameBUSY)
+	if err != nil {
+		_ = port.Close()
+		return err
+	}
+	pwr, err := resolvePin(pinNamePWR)
+	if err != nil {
+		_ = port.Close()
+		return err
+	}
+
+	if err := pwr.Out(gpio.High); err != nil {
+		_ = port.Close()
+		return fmt.Errorf("pwr pin high: %w", err)
+	}
+	if err := busy.In(gpio.PullNoChange, gpio.NoEdge); err != nil {
+		// PWR is already HIGH at this point; drop it before bailing so
+		// the panel doesn't sit powered with no driver attached.
+		_ = pwr.Out(gpio.Low)
+		_ = port.Close()
+		return fmt.Errorf("busy pin in: %w", err)
+	}
+
+	h.port = port
+	h.spiConn = conn
+	h.rstPin = rst
+	h.dcPin = dc
+	h.busyPin = busy
+	h.pwrPin = pwr
+	return nil
+}
+
+func resolvePin(name string) (gpio.PinIO, error) {
+	if p := gpioByNameFn(name); p != nil {
+		return p, nil
+	}
+	return nil, fmt.Errorf("gpio pin %s not found (is the kernel driver loaded?)", name)
 }
 
 func (h *spiHardware) SendCommand(cmd byte) error {

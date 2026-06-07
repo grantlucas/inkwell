@@ -15,6 +15,110 @@ import (
 	"periph.io/x/conn/v3/spi/spitest"
 )
 
+// withInjections swaps the periph.io seam functions for the body of
+// the test and restores them via t.Cleanup. A nil seam is replaced
+// with a panic stub so a test that doesn't expect a particular seam
+// to be hit will fail loudly if a refactor reorders initRealHardware
+// — never silently falling through to the real periph.io call (which
+// would touch /dev/spidev0.0 and the GPIO chip on a Pi).
+//
+// Not safe under t.Parallel(): the seam vars are package-level.
+func withInjections(t *testing.T, hostFn func() error, openFn func(string) (spi.PortCloser, error), pinFn func(string) gpio.PinIO, body func()) {
+	t.Helper()
+	if hostFn == nil {
+		hostFn = func() error { panic("hostInitFn called but test did not stub it") }
+	}
+	if openFn == nil {
+		openFn = func(string) (spi.PortCloser, error) {
+			panic("spiOpenFn called but test did not stub it")
+		}
+	}
+	if pinFn == nil {
+		pinFn = func(string) gpio.PinIO { panic("gpioByNameFn called but test did not stub it") }
+	}
+	origHost, origOpen, origPin := hostInitFn, spiOpenFn, gpioByNameFn
+	hostInitFn = hostFn
+	spiOpenFn = openFn
+	gpioByNameFn = pinFn
+	t.Cleanup(func() {
+		hostInitFn = origHost
+		spiOpenFn = origOpen
+		gpioByNameFn = origPin
+	})
+	body()
+}
+
+// recordingPortCloser wraps spitest.Record with a controllable Close
+// behaviour and a Connect that can be made to fail. It records closure
+// so tests can assert that error paths clean up the SPI port.
+type recordingPortCloser struct {
+	spitest.Record
+	closeErr   error
+	connectErr error
+	closed     bool
+}
+
+func (r *recordingPortCloser) Close() error {
+	r.closed = true
+	return r.closeErr
+}
+
+func (r *recordingPortCloser) LimitSpeed(_ physic.Frequency) error {
+	return nil
+}
+
+func (r *recordingPortCloser) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Conn, error) {
+	if r.connectErr != nil {
+		return nil, r.connectErr
+	}
+	return r.Record.Connect(f, m, bits)
+}
+
+// pinSet bundles the four GPIO pins required by spiHardware so a
+// single helper can build it and dependent test cases can mutate
+// individual pins (e.g. swap PWR with a failing pin).
+type pinSet struct {
+	rst, dc, busy, pwr gpio.PinIO
+}
+
+func defaultPinSet() pinSet {
+	return pinSet{
+		rst:  &gpiotest.Pin{N: "GPIO17", Num: 17},
+		dc:   &gpiotest.Pin{N: "GPIO25", Num: 25},
+		busy: &gpiotest.Pin{N: "GPIO24", Num: 24},
+		pwr:  &gpiotest.Pin{N: "GPIO18", Num: 18},
+	}
+}
+
+// pinResolver returns a gpioByNameFn replacement that returns the
+// matching pin from set for each canonical BCM name and nil otherwise.
+// Setting any field of set to nil simulates "pin not found" for that
+// name, which is how tests exercise the not-found branches.
+func pinResolver(set pinSet) func(string) gpio.PinIO {
+	return func(name string) gpio.PinIO {
+		switch name {
+		case pinNameRST:
+			return set.rst
+		case pinNameDC:
+			return set.dc
+		case pinNameBUSY:
+			return set.busy
+		case pinNamePWR:
+			return set.pwr
+		}
+		return nil
+	}
+}
+
+// failInPin wraps gpiotest.Pin and fails on In(). Used to exercise the
+// busy-pin configure error branch in initRealHardware.
+type failInPin struct {
+	gpiotest.Pin
+	err error
+}
+
+func (p *failInPin) In(_ gpio.Pull, _ gpio.Edge) error { return p.err }
+
 func newTestSPIHardware(t *testing.T) (*spiHardware, *spitest.Record, *gpiotest.Pin, *gpiotest.Pin, *gpiotest.Pin, *gpiotest.Pin) {
 	t.Helper()
 
@@ -41,28 +145,43 @@ func newTestSPIHardware(t *testing.T) (*spiHardware, *spitest.Record, *gpiotest.
 }
 
 func TestCreateBackend_SPI_WithHardwareTag(t *testing.T) {
-	// With the hardware tag, createBackend("spi") calls NewSPIHardware() which
-	// tries initRealHardware and fails in a non-Pi environment.
-	cfg := &Config{Backend: "spi"}
-	profile := &Waveshare7in5V2
-	_, err := createBackend(cfg, profile)
-	if err == nil {
-		t.Fatal("expected error from createBackend on non-Pi")
-	}
+	// With the hardware tag, createBackend("spi") must reach
+	// initRealHardware. Inject a failing host init so the test is
+	// deterministic on every host (including non-Pi CI runners).
+	wantErr := errors.New("host init boom")
+	withInjections(t,
+		func() error { return wantErr },
+		nil, // spiOpenFn must not be reached when host init fails.
+		nil, // gpioByNameFn must not be reached when host init fails.
+		func() {
+			cfg := &Config{Backend: "spi"}
+			profile := &Waveshare7in5V2
+			_, err := createBackend(cfg, profile)
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("createBackend error = %v, want to contain %v", err, wantErr)
+			}
+		})
 }
 
 func TestNewApp_SPI_WithHardwareTag(t *testing.T) {
-	cfg, err := LoadConfig(strings.NewReader(`
+	wantErr := errors.New("host init boom")
+	withInjections(t,
+		func() error { return wantErr },
+		nil,
+		nil,
+		func() {
+			cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2
 backend: spi
 `))
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	_, err = NewApp(cfg)
-	if err == nil {
-		t.Fatal("expected error from NewApp on non-Pi")
-	}
+			if err != nil {
+				t.Fatalf("LoadConfig: %v", err)
+			}
+			_, err = NewApp(cfg)
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("NewApp error = %v, want to contain %v", err, wantErr)
+			}
+		})
 }
 
 func TestSPIHardware_ImplementsHardware(t *testing.T) {
@@ -354,20 +473,6 @@ func newHardwareWithFailPin(t *testing.T, pinName string, pinErr error) *spiHard
 	return hw
 }
 
-// failPortCloser is an spi.PortCloser that records Close() calls and can fail.
-type failPortCloser struct {
-	spitest.Record
-	closeErr error
-}
-
-func (f *failPortCloser) Close() error {
-	return f.closeErr
-}
-
-func (f *failPortCloser) LimitSpeed(_ physic.Frequency) error {
-	return nil
-}
-
 func TestSPIHardware_Reset_NthOutError(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -404,17 +509,165 @@ func TestSPIHardware_Reset_NthOutError(t *testing.T) {
 	}
 }
 
-func TestNewSPIHardware_InitRealHardwareFallback(t *testing.T) {
-	// When no WithSPIConn is provided and no port, initRealHardware returns error.
-	_, err := NewSPIHardware()
-	if err == nil {
-		t.Fatal("expected error from initRealHardware")
+func TestInitRealHardware_Success(t *testing.T) {
+	port := &recordingPortCloser{}
+	pins := defaultPinSet()
+	withInjections(t,
+		func() error { return nil },
+		func(name string) (spi.PortCloser, error) {
+			if name != spiPortName {
+				t.Errorf("spi open name = %q, want %q", name, spiPortName)
+			}
+			return port, nil
+		},
+		pinResolver(pins),
+		func() {
+			hw, err := NewSPIHardware()
+			if err != nil {
+				t.Fatalf("NewSPIHardware: %v", err)
+			}
+			if hw.spiConn == nil {
+				t.Error("spiConn was not assigned")
+			}
+			if hw.port != port {
+				t.Error("port was not assigned to the opened port")
+			}
+			if pwr, ok := pins.pwr.(*gpiotest.Pin); ok && pwr.L != gpio.High {
+				t.Errorf("PWR pin = %v after init, want High", pwr.L)
+			}
+			if port.closed {
+				t.Error("port was closed on the success path")
+			}
+		})
+}
+
+func TestInitRealHardware_HostInitFails(t *testing.T) {
+	wantErr := errors.New("driverreg boom")
+	withInjections(t,
+		func() error { return wantErr },
+		nil,
+		nil,
+		func() {
+			_, err := NewSPIHardware()
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("err = %v, want %v", err, wantErr)
+			}
+		})
+}
+
+func TestInitRealHardware_SPIOpenFails(t *testing.T) {
+	wantErr := errors.New("no spi port")
+	withInjections(t,
+		func() error { return nil },
+		func(string) (spi.PortCloser, error) { return nil, wantErr },
+		nil, // GPIO lookup must not be reached when spi open fails.
+		func() {
+			_, err := NewSPIHardware()
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("err = %v, want %v", err, wantErr)
+			}
+		})
+}
+
+func TestInitRealHardware_SPIConnectFails(t *testing.T) {
+	wantErr := errors.New("connect boom")
+	port := &recordingPortCloser{connectErr: wantErr}
+	withInjections(t,
+		func() error { return nil },
+		func(string) (spi.PortCloser, error) { return port, nil },
+		pinResolver(defaultPinSet()),
+		func() {
+			_, err := NewSPIHardware()
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("err = %v, want %v", err, wantErr)
+			}
+			if !port.closed {
+				t.Error("port was not closed after connect failure")
+			}
+		})
+}
+
+func TestInitRealHardware_PinNotFound(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		mutate  func(*pinSet)
+		missing string
+	}{
+		{"rst", func(s *pinSet) { s.rst = nil }, pinNameRST},
+		{"dc", func(s *pinSet) { s.dc = nil }, pinNameDC},
+		{"busy", func(s *pinSet) { s.busy = nil }, pinNameBUSY},
+		{"pwr", func(s *pinSet) { s.pwr = nil }, pinNamePWR},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			port := &recordingPortCloser{}
+			pins := defaultPinSet()
+			tc.mutate(&pins)
+			withInjections(t,
+				func() error { return nil },
+				func(string) (spi.PortCloser, error) { return port, nil },
+				pinResolver(pins),
+				func() {
+					_, err := NewSPIHardware()
+					if err == nil {
+						t.Fatal("expected error from initRealHardware")
+					}
+					if !strings.Contains(err.Error(), tc.missing) {
+						t.Errorf("err %v does not mention missing pin %q", err, tc.missing)
+					}
+					if !port.closed {
+						t.Error("port was not closed after pin lookup failure")
+					}
+				})
+		})
 	}
+}
+
+func TestInitRealHardware_PWROutFails(t *testing.T) {
+	wantErr := errors.New("pwr fail")
+	port := &recordingPortCloser{}
+	pins := defaultPinSet()
+	pins.pwr = &failOutPin{Pin: gpiotest.Pin{N: "GPIO18"}, err: wantErr}
+	withInjections(t,
+		func() error { return nil },
+		func(string) (spi.PortCloser, error) { return port, nil },
+		pinResolver(pins),
+		func() {
+			_, err := NewSPIHardware()
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("err = %v, want %v", err, wantErr)
+			}
+			if !port.closed {
+				t.Error("port was not closed after PWR.Out failure")
+			}
+		})
+}
+
+func TestInitRealHardware_BusyInFails(t *testing.T) {
+	wantErr := errors.New("busy in fail")
+	port := &recordingPortCloser{}
+	pins := defaultPinSet()
+	pins.busy = &failInPin{Pin: gpiotest.Pin{N: "GPIO24"}, err: wantErr}
+	withInjections(t,
+		func() error { return nil },
+		func(string) (spi.PortCloser, error) { return port, nil },
+		pinResolver(pins),
+		func() {
+			_, err := NewSPIHardware()
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("err = %v, want %v", err, wantErr)
+			}
+			if !port.closed {
+				t.Error("port was not closed after BUSY.In failure")
+			}
+			if pwr, ok := pins.pwr.(*gpiotest.Pin); ok && pwr.L != gpio.Low {
+				t.Errorf("PWR pin = %v after BUSY.In failure, want Low", pwr.L)
+			}
+		})
 }
 
 func TestSPIHardware_Close_PortCloseError(t *testing.T) {
 	portErr := errors.New("port close fail")
-	port := &failPortCloser{closeErr: portErr}
+	port := &recordingPortCloser{closeErr: portErr}
 	conn, err := port.Connect(0, 0, 8)
 	if err != nil {
 		t.Fatalf("Connect: %v", err)
