@@ -254,6 +254,31 @@ func TestSelfUpdater_UnknownFlag(t *testing.T) {
 	}
 }
 
+// TestSelfUpdater_RejectsPositionalArgs confirms unexpected
+// positional args after --check / --force fail fast rather than
+// being silently ignored. Otherwise `inkwell self-update foo` would
+// still apply the update, which the user almost certainly didn't
+// intend.
+func TestSelfUpdater_RejectsPositionalArgs(t *testing.T) {
+	var out bytes.Buffer
+	u := newFixtureUpdater()
+	calledFetch := false
+	u.FetchAsset = func(string, string, string) (string, error) {
+		calledFetch = true
+		return "/tmp/x", nil
+	}
+	err := u.Run([]string{"unexpected"}, &out)
+	if err == nil {
+		t.Fatal("expected error for positional arg")
+	}
+	if !strings.Contains(err.Error(), "positional") {
+		t.Errorf("error = %q, want mention of positional", err.Error())
+	}
+	if calledFetch {
+		t.Error("FetchAsset must not run when args are invalid")
+	}
+}
+
 // TestSelfUpdater_HelpFlagEmitsUsage covers the help branch
 // flag.Parse takes when --help is passed: it returns flag.ErrHelp,
 // which Run propagates. Usage text is emitted via the flag package's

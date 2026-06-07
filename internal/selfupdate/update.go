@@ -51,6 +51,9 @@ func (s *SelfUpdater) Run(args []string, stdout io.Writer) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("self-update accepts no positional arguments (got %v)", fs.Args())
+	}
 
 	rel, err := s.FetchLatest()
 	if err != nil {
