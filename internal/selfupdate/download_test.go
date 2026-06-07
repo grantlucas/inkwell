@@ -131,6 +131,39 @@ func TestDownloadVerifyExtract_MissingBinary(t *testing.T) {
 	}
 }
 
+// TestDownloadVerifyExtract_RejectsSymlinkTraversal covers the
+// hdr.Linkname check: a tarball entry that is a symlink whose target
+// points outside the archive root must be rejected even if the
+// entry's own name is safe.
+func TestDownloadVerifyExtract_RejectsSymlinkTraversal(t *testing.T) {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	// Safe-looking entry name but malicious Linkname.
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     "inkwell",
+		Linkname: "../../../../etc/passwd",
+		Mode:     0o755,
+		Typeflag: tar.TypeSymlink,
+	}); err != nil {
+		t.Fatalf("WriteHeader: %v", err)
+	}
+	_ = tw.Close()
+	_ = gz.Close()
+
+	assetURL, checksumsURL, srv := fixtureServer(t, "inkwell-linux-arm64.tar.gz", buf.Bytes(), false)
+	defer srv.Close()
+
+	d := NewDownloader(srv.Client())
+	_, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
+	if err == nil {
+		t.Fatal("expected rejection for symlink with traversing target")
+	}
+	if !strings.Contains(err.Error(), "symlink") {
+		t.Errorf("error = %q, want mention of symlink", err.Error())
+	}
+}
+
 func TestDownloadVerifyExtract_RejectsPathTraversal(t *testing.T) {
 	cases := []struct {
 		label   string

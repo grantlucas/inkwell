@@ -12,7 +12,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path"
 	"strings"
 )
 
@@ -168,10 +167,17 @@ func (d *Downloader) fetch(url string) ([]byte, error) {
 }
 
 // extractInkwellBinary walks the gzipped tarball and returns the
-// bytes of the entry named binaryName. Rejects any entry whose name
-// resolves outside the archive root — absolute paths, "..", etc. —
-// regardless of which entry it is, since the tarball itself is then
-// untrustworthy.
+// bytes of the entry named binaryName at the archive root. Rejects
+// any entry whose name or symlink target resolves outside the
+// archive root (absolute paths, ".." components) — the tarball
+// itself is then untrustworthy and we abort rather than try to
+// salvage a "safe" entry from it.
+//
+// Tarball + binary are buffered in memory (~12MB combined at current
+// release sizes; well under the Pi Zero 2 W's 512MB budget). If the
+// release ever ships substantially larger artifacts, switch to
+// streaming through a TeeReader+sha256 into a temp file before
+// untarring.
 func extractInkwellBinary(gzBytes []byte) ([]byte, error) {
 	gz, err := gzip.NewReader(bytes.NewReader(gzBytes))
 	if err != nil {
@@ -191,7 +197,10 @@ func extractInkwellBinary(gzBytes []byte) ([]byte, error) {
 		if !safeArchivePath(hdr.Name) {
 			return nil, fmt.Errorf("rejecting tarball with unsafe path: %q", hdr.Name)
 		}
-		if path.Base(hdr.Name) == binaryName && hdr.Name == binaryName {
+		if hdr.Linkname != "" && !safeArchivePath(hdr.Linkname) {
+			return nil, fmt.Errorf("rejecting tarball with unsafe symlink target: %q", hdr.Linkname)
+		}
+		if hdr.Name == binaryName {
 			return io.ReadAll(tr)
 		}
 	}
