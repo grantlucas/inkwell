@@ -272,11 +272,14 @@ or the service user cannot reach the device node. Verify
 `ls /dev/spi*` shows `/dev/spidev0.0` and that the user running
 Inkwell is in the `spi` group (`groups` after re-login).
 
-**`gpio pin GPIO… not found`** — the periph.io GPIO driver was not
-loaded. Re-check `sudo raspi-config` enabled the GPIO peripherals and
-that you are running on a supported Raspberry Pi (the BCM pin map in
-[`docs/tech-specs/01-hardware-overview.md`](../tech-specs/01-hardware-overview.md)
-assumes the standard 40-pin header).
+**`gpio pin GPIO… not found`** — periph.io couldn't resolve a BCM pin.
+Three things to check, in order: (1) you're on a supported Raspberry
+Pi and the wiring matches the BCM pin map in
+[`docs/tech-specs/01-hardware-overview.md`](../tech-specs/01-hardware-overview.md);
+(2) `ls /dev/gpiochip*` shows at least `/dev/gpiochip0` and the
+service user can read it (group `gpio` after re-login); (3) the
+`journalctl -u inkwell` logs for `periph host init` errors that would
+indicate the kernel GPIO driver failed to load.
 
 ## Building from Source (Advanced)
 
