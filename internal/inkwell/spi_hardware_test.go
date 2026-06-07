@@ -15,14 +15,26 @@ import (
 	"periph.io/x/conn/v3/spi/spitest"
 )
 
-// withInjections swaps the periph.io seam functions for the body of the
-// test and restores them afterwards. It panics if any of the supplied
-// functions is nil so a test mistake fails loudly instead of leaking
-// real hardware calls into the suite.
+// withInjections swaps the periph.io seam functions for the body of
+// the test and restores them via t.Cleanup. A nil seam is replaced
+// with a panic stub so a test that doesn't expect a particular seam
+// to be hit will fail loudly if a refactor reorders initRealHardware
+// — never silently falling through to the real periph.io call (which
+// would touch /dev/spidev0.0 and the GPIO chip on a Pi).
+//
+// Not safe under t.Parallel(): the seam vars are package-level.
 func withInjections(t *testing.T, hostFn func() error, openFn func(string) (spi.PortCloser, error), pinFn func(string) gpio.PinIO, body func()) {
 	t.Helper()
-	if hostFn == nil || openFn == nil || pinFn == nil {
-		t.Fatal("withInjections: all stubs must be non-nil")
+	if hostFn == nil {
+		hostFn = func() error { panic("hostInitFn called but test did not stub it") }
+	}
+	if openFn == nil {
+		openFn = func(string) (spi.PortCloser, error) {
+			panic("spiOpenFn called but test did not stub it")
+		}
+	}
+	if pinFn == nil {
+		pinFn = func(string) gpio.PinIO { panic("gpioByNameFn called but test did not stub it") }
 	}
 	origHost, origOpen, origPin := hostInitFn, spiOpenFn, gpioByNameFn
 	hostInitFn = hostFn
@@ -139,8 +151,8 @@ func TestCreateBackend_SPI_WithHardwareTag(t *testing.T) {
 	wantErr := errors.New("host init boom")
 	withInjections(t,
 		func() error { return wantErr },
-		spiOpenFn,
-		gpioByNameFn,
+		nil, // spiOpenFn must not be reached when host init fails.
+		nil, // gpioByNameFn must not be reached when host init fails.
 		func() {
 			cfg := &Config{Backend: "spi"}
 			profile := &Waveshare7in5V2
@@ -155,8 +167,8 @@ func TestNewApp_SPI_WithHardwareTag(t *testing.T) {
 	wantErr := errors.New("host init boom")
 	withInjections(t,
 		func() error { return wantErr },
-		spiOpenFn,
-		gpioByNameFn,
+		nil,
+		nil,
 		func() {
 			cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2
@@ -461,20 +473,6 @@ func newHardwareWithFailPin(t *testing.T, pinName string, pinErr error) *spiHard
 	return hw
 }
 
-// failPortCloser is an spi.PortCloser that records Close() calls and can fail.
-type failPortCloser struct {
-	spitest.Record
-	closeErr error
-}
-
-func (f *failPortCloser) Close() error {
-	return f.closeErr
-}
-
-func (f *failPortCloser) LimitSpeed(_ physic.Frequency) error {
-	return nil
-}
-
 func TestSPIHardware_Reset_NthOutError(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -547,8 +545,8 @@ func TestInitRealHardware_HostInitFails(t *testing.T) {
 	wantErr := errors.New("driverreg boom")
 	withInjections(t,
 		func() error { return wantErr },
-		spiOpenFn,
-		gpioByNameFn,
+		nil,
+		nil,
 		func() {
 			_, err := NewSPIHardware()
 			if !errors.Is(err, wantErr) {
@@ -562,7 +560,7 @@ func TestInitRealHardware_SPIOpenFails(t *testing.T) {
 	withInjections(t,
 		func() error { return nil },
 		func(string) (spi.PortCloser, error) { return nil, wantErr },
-		gpioByNameFn,
+		nil, // GPIO lookup must not be reached when spi open fails.
 		func() {
 			_, err := NewSPIHardware()
 			if !errors.Is(err, wantErr) {
@@ -666,7 +664,7 @@ func TestInitRealHardware_BusyInFails(t *testing.T) {
 
 func TestSPIHardware_Close_PortCloseError(t *testing.T) {
 	portErr := errors.New("port close fail")
-	port := &failPortCloser{closeErr: portErr}
+	port := &recordingPortCloser{closeErr: portErr}
 	conn, err := port.Connect(0, 0, 8)
 	if err != nil {
 		t.Fatalf("Connect: %v", err)

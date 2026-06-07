@@ -34,6 +34,11 @@ const (
 // Injection seams for the periph.io entry points. Tests on non-Pi
 // hosts override these to avoid touching real device nodes; the
 // defaults call straight into periph.io.
+//
+// These are package-level mutables for symmetry with createSPIBackendFn
+// in app.go. They are NOT goroutine-safe — tests that swap them must
+// not run with t.Parallel(), and production code must treat them as
+// read-only after init.
 var (
 	hostInitFn = func() error {
 		_, err := host.Init()
