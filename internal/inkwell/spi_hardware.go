@@ -29,6 +29,17 @@ const (
 	pinNameDC   = "GPIO25" // data (HIGH) / command (LOW)
 	pinNameBUSY = "GPIO24" // HIGH = idle, LOW = busy
 	pinNamePWR  = "GPIO18" // HIGH = panel powered on
+
+	// spiTxChunkSize caps each spi.Conn.Tx payload to the default
+	// Linux spidev kernel buffer (4096 bytes). periph.io's sysfs-spi
+	// driver does not auto-chunk and returns
+	//   "sysfs-spi: maximum Tx length is N, got M bytes"
+	// when M > N. The 800x480 V2 panel pushes 48000-byte BW frames per
+	// refresh, so SendData splits writes into chunks at this size to
+	// work against a stock Raspberry Pi OS install. The kernel param
+	// spidev.bufsiz can be raised at boot, but the Python reference
+	// driver chunks at the spidev layer anyway — match that behavior.
+	spiTxChunkSize = 4096
 )
 
 // Injection seams for the periph.io entry points. Tests on non-Pi
@@ -191,7 +202,13 @@ func (h *spiHardware) SendData(data []byte) error {
 	if err := h.dcPin.Out(gpio.High); err != nil {
 		return fmt.Errorf("dc pin high: %w", err)
 	}
-	return h.spiConn.Tx(data, nil)
+	for i := 0; i < len(data); i += spiTxChunkSize {
+		end := min(i+spiTxChunkSize, len(data))
+		if err := h.spiConn.Tx(data[i:end], nil); err != nil {
+			return fmt.Errorf("spi tx: %w", err)
+		}
+	}
+	return nil
 }
 
 func (h *spiHardware) ReadBusy() bool {
