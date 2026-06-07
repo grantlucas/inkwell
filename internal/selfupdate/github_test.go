@@ -170,6 +170,19 @@ func TestGitHubClient_DefaultClientTimeout(t *testing.T) {
 	}
 }
 
+// TestGitHubClient_WithHTTPClientNil confirms WithHTTPClient(nil) is
+// a no-op: the constructor's default client stays in place rather
+// than getting nilled out (which would panic on the next Do call).
+func TestGitHubClient_WithHTTPClientNil(t *testing.T) {
+	c := NewGitHubClient("any/repo", WithHTTPClient(nil))
+	if c.httpClient == nil {
+		t.Fatal("WithHTTPClient(nil) must not nil out the client")
+	}
+	if c.httpClient.Timeout == 0 {
+		t.Errorf("default timeout should be preserved when WithHTTPClient(nil)")
+	}
+}
+
 func TestGitHubClient_WithUserAgent(t *testing.T) {
 	gotUA := ""
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

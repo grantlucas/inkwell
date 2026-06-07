@@ -1,6 +1,7 @@
 package selfupdate
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,9 +47,15 @@ func WithBaseURL(url string) Option {
 
 // WithHTTPClient swaps in a custom *http.Client. Used by tests; in
 // production the default has a 30s timeout so a stalled API call
-// can't hang the self-update flow forever.
+// can't hang the self-update flow forever. A nil argument is a
+// no-op — leaving the constructor's default in place — rather than
+// nilling out the client and panicking on the next Do() call.
 func WithHTTPClient(hc *http.Client) Option {
-	return func(c *GitHubClient) { c.httpClient = hc }
+	return func(c *GitHubClient) {
+		if hc != nil {
+			c.httpClient = hc
+		}
+	}
 }
 
 // WithUserAgent overrides the User-Agent header sent with requests.
@@ -109,7 +116,7 @@ func (r *Release) ChecksumsURL() (string, error) {
 // generic "unexpected status" errors.
 func (c *GitHubClient) LatestRelease() (*Release, error) {
 	url := fmt.Sprintf("%s/repos/%s/releases/latest", c.baseURL, c.repo)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
