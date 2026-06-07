@@ -46,12 +46,13 @@ type WidgetConfig struct {
 
 // Config holds application configuration loaded from YAML.
 type Config struct {
-	Display   string          `yaml:"display"`
-	Backend   string          `yaml:"backend"`
-	ColorMode string          `yaml:"color_mode,omitempty"`
-	Preview   PreviewConfig   `yaml:"preview,omitempty"`
-	Image     ImageConfig     `yaml:"image,omitempty"`
-	Dashboard DashboardConfig `yaml:"dashboard,omitempty"`
+	Display         string          `yaml:"display"`
+	Backend         string          `yaml:"backend"`
+	ColorMode       string          `yaml:"color_mode,omitempty"`
+	ClearOnShutdown bool            `yaml:"clear_on_shutdown"`
+	Preview         PreviewConfig   `yaml:"preview,omitempty"`
+	Image           ImageConfig     `yaml:"image,omitempty"`
+	Dashboard       DashboardConfig `yaml:"dashboard,omitempty"`
 }
 
 // PreviewConfig holds web preview server settings.
@@ -67,11 +68,12 @@ type ImageConfig struct {
 // DefaultConfig returns a Config with all defaults applied.
 func DefaultConfig() *Config {
 	return &Config{
-		Display:   "waveshare_7in5_v2",
-		Backend:   "preview",
-		ColorMode: "bw",
-		Preview:   PreviewConfig{Port: 8080},
-		Image:     ImageConfig{OutputDir: "output"},
+		Display:         "waveshare_7in5_v2",
+		Backend:         "preview",
+		ColorMode:       "bw",
+		ClearOnShutdown: true,
+		Preview:         PreviewConfig{Port: 8080},
+		Image:           ImageConfig{OutputDir: "output"},
 	}
 }
 

@@ -220,6 +220,44 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.ColorMode != "bw" {
 		t.Errorf("ColorMode = %q, want bw", cfg.ColorMode)
 	}
+	if !cfg.ClearOnShutdown {
+		t.Errorf("ClearOnShutdown = false, want true (default)")
+	}
+}
+
+func TestLoadConfig_ClearOnShutdown(t *testing.T) {
+	cases := []struct {
+		label string
+		yaml  string
+		want  bool
+	}{
+		{
+			label: "defaults to true when omitted",
+			yaml:  "display: waveshare_7in5_v2",
+			want:  true,
+		},
+		{
+			label: "explicit true",
+			yaml:  "display: waveshare_7in5_v2\nclear_on_shutdown: true",
+			want:  true,
+		},
+		{
+			label: "explicit false opts out",
+			yaml:  "display: waveshare_7in5_v2\nclear_on_shutdown: false",
+			want:  false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			cfg, err := LoadConfig(strings.NewReader(tc.yaml))
+			if err != nil {
+				t.Fatalf("LoadConfig: %v", err)
+			}
+			if cfg.ClearOnShutdown != tc.want {
+				t.Errorf("ClearOnShutdown = %v, want %v", cfg.ClearOnShutdown, tc.want)
+			}
+		})
+	}
 }
 
 func TestLoadConfig_ColorMode(t *testing.T) {

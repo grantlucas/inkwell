@@ -34,6 +34,7 @@ type App struct {
 	listener        net.Listener
 	ready           chan struct{}
 	shutdownTimeout time.Duration
+	clearOnShutdown bool
 }
 
 // AppOption configures optional App parameters.
@@ -153,6 +154,7 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 		listenAddr:      fmt.Sprintf(":%d", cfg.Preview.Port),
 		ready:           make(chan struct{}),
 		shutdownTimeout: 5 * time.Second,
+		clearOnShutdown: cfg.ClearOnShutdown,
 	}, nil
 }
 
@@ -253,13 +255,32 @@ func (a *App) Run(ctx context.Context) error {
 
 		select {
 		case <-ctx.Done():
-			return a.epd.Close()
+			return a.shutdown()
 		case err := <-serverErr:
 			a.epd.Close()
 			return fmt.Errorf("preview server: %w", err)
 		case <-ticker.C:
 		}
 	}
+}
+
+// shutdown runs the graceful-exit cleanup: optionally clears the panel to
+// white (so a stopped service shows an obviously-blank screen instead of
+// a stale dashboard), then runs the sleep sequence and releases the
+// hardware. Only the signal-driven shutdown path uses this; render and
+// display error paths skip the clear so a partial/broken frame isn't
+// "corrected" on top of an already-failing state.
+//
+// A Clear failure is reported but Close still runs — we want the panel
+// in deep sleep even if the refresh couldn't complete, otherwise we'd
+// leave it drawing power.
+func (a *App) shutdown() error {
+	var clearErr error
+	if a.clearOnShutdown {
+		clearErr = a.epd.Clear()
+	}
+	closeErr := a.epd.Close()
+	return errors.Join(clearErr, closeErr)
 }
 
 // buildDashboard creates a Dashboard from config, instantiating widgets via

@@ -1036,6 +1036,157 @@ func TestApplyColorMode(t *testing.T) {
 	}
 }
 
+// TestRun_GracefulShutdownClearsBeforeSleep covers the contract:
+// on signal-driven shutdown (ctx.Done), the EPD is cleared to white
+// and the clear's refresh (with BUSY wait) completes BEFORE the
+// SleepSequence is sent — otherwise the panel would retain the
+// pre-clear frame after power-down.
+//
+// Long interval + pre-cancelled context guarantees exactly one render
+// before the cleanup path runs, so refresh count = 1 (render) + 1 (Clear) = 2.
+func TestRun_GracefulShutdownClearsBeforeSleep(t *testing.T) {
+	cfg := DefaultConfig() // ClearOnShutdown defaults to true
+	mock := &MockHardware{}
+	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Hour))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := app.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	refreshCount := 0
+	for _, b := range mock.Commands() {
+		if b == 0x12 {
+			refreshCount++
+		}
+	}
+	if refreshCount != 2 {
+		t.Errorf("refresh count = %d, want 2 (1 render + 1 clear)", refreshCount)
+	}
+
+	// The last 0x12 (Clear's refresh) must be followed by busy, then the
+	// SleepSequence commands, then close.
+	lastRefresh := -1
+	for i, c := range mock.Calls {
+		if c.Type == "command" && c.Data[0] == 0x12 {
+			lastRefresh = i
+		}
+	}
+	if lastRefresh < 0 {
+		t.Fatal("no refresh command found")
+	}
+
+	after := mock.Calls[lastRefresh+1:]
+	want := []struct {
+		typ  string
+		cmd  byte
+		data []byte
+	}{
+		{typ: "busy"},                              // Display's ReadBusy after refresh
+		{typ: "command", cmd: 0x50},                // sleep VCOM setting
+		{typ: "data", data: []byte{0xF7}},          // VCOM data
+		{typ: "command", cmd: 0x02},                // power off
+		{typ: "busy"},                              // execSequence busy after nil-data
+		{typ: "command", cmd: 0x07},                // deep sleep
+		{typ: "data", data: []byte{0xA5}},          // deep sleep data
+		{typ: "close"},                             // hw.Close
+	}
+	if len(after) < len(want) {
+		t.Fatalf("calls after last refresh = %d, want >= %d", len(after), len(want))
+	}
+	for i, w := range want {
+		got := after[i]
+		if got.Type != w.typ {
+			t.Errorf("after[%d].Type = %q, want %q", i, got.Type, w.typ)
+			continue
+		}
+		switch w.typ {
+		case "command":
+			if got.Data[0] != w.cmd {
+				t.Errorf("after[%d] command = 0x%02X, want 0x%02X", i, got.Data[0], w.cmd)
+			}
+		case "data":
+			if len(got.Data) != len(w.data) || got.Data[0] != w.data[0] {
+				t.Errorf("after[%d] data = % X, want % X", i, got.Data, w.data)
+			}
+		}
+	}
+}
+
+// TestRun_ClearOnShutdownDisabled confirms the opt-out: when
+// clear_on_shutdown is false, the cleanup path skips Clear entirely
+// and only the render's single refresh shows up.
+func TestRun_ClearOnShutdownDisabled(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ClearOnShutdown = false
+	mock := &MockHardware{}
+	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Hour))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := app.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	refreshCount := 0
+	for _, b := range mock.Commands() {
+		if b == 0x12 {
+			refreshCount++
+		}
+	}
+	if refreshCount != 1 {
+		t.Errorf("refresh count = %d, want 1 (clear disabled)", refreshCount)
+	}
+}
+
+// TestRun_CrashPathDoesNotClear confirms Clear runs ONLY on the
+// ctx.Done branch — never on render/display/server errors. If Clear
+// were called on the widget-render error path, we'd see a 0x12
+// refresh from Clear's Display call.
+func TestRun_CrashPathDoesNotClear(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+dashboard:
+  screens:
+    - name: main
+      widgets:
+        - type: broken
+          bounds: [0, 0, 10, 10]
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	reg := widget.NewRegistry()
+	reg.Register("broken", func(bounds image.Rectangle, _ map[string]any, _ widget.Deps) (widget.Widget, error) {
+		return &brokenWidget{bounds: bounds}, nil
+	})
+
+	mock := &MockHardware{}
+	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond), WithRegistry(reg))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	if err := app.Run(context.Background()); err == nil {
+		t.Fatal("expected render error")
+	}
+
+	for _, b := range mock.Commands() {
+		if b == 0x12 {
+			t.Fatal("Clear should not run on crash paths; saw refresh 0x12")
+		}
+	}
+}
+
 func TestNewApp_DefaultBackendImage(t *testing.T) {
 	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2

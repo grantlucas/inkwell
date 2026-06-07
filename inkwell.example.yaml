@@ -4,6 +4,11 @@ backend: preview
 #                 # Gray4 trade-offs: slower refresh, no partial refresh,
 #                 # larger framebuffer. Only opt in once you've tested it
 #                 # on real hardware.
+# clear_on_shutdown: true  # default; clears the panel to white on
+#                          # graceful shutdown (SIGINT/SIGTERM) before
+#                          # sleeping the controller. Set to false to
+#                          # keep the last frame visible — useful for
+#                          # post-mortem debugging of a render bug.
 preview:
   port: 8080
 
