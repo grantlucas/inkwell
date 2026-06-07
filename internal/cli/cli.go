@@ -29,9 +29,15 @@ type Options struct {
 	// the handler.
 	SelfUpdate func(args []string) error
 
-	// Version handles `inkwell version` and `inkwell --version` /
-	// `inkwell -v`. Args is empty for the flag form.
-	Version func(args []string) error
+	// VersionShort handles the `--version` / `-v` flag form, which
+	// prints a one-line summary suitable for shell scripts.
+	VersionShort func() error
+
+	// VersionLong handles the `version` subcommand, which prints a
+	// multi-line block with commit, build date, go runtime, and
+	// platform. Receives any args after the subcommand (currently
+	// unused but reserved for future flags like --json).
+	VersionLong func(args []string) error
 }
 
 const defaultConfigPath = "inkwell.yaml"
@@ -60,7 +66,7 @@ const defaultConfigPath = "inkwell.yaml"
 func Run(args []string, opts Options) int {
 	for _, a := range args {
 		if a == "--version" || a == "-v" {
-			return invoke(opts.Stderr, func() error { return opts.Version(nil) })
+			return invoke(opts.Stderr, opts.VersionShort)
 		}
 	}
 
@@ -75,7 +81,7 @@ func Run(args []string, opts Options) int {
 	case "self-update":
 		return invoke(opts.Stderr, func() error { return opts.SelfUpdate(rest) })
 	case "version":
-		return invoke(opts.Stderr, func() error { return opts.Version(rest) })
+		return invoke(opts.Stderr, func() error { return opts.VersionLong(rest) })
 	}
 
 	if looksLikePath(head) {

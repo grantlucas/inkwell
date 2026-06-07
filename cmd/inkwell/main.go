@@ -13,11 +13,12 @@ import (
 
 func main() {
 	os.Exit(cli.Run(os.Args[1:], cli.Options{
-		Stdout:     os.Stdout,
-		Stderr:     os.Stderr,
-		RunApp:     runApp,
-		SelfUpdate: selfUpdate,
-		Version:    printVersion,
+		Stdout:       os.Stdout,
+		Stderr:       os.Stderr,
+		RunApp:       runApp,
+		SelfUpdate:   selfUpdate,
+		VersionShort: func() error { return cli.PrintVersionShort(os.Stdout) },
+		VersionLong:  func([]string) error { return cli.PrintVersionLong(os.Stdout) },
 	}))
 }
 
@@ -56,11 +57,4 @@ func runApp(path string) error {
 func selfUpdate(args []string) error {
 	_ = args
 	return fmt.Errorf("self-update is not wired in this build")
-}
-
-// printVersion is the entrypoint for `inkwell version` and
-// `inkwell --version`. Wired in a later commit.
-func printVersion(args []string) error {
-	_ = args
-	return fmt.Errorf("version is not wired in this build")
 }
