@@ -123,14 +123,14 @@ func TestReplaceAt_CreateTempError(t *testing.T) {
 	}
 }
 
-func TestReplaceAt_WriteFileError(t *testing.T) {
+func TestReplaceAt_WriteAndSyncError(t *testing.T) {
 	dir := t.TempDir()
 	target := writeFixtureBinary(t, dir, "inkwell", []byte("old"), 0o755)
 	src := writeFixtureBinary(t, t.TempDir(), "src", []byte("new"), 0o755)
 
 	r := NewReplacer()
-	r.writeFile = func(string, []byte, os.FileMode) error {
-		return errors.New("simulated write failure")
+	r.writeAndSync = func(string, []byte, os.FileMode) error {
+		return errors.New("simulated write+fsync failure")
 	}
 
 	err := r.ReplaceAt(target, src)
@@ -142,6 +142,81 @@ func TestReplaceAt_WriteFileError(t *testing.T) {
 	got, _ := os.ReadFile(target)
 	if string(got) != "old" {
 		t.Errorf("target = %q, want \"old\"", got)
+	}
+}
+
+// TestReplaceAt_FsyncDirError covers the directory-fsync error
+// branch. The rename has already succeeded by then, so the new
+// binary IS in place on disk — the error just signals the durability
+// guarantee wasn't met.
+func TestReplaceAt_FsyncDirError(t *testing.T) {
+	dir := t.TempDir()
+	target := writeFixtureBinary(t, dir, "inkwell", []byte("old"), 0o755)
+	src := writeFixtureBinary(t, t.TempDir(), "src", []byte("new"), 0o755)
+
+	r := NewReplacer()
+	r.fsyncDir = func(string) error { return errors.New("simulated dir fsync failure") }
+
+	err := r.ReplaceAt(target, src)
+	if err == nil {
+		t.Fatal("expected fsync error")
+	}
+	if !strings.Contains(err.Error(), "fsync target dir") {
+		t.Errorf("error = %q, want mention of fsync", err.Error())
+	}
+	// Rename had already committed, so the target was replaced.
+	got, _ := os.ReadFile(target)
+	if string(got) != "new" {
+		t.Errorf("target should be replaced before fsync failure surfaces, got %q", got)
+	}
+}
+
+// TestDefaultWriteAndSync_Smoke confirms the default helper actually
+// writes + chmods correctly. The error branches inside are exercised
+// indirectly via injection in the orchestrator tests.
+func TestDefaultWriteAndSync_Smoke(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "out.bin")
+	if err := defaultWriteAndSync(path, []byte("hello"), 0o755); err != nil {
+		t.Fatalf("defaultWriteAndSync: %v", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(got) != "hello" {
+		t.Errorf("content = %q, want \"hello\"", got)
+	}
+	st, _ := os.Stat(path)
+	if st.Mode().Perm() != 0o755 {
+		t.Errorf("mode = %v, want 0o755", st.Mode().Perm())
+	}
+}
+
+// TestDefaultWriteAndSync_OpenError covers the OpenFile error path
+// — directories that don't exist make OpenFile fail before any
+// write can run.
+func TestDefaultWriteAndSync_OpenError(t *testing.T) {
+	err := defaultWriteAndSync("/this/path/does/not/exist/anywhere/out.bin", []byte("x"), 0o755)
+	if err == nil {
+		t.Fatal("expected OpenFile error")
+	}
+}
+
+// TestDefaultFsyncDir_Smoke confirms the default fsync-dir helper
+// succeeds on a real directory.
+func TestDefaultFsyncDir_Smoke(t *testing.T) {
+	if err := defaultFsyncDir(t.TempDir()); err != nil {
+		t.Errorf("defaultFsyncDir: %v", err)
+	}
+}
+
+// TestDefaultFsyncDir_OpenError covers the Open error branch — a
+// nonexistent directory can't be fsync'd.
+func TestDefaultFsyncDir_OpenError(t *testing.T) {
+	err := defaultFsyncDir("/this/path/does/not/exist/anywhere")
+	if err == nil {
+		t.Fatal("expected open error")
 	}
 }
 
