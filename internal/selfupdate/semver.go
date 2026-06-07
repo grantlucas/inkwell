@@ -52,9 +52,20 @@ func compareVersions(a, b string) (int, error) {
 
 // parseVersion turns "vX.Y.Z" or "X.Y.Z" into a 3-int array. Any
 // non-numeric component or wrong arity is an error.
+//
+// Pre-release and build-metadata suffixes ("-rc1", "+abc") are
+// stripped before parsing — they collapse the comparison to the
+// underlying X.Y.Z. That's lossy (a `v1.0.0-rc1` will compare
+// equal to `v1.0.0`), but the project doesn't ship pre-releases
+// today; the alternative of erroring out would break self-update
+// the moment a `-rc` tag ever gets cut.
 func parseVersion(s string) ([3]int, error) {
 	var out [3]int
 	s = strings.TrimPrefix(s, "v")
+	// Drop "-rc1" / "+build.42" style suffixes.
+	if i := strings.IndexAny(s, "-+"); i >= 0 {
+		s = s[:i]
+	}
 	parts := strings.Split(s, ".")
 	if len(parts) != 3 {
 		return out, fmt.Errorf("version %q must have 3 components", s)

@@ -26,6 +26,9 @@ func TestCompareVersions(t *testing.T) {
 		{label: "release sorts above dev", a: "v0.0.1", b: "dev", want: 1},
 		{label: "dev equals dev", a: "dev", b: "dev", want: 0},
 		{label: "tolerates missing v prefix", a: "1.2.3", b: "v1.2.3", want: 0},
+		{label: "strips pre-release suffix", a: "v1.0.0-rc1", b: "v1.0.0", want: 0},
+		{label: "strips build metadata", a: "v1.2.3+build.42", b: "v1.2.3", want: 0},
+		{label: "pre-release older than next patch", a: "v1.0.0-rc1", b: "v1.0.1", want: -1},
 		{label: "rejects non-numeric component", a: "v1.bad.0", b: "v1.0.0", wantErr: true},
 		{label: "rejects too few components", a: "v1.0", b: "v1.0.0", wantErr: true},
 	}
