@@ -172,6 +172,17 @@ func TestCachedSource_ExpandsRecurringEvents(t *testing.T) {
 	if len(got) != 5 {
 		t.Fatalf("got %d, want 5 (%v)", len(got), got)
 	}
+	// Assert actual instants, not just count — a count-only check
+	// would pass even if expansion emitted five wrong/duplicate days.
+	baseStart := time.Date(2026, 4, 27, 9, 0, 0, 0, time.UTC)
+	baseEnd := time.Date(2026, 4, 27, 9, 30, 0, 0, time.UTC)
+	for i, e := range got {
+		wantStart := baseStart.AddDate(0, 0, i)
+		wantEnd := baseEnd.AddDate(0, 0, i)
+		if !e.Start.Equal(wantStart) || !e.End.Equal(wantEnd) {
+			t.Errorf("occ[%d] = [%s,%s), want [%s,%s)", i, e.Start, e.End, wantStart, wantEnd)
+		}
+	}
 	// Each occurrence must be flattened (no Recurrence pointer leaking
 	// downstream — widgets would otherwise re-expand recursively).
 	for i, e := range got {
