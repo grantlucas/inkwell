@@ -275,6 +275,45 @@ END:VCALENDAR
 	}
 }
 
+// TestParse_EXDATEWithoutRRULE pins the EXDATE-only VEVENT case: a
+// VEVENT with EXDATE but no RRULE is malformed by RFC 5545 (EXDATE is
+// only meaningful relative to a recurrence rule). The event itself
+// should still survive — without the END:VEVENT cleanup, parse would
+// leave a zero-frequency Recurrence and Occurrences would drop the
+// event entirely through the no-default-case switch in expand.
+func TestParse_EXDATEWithoutRRULE(t *testing.T) {
+	input := `BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:lonely-exdate
+DTSTART:20260427T090000Z
+DTEND:20260427T100000Z
+SUMMARY:One-off
+EXDATE:20260428T090000Z
+END:VEVENT
+END:VCALENDAR
+`
+	events, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	// The orphan EXDATE has no meaning without an RRULE; the parser
+	// must drop the zero-frequency Recurrence so the single instance
+	// flows through Occurrences as a non-recurring event.
+	if events[0].Recurrence != nil {
+		t.Errorf("Recurrence = %+v, want nil (orphan EXDATE)", events[0].Recurrence)
+	}
+
+	// End-to-end: the event must show up in a covering window.
+	occs := Occurrences(events, time.Date(2026, 4, 27, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 4, 28, 0, 0, 0, 0, time.UTC))
+	if len(occs) != 1 {
+		t.Fatalf("Occurrences len = %d, want 1 (event must not be dropped)", len(occs))
+	}
+}
+
 // TestParse_EXDATEUnknownTZIDFallsBackToUTC pins the failure mode for
 // a TZID we can't resolve: the existing extractTZID logs a warning and
 // returns nil, so the EXDATE parses as a naive UTC datetime. This keeps

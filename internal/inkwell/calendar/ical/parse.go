@@ -35,6 +35,15 @@ func Parse(r io.Reader) ([]Event, error) {
 			hasDuration = false
 		case line == "END:VEVENT":
 			if inEvent && cur != nil && !cur.Start.IsZero() {
+				// EXDATE without RRULE would otherwise leave a
+				// Recurrence with Freq=0; Occurrences would route the
+				// event through expand(), the switch on Freq would
+				// match no case, and the event would vanish silently.
+				// Orphan EXDATEs have no meaning per RFC 5545 — drop
+				// the recurrence metadata and keep the single instance.
+				if cur.Recurrence != nil && cur.Recurrence.Freq == 0 {
+					cur.Recurrence = nil
+				}
 				switch {
 				case hasDuration:
 					cur.End = cur.Start.Add(curDuration)
