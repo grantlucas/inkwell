@@ -142,7 +142,12 @@ sudo systemctl restart inkwell     # bring the new binary up
 
 `sudo` is needed because `/usr/local/bin/inkwell` is owned by root
 on a default install; `chown` it to the service user if you'd prefer
-to run the updater without elevation.
+to run the updater without elevation. A failed update leaves the
+existing binary untouched, and `--force` re-applies the current
+version for recovery. See
+[`docs/guides/installation.md`](docs/guides/installation.md#7-updating)
+for the full upgrade workflow including manual download and the
+graceful-shutdown panel-clear during restart.
 
 ## Supported Hardware
 
