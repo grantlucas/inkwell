@@ -222,3 +222,84 @@ END:VCALENDAR
 		t.Fatal("expected error for invalid EXDATE")
 	}
 }
+
+// TestParse_EXDATEWithTZID confirms an EXDATE qualified by a TZID
+// parameter is parsed in that zone — so its instant matches the
+// corresponding occurrence generated from a TZID-qualified DTSTART.
+// Without TZID threading, EXDATE values are parsed as naive UTC, the
+// instants diverge, and the EXDATE silently fails to exclude. Real
+// Google Calendar feeds emit this form for non-UTC recurring events.
+func TestParse_EXDATEWithTZID(t *testing.T) {
+	input := `BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:zoned
+DTSTART;TZID=America/Los_Angeles:20260427T090000
+DTEND;TZID=America/Los_Angeles:20260427T093000
+RRULE:FREQ=DAILY;COUNT=3
+EXDATE;TZID=America/Los_Angeles:20260428T090000
+END:VEVENT
+END:VCALENDAR
+`
+	events, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(events) != 1 || events[0].Recurrence == nil {
+		t.Fatalf("Recurrence not populated: %+v", events)
+	}
+	loc, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		t.Skipf("tzdata unavailable: %v", err)
+	}
+	wantExDate := time.Date(2026, 4, 28, 9, 0, 0, 0, loc)
+	got := events[0].Recurrence.ExDates
+	if len(got) != 1 {
+		t.Fatalf("ExDates len = %d, want 1", len(got))
+	}
+	// Compare absolute instants — the EXDATE must land at 09:00 LA,
+	// not 09:00 UTC.
+	if !got[0].Equal(wantExDate) {
+		t.Errorf("ExDates[0] = %v (unix %d), want %v (unix %d)",
+			got[0], got[0].Unix(), wantExDate, wantExDate.Unix())
+	}
+
+	// End-to-end: the EXDATE must actually exclude the Apr 28 occurrence.
+	winStart := time.Date(2026, 4, 27, 0, 0, 0, 0, loc)
+	winEnd := time.Date(2026, 4, 30, 0, 0, 0, 0, loc)
+	occs := Occurrences(events, winStart, winEnd)
+	if len(occs) != 2 {
+		t.Fatalf("Occurrences len = %d, want 2 (Apr 28 excluded by EXDATE)", len(occs))
+	}
+	if occs[0].Start.Day() != 27 || occs[1].Start.Day() != 29 {
+		t.Errorf("days = (%d, %d), want (27, 29)", occs[0].Start.Day(), occs[1].Start.Day())
+	}
+}
+
+// TestParse_EXDATEUnknownTZIDFallsBackToUTC pins the failure mode for
+// a TZID we can't resolve: the existing extractTZID logs a warning and
+// returns nil, so the EXDATE parses as a naive UTC datetime. This keeps
+// the parser from rejecting otherwise-valid feeds with an exotic TZID.
+func TestParse_EXDATEUnknownTZIDFallsBackToUTC(t *testing.T) {
+	input := `BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:exotic-tz
+DTSTART:20260427T090000Z
+RRULE:FREQ=DAILY;COUNT=5
+EXDATE;TZID=Fake/Zone:20260428T090000
+END:VEVENT
+END:VCALENDAR
+`
+	events, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(events) != 1 || events[0].Recurrence == nil {
+		t.Fatalf("Recurrence not populated: %+v", events)
+	}
+	// Unknown TZID → UTC fallback → 09:00 UTC.
+	want := time.Date(2026, 4, 28, 9, 0, 0, 0, time.UTC)
+	got := events[0].Recurrence.ExDates
+	if len(got) != 1 || !got[0].Equal(want) {
+		t.Errorf("ExDates = %v, want [%v]", got, want)
+	}
+}

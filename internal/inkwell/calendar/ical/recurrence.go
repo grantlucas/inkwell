@@ -44,7 +44,9 @@ func parseRRULE(value string) (Recurrence, error) {
 			}
 			r.Count = n
 		case "UNTIL":
-			t, err := parseICSTime(v)
+			// UNTIL is constrained by RFC 5545 §3.3.10 to be UTC when
+			// DTSTART has a TZID, so it never needs zone threading.
+			t, err := parseICSTime(v, nil)
 			if err != nil {
 				return Recurrence{}, fmt.Errorf("invalid UNTIL %q: %w", v, err)
 			}
@@ -109,14 +111,19 @@ func parseByDay(s string) ([]time.Weekday, error) {
 }
 
 // parseICSTime parses an RRULE UNTIL value or an EXDATE value, both of
-// which use the same date/datetime forms as DTSTART (without the
-// property-line wrapping parseDateTime needs).
-func parseICSTime(v string) (time.Time, error) {
+// which use the same date/datetime forms as DTSTART. loc anchors naive
+// (non-Z) datetimes to a TZID-derived location; pass nil to interpret
+// them as UTC. Date-only and explicit-Z forms ignore loc since they
+// already carry unambiguous instants.
+func parseICSTime(v string, loc *time.Location) (time.Time, error) {
 	if len(v) == 8 {
 		return time.Parse("20060102", v)
 	}
 	if strings.HasSuffix(v, "Z") {
 		return time.Parse("20060102T150405Z", v)
+	}
+	if loc != nil {
+		return time.ParseInLocation("20060102T150405", v, loc)
 	}
 	return time.Parse("20060102T150405", v)
 }

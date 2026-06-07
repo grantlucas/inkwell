@@ -12,6 +12,11 @@ import (
 // dashboard window (decades of daily occurrences). Declared as a var
 // (not a const) so safety-cap exhaustion can be exercised in tests
 // without burning real iteration time.
+//
+// Bounds the outer iteration of each walker, not the yielded count —
+// walkWeekly with BYDAY can therefore emit up to cap × len(BYDAY)
+// candidates before bailing. Tests that mutate this value MUST NOT run
+// in parallel (no t.Parallel() inside ical package tests).
 var occurrenceSafetyCap = 50_000
 
 // Occurrences expands recurring events in [start, end) and returns all

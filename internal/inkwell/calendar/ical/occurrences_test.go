@@ -377,3 +377,29 @@ func TestOccurrences_UnboundedRRULEStopsAtWindow(t *testing.T) {
 		t.Fatalf("got %d, want 7", len(got))
 	}
 }
+
+// Recurring all-day events must propagate AllDay through expansion;
+// otherwise a recurring birthday/holiday would render as a timed event
+// at midnight on the device. A one-line regression guard for the
+// occ := master copy in expand().
+func TestOccurrences_AllDayPropagatesThroughExpansion(t *testing.T) {
+	master := Event{
+		UID:    "holiday",
+		Start:  utc(2026, 4, 27, 0, 0),
+		End:    utc(2026, 4, 28, 0, 0),
+		AllDay: true,
+		Recurrence: &Recurrence{
+			Freq:  FreqDaily,
+			Count: 3,
+		},
+	}
+	got := Occurrences([]Event{master}, utc(2026, 4, 27, 0, 0), utc(2026, 5, 1, 0, 0))
+	if len(got) != 3 {
+		t.Fatalf("got %d, want 3", len(got))
+	}
+	for i, e := range got {
+		if !e.AllDay {
+			t.Errorf("occ[%d].AllDay = false, want true", i)
+		}
+	}
+}
