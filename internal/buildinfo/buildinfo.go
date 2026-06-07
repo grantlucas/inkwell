@@ -62,8 +62,9 @@ func Get() Info {
 
 // Platform returns "GOOS/GOARCH" with armv6/armv7 flattened so the
 // string lines up 1:1 with the GoReleaser asset naming convention.
-// Used by both the --version short line and the release-asset
-// resolver, so they stay in lockstep.
+// Used by the --version output; the release-asset resolver in
+// internal/selfupdate uses the same flattening rule independently
+// so the two stay in lockstep.
 func (i Info) Platform() string {
 	arch := i.GOARCH
 	if arch == "arm" && i.GOARM != "" {

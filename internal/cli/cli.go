@@ -1,8 +1,9 @@
 // Package cli is the inkwell binary's argument router. It dispatches
-// between running the dashboard (`inkwell [config.yaml]`) and the
-// management subcommands (`self-update`, `version`). Keeping this in
-// an internal package — rather than inline in cmd/inkwell/main.go —
-// lets the routing logic be unit-tested without spawning the binary.
+// between running the dashboard (`inkwell [config.yaml]`), the
+// `self-update` subcommand, and the `--version` / `-v` flag.
+// Keeping this in an internal package — rather than inline in
+// cmd/inkwell/main.go — lets the routing logic be unit-tested
+// without spawning the binary.
 package cli
 
 import (

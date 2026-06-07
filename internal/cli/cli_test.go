@@ -139,8 +139,9 @@ func TestRun_HandlerErrorBecomesExitOne(t *testing.T) {
 }
 
 // TestRun_VersionFlagShortCircuits proves --version / -v are handled
-// at the router level (not as subcommands), so they win regardless of
-// what follows them. Issue inkwell-92z spells out this ordering.
+// at the router level — they win regardless of what other args
+// follow them, so e.g. `inkwell --version some.yaml` prints version
+// rather than trying to start the dashboard.
 func TestRun_VersionFlagShortCircuits(t *testing.T) {
 	cases := [][]string{
 		{"--version"},
