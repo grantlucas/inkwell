@@ -241,8 +241,24 @@ stays blank, double-check that SPI is enabled
 
 ## 7. Updating
 
-To move to a newer release, download the new tarball (step 2), drop
-the new binary in place, and restart the service:
+Inkwell ships a built-in self-updater that pulls the matching arch
+tarball, sha256-verifies it against `checksums.txt`, and atomically
+replaces the running binary:
+
+```bash
+inkwell --version                  # see what's installed
+sudo inkwell self-update --check   # see what's available, no writes
+sudo inkwell self-update           # apply the latest release
+sudo systemctl restart inkwell     # bring the new binary up
+```
+
+`sudo` is needed because the installed binary at
+`/usr/local/bin/inkwell` is owned by root by default. If you'd
+rather not invoke `sudo`, `chown` the binary to the service user
+so that user can replace it: `sudo chown pi:pi /usr/local/bin/inkwell`.
+
+The manual path still works if you prefer it: download the tarball
+(step 2), drop the new binary in place, and restart the service:
 
 ```bash
 sudo install -m 0755 -o pi -g pi inkwell /usr/local/bin/inkwell
