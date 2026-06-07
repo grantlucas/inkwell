@@ -659,6 +659,9 @@ func TestInitRealHardware_BusyInFails(t *testing.T) {
 			if !port.closed {
 				t.Error("port was not closed after BUSY.In failure")
 			}
+			if pwr, ok := pins.pwr.(*gpiotest.Pin); ok && pwr.L != gpio.Low {
+				t.Errorf("PWR pin = %v after BUSY.In failure, want Low", pwr.L)
+			}
 		})
 }
 

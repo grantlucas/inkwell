@@ -157,6 +157,9 @@ func (h *spiHardware) initRealHardware() error {
 		return fmt.Errorf("pwr pin high: %w", err)
 	}
 	if err := busy.In(gpio.PullNoChange, gpio.NoEdge); err != nil {
+		// PWR is already HIGH at this point; drop it before bailing so
+		// the panel doesn't sit powered with no driver attached.
+		_ = pwr.Out(gpio.Low)
 		_ = port.Close()
 		return fmt.Errorf("busy pin in: %w", err)
 	}
