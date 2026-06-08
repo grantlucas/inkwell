@@ -20,6 +20,81 @@ func sampleHourly() []weather.HourlyPoint {
 	return points
 }
 
+// TestRenderHourlyChart_NowMarkerIsBlackStroke pins the "now" indicator
+// shape: when IsToday is true and HighlightHour is within the rendered
+// range, the chart draws a contiguous vertical run of PaperBlack pixels
+// at the highlight column from the top of the chart down through the
+// bar gutter. The previous PaperGray20 fill collapsed to white on both
+// the BW threshold and Gray4 light-bucket paths — losing the marker on
+// hardware. A solid stroke is the device-durable replacement; this test
+// would catch any regression that swaps it back for a gray fill.
+func TestRenderHourlyChart_NowMarkerIsBlackStroke(t *testing.T) {
+	frame := newTestFrame(220, 80)
+	opts := ChartOptions{
+		TempUnit:      "C",
+		GlobalTempMin: 5,
+		GlobalTempMax: 24,
+		HighlightHour: 12,
+		IsToday:       true,
+	}
+	RenderHourlyChart(frame, image.Rect(0, 0, 220, 80), sampleHourly(), opts)
+
+	// Scan every column for a contiguous PaperBlack run >= 25 px tall.
+	// The chart area minus labels/axis is at least that tall at h=80,
+	// so the marker is the only thing that produces a run that long.
+	const minRun = 25
+	found := false
+	for x := range 220 {
+		run := 0
+		for y := range 80 {
+			if frame.ColorIndexAt(x, y) == widget.PaperBlack {
+				run++
+				if run >= minRun {
+					found = true
+					break
+				}
+			} else {
+				run = 0
+			}
+		}
+		if found {
+			break
+		}
+	}
+	if !found {
+		t.Errorf("no PaperBlack vertical run >= %d px found — now-marker missing", minRun)
+	}
+}
+
+// And the inverse: when IsToday is false, no such tall PaperBlack column
+// exists (the temp polyline draws single black pixels but those don't
+// form a tall contiguous run).
+func TestRenderHourlyChart_NoMarkerWhenNotToday(t *testing.T) {
+	frame := newTestFrame(220, 80)
+	opts := ChartOptions{
+		TempUnit:      "C",
+		GlobalTempMin: 5,
+		GlobalTempMax: 24,
+		HighlightHour: 12,
+		IsToday:       false,
+	}
+	RenderHourlyChart(frame, image.Rect(0, 0, 220, 80), sampleHourly(), opts)
+
+	for x := range 220 {
+		run := 0
+		for y := range 80 {
+			if frame.ColorIndexAt(x, y) == widget.PaperBlack {
+				run++
+				if run >= 25 {
+					t.Fatalf("col %d has black run %d — marker drew when IsToday=false", x, run)
+				}
+			} else {
+				run = 0
+			}
+		}
+	}
+}
+
 func TestRenderHourlyChart_Basic(t *testing.T) {
 	frame := newTestFrame(120, 80)
 	opts := ChartOptions{

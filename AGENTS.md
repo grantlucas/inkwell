@@ -2,62 +2,87 @@
 
 ## Target Hardware — Read This Before Touching Rendering
 
-**Inkwell drives a Waveshare 7.5" V2 e-paper panel. The panel is
-fundamentally a 1-bit display.** Forgetting this leads to PRs that look
-great in the preview but worse than baseline on real hardware.
+**Inkwell drives a Waveshare 7.5" V2 e-paper panel.** It supports two
+modes; both are wired end-to-end and selectable via `color_mode` in
+config. Forgetting which mode is active (and what it actually shows)
+leads to PRs that look great in the preview but worse than baseline on
+real hardware.
 
 What the panel can show:
 
-- **`BW` mode (default, active):** 1 bit per pixel — pure black or pure white.
-- **`Init4Gray` mode (supported but not yet wired end-to-end):** four
-  levels — white, light gray, dark gray, black. Requires running the
-  `Init4Gray` command sequence + 2-bits-per-pixel buffer.
+- **`gray4` mode (default):** 2 bits per pixel — white, light gray,
+  dark gray, black. Driven by the `Init4Gray` command sequence and a
+  split-plane SPI write. Slower refresh and a larger framebuffer than
+  BW; no partial refresh. This is the recommended mode and the default
+  in `DefaultConfig()`.
+- **`bw` mode:** 1 bit per pixel — pure black or pure white via a
+  `Y<128` threshold. Faster refresh, smaller framebuffer.
 
-There is **no native 8-level or 12-level grayscale.** The compositor uses
-a 12-level `PaperPalette` purely as a *rendering canvas* so widgets can
-draw with anti-aliased edges and intermediate grays — but the **packer
-collapses that down to what the device actually supports** before any
-data leaves the host:
+There is **no native 8-level or 12-level grayscale, and there is no
+dithering.** Both packers collapse the compositor's frame straight to
+the device's bit depth:
 
-- `packBW` (`internal/inkwell/buffer.go`) — Bayer 4×4 ordered dithering
-  to 1 bit per pixel. Soft grays survive as halftone stipple patterns.
-- `packGray4` — 4-level luminance buckets. Reserved for the Init4Gray
-  device path once it's wired through `EPD`/`SPI`.
+- `packBW` (`internal/inkwell/buffer.go`) — pure threshold. Anything
+  with luminance ≥ 128 becomes white; anything below becomes black.
+  No Bayer / Floyd-Steinberg stipple anywhere; soft grays don't
+  "survive" — they collapse all-or-nothing.
+- `packGray4` — 4-level luminance buckets via the boundaries baked
+  into `gray4Palette`: `Y > 192` → white, `> 128` → light gray,
+  `> 64` → dark gray, else black. Used by the `Init4Gray` device
+  path.
+
+The compositor still draws into a 12-level `PaperPalette` because the
+font drawer needs intermediate grays for anti-aliased glyph edges and
+because `packGray4` can express two real gray buckets. Just don't
+mistake the source canvas for what the device will show.
 
 ### Hard rules when adding visual elements
 
 1. **Always reason about what the *device* will show, not what the
    preview shows.** Open `http://localhost:8080/` and look at the
-   default view — that is the post-dither device buffer. Use the
-   `Source (design intent)` toggle (or `?source=1`) for the smooth
-   grayscale design view; do not rely on it for visual sign-off.
-2. **Pure black and pure white are the only luminance levels guaranteed
-   to render as-is.** Everything in between becomes stipple patterns
-   on hardware. Use that intentionally — but don't expect a flat
-   `PaperGray20` fill on a small region (under ~12 px on a side) to
-   look like a clean gray, because there aren't enough pixels for the
-   pattern to read.
-3. **Anti-aliased glyph edges turn into edge stippling on the device.**
-   That's fine for body text; for tiny labels (≤10 pt) it can look
-   fuzzy. Use `HintingFull` (no AA) when crispness matters more than
-   smoothness; `HintingVertical` (the default) keeps vertical stems
-   sharp while letting horizontal edges anti-alias.
-4. **`PaperBlack` / `PaperWhite` are the only safe choices for 1-px
-   strokes.** A 1-px line at `PaperGray40` becomes a dashed dotted
-   line on the device after dithering. If you need a soft hairline,
-   make it at least 2 px tall (so the dither has room to express a
-   gray) or accept the dotted appearance.
-5. **Don't add new `PaperGrayNN` entries without testing on the device
-   view.** Each new entry must yield a visibly distinct halftone
-   pattern in the dithered output, otherwise you're adding palette
-   bloat for no on-device benefit.
+   default view — that is the post-pack device buffer (BW threshold or
+   Gray4 quantized, depending on `color_mode`). Use the
+   `Source (design intent)` toggle (or `?source=1`) only for design
+   review; do not rely on it for visual sign-off.
+2. **Soft accents must be expressed as solid `PaperBlack` strokes,
+   not as gray fills.** A `PaperGray20` background tint vanishes in
+   Gray4's light bucket and snaps to white under the BW threshold —
+   it reads on neither mode. Use inversion (`PaperBlack` fill +
+   `PaperWhite` text) for highlights and 1–2 px `PaperBlack` strokes
+   for indicators. `PaperGrayNN` fills are only useful when the region
+   is large enough for the Gray4 bucket to read (precip-bar
+   interiors are the canonical case — they land `PaperGray70` so
+   Gray4 gets dark gray and BW gets solid black).
+3. **For text, use `PaperBlack` as the source color.** A gray source
+   (`PaperGray70`) leaves the anti-aliased fringe above the BW
+   threshold and the glyphs fragment; only black source spans the
+   threshold cleanly enough to keep letterforms recognizable. Carry
+   visual hierarchy with font weight + size, not color. `HintingFull`
+   was tried and rejected — at 10–12 pt it snapped thin features (the
+   J's descender hook in Terminus) to zero pixels at certain offsets;
+   `HintingVertical` + a `PaperBlack` source is what's in `fonts.go`.
+4. **Tiny Regular-weight text (10–12 pt) breaks under threshold.**
+   Terminus Regular has 1-px stems and decorative features (the J's
+   detached hook) that disconnect on-device. Use `fonts.SemiBold` for
+   any body text below ~14 pt; reserve `fonts.Regular` for sizes where
+   stems are ≥ 2 px wide on their own.
+5. **Don't add new `PaperGrayNN` entries.** The palette is pinned by
+   `TestPaperPalette_BWBucket` which records exactly which shades
+   collapse to black vs white under the BW threshold; adding a new
+   entry doesn't help unless it lands in a Gray4 bucket nothing else
+   occupies, and the two device-real shades (`PaperGray70` for the
+   dark-gray bucket, anything `PaperGray60`+ for the black side of
+   the threshold) already cover the design space.
 
 ### When in doubt
 
-Generate two screenshots — the default device view and `?source=1` — and
-compare. If a visual decision only reads in the source view and
+Generate two screenshots — the default device view and `?source=1` —
+and compare. If a visual decision only reads in the source view and
 disappears in the device view, the design has to change, not the
-preview.
+preview. Swap `color_mode` in `inkwell.yaml` between `gray4` and `bw`
+to verify both paths; what looks fine on Gray4 can still fragment on
+BW (and vice versa for thin gray fills that survive only because of
+the Gray4 bucket).
 
 ## Workflow
 

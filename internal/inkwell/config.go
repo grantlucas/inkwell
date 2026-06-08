@@ -66,11 +66,17 @@ type ImageConfig struct {
 }
 
 // DefaultConfig returns a Config with all defaults applied.
+//
+// ColorMode defaults to "gray4" because the post-refresh rendering reads
+// noticeably better on hardware than 1-bit BW — precip bars stay as a
+// dark gray instead of collapsing to solid black, and the design intent
+// shines through. BW is still available for users who want the smaller
+// framebuffer / faster refresh trade-off.
 func DefaultConfig() *Config {
 	return &Config{
 		Display:         "waveshare_7in5_v2",
 		Backend:         "preview",
-		ColorMode:       "bw",
+		ColorMode:       "gray4",
 		ClearOnShutdown: true,
 		Preview:         PreviewConfig{Port: 8080},
 		Image:           ImageConfig{OutputDir: "output"},

@@ -19,31 +19,18 @@ func PackImage(profile *DisplayProfile, img image.Image) ([]byte, error) {
 	}
 }
 
-// bayer4x4 is the standard 4×4 ordered-dither threshold matrix. Values are
-// in [0, 15] and get scaled into the [0, 255] luminance range when used as
-// per-pixel thresholds. The matrix produces visually-stable halftone patterns
-// (no error-propagation snake artifacts) which suits a dashboard's flat
-// gray fills better than a Floyd-Steinberg style approach.
-var bayer4x4 = [4][4]int{
-	{0, 8, 2, 10},
-	{12, 4, 14, 6},
-	{3, 11, 1, 9},
-	{15, 7, 13, 5},
-}
-
-// packBW packs an image into a 1-bit-per-pixel buffer (8 pixels per byte, MSB
-// first). Convention: black pixel → bit 1, white pixel → bit 0.
+// packBW packs an image into a 1-bit-per-pixel buffer (8 pixels per byte,
+// MSB first). Convention: black pixel → bit 1, white pixel → bit 0.
 //
-// The Waveshare 7.5" V2 panel is fundamentally 1-bit, so any intermediate
-// grays the compositor produced (anti-aliased glyph edges, today highlight
-// tint, hour-band, soft separators, precip-bar fills) would otherwise snap
-// to pure black or white at the device — wiping out the visual hierarchy.
-// To preserve gradations on a 1-bit panel we apply Bayer-4×4 ordered
-// dithering: each output pixel uses a position-dependent threshold from
-// the matrix, so a gray fill turns into a structured stipple pattern the
-// eye reads as a continuous tone. Pure black (Y=0) and pure white (Y=255)
-// are unaffected because they fall outside the threshold range, keeping
-// solid type and pure-white backgrounds crisp.
+// The Waveshare 7.5" V2 panel is fundamentally 1-bit. We threshold each
+// pixel at Y < 128 → black so the device sees pure black or pure white —
+// no halftone stipple. Anti-aliased glyph edges from the font drawer (and
+// any other intermediate grays) collapse along the same threshold, which
+// keeps text crisp without leaving halftone dots scattered through what
+// should be solid backgrounds. Widgets that need a soft accent must draw
+// it as a solid PaperBlack stroke (a line, outline, or tick) rather than
+// a gray fill; gray fills below the threshold render solid black and
+// gray fills above it disappear, so they read as "all-or-nothing" in BW.
 func packBW(profile *DisplayProfile, img image.Image) []byte {
 	buf := make([]byte, profile.BufferSize())
 	w := profile.Width
@@ -51,9 +38,7 @@ func packBW(profile *DisplayProfile, img image.Image) []byte {
 	for y := range h {
 		for x := range w {
 			g := color.GrayModel.Convert(img.At(x, y)).(color.Gray)
-			// Matrix value 0..15 → threshold 8, 24, 40, … 248.
-			threshold := bayer4x4[y%4][x%4]*16 + 8
-			if int(g.Y) < threshold { // dark → black → bit = 1
+			if g.Y < 128 { // dark → black → bit = 1
 				idx := (y*w + x) / 8
 				bit := uint(7 - (x % 8)) // MSB first
 				buf[idx] |= 1 << bit

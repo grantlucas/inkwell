@@ -917,6 +917,7 @@ func TestNewApp_ColorModeBW_LeavesProfileBW(t *testing.T) {
 	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2
 backend: preview
+color_mode: bw
 `))
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)

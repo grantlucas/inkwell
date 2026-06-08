@@ -24,7 +24,12 @@ var (
 func init() {
 	labelFace = mustLoadFace(fonts.SemiBold, 10, "label")
 	tempHiFace = mustLoadFace(fonts.Bold, 12, "temp hi")
-	tempLoFace = mustLoadFace(fonts.Regular, 10, "temp lo")
+	// Lo temp is SemiBold (not Regular) for the same reason monthFace
+	// in day_header.go is — Terminus's Regular at 10 pt produces glyphs
+	// with 1-px stems and detached features that fragment on-device
+	// after the BW threshold. SemiBold's 2-px stems are robust. The
+	// hi/lo hierarchy is still readable: Bold 12 vs. SemiBold 10.
+	tempLoFace = mustLoadFace(fonts.SemiBold, 10, "temp lo")
 }
 
 // mustLoadFace is extracted so the per-face panic branches are
@@ -98,9 +103,11 @@ func RenderDayWeather(frame *image.Paletted, bounds image.Rectangle, day weather
 		labelY := bounds.Min.Y + labelFace.Metrics().Ascent.Ceil() + 4
 		label := day.Condition.Label()
 		maxLabelW := w - textX + bounds.Min.X
-		// Condition label as a quiet caption above the temps so the
-		// temperature reads as the primary number in the row.
-		drawTextGrayWithFace(frame, textX, labelY, truncateText(label, maxLabelW/charWidth), labelFace, widget.PaperGray70)
+		// Condition label renders in solid PaperBlack; the BW threshold
+		// chops AA fringe off any gray source color, so a "muted" label
+		// in PaperGray70 ends up fragmented. Hierarchy comes from font
+		// weight (semi-bold label vs. regular temps) and position.
+		drawTextWithFace(frame, textX, labelY, truncateText(label, maxLabelW/charWidth), labelFace)
 	}
 
 	tempStr := fmt.Sprintf("%d°%s", int(math.Round(hi)), unit)
@@ -108,13 +115,16 @@ func RenderDayWeather(frame *image.Paletted, bounds image.Rectangle, day weather
 	tempY := bounds.Min.Y + condRowH - 4
 	drawTextWithFace(frame, textX, tempY, tempStr, tempHiFace)
 	hiW := textWidth(tempHiFace, tempStr)
-	// Low temp in muted gray — visual hierarchy: high temp is the headline.
-	drawTextGrayWithFace(frame, textX+hiW+3, tempY, loStr, tempLoFace, widget.PaperGray70)
+	// Low temp also in PaperBlack — see the label note above. Hierarchy
+	// between hi/lo is carried by font weight (bold hi vs. regular lo).
+	drawTextWithFace(frame, textX+hiW+3, tempY, loStr, tempLoFace)
 
-	// Soft hairline dividing the condition row from the chart below. Pure
-	// black would scream against the small text — Gray30 reads as a clean
-	// structural rule without dominating the cell.
-	drawHLine(frame, bounds.Min.X, bounds.Max.X, bounds.Min.Y+condRowH, widget.PaperGray30)
+	// Condition-row divider: PaperBlack so it survives the BW threshold
+	// and the Gray4 quantization. The old PaperGray30 (Y=0xB3) only read
+	// as a soft hairline thanks to the Bayer dither — without it the rule
+	// either vanished (light bucket on Gray4) or disappeared entirely
+	// (above 128 on the BW threshold).
+	drawHLine(frame, bounds.Min.X, bounds.Max.X, bounds.Min.Y+condRowH, widget.PaperBlack)
 
 	chartBounds := image.Rect(
 		bounds.Min.X+2,

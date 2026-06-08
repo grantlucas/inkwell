@@ -36,11 +36,14 @@ func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calend
 			break
 		}
 
-		// Soft accent rule: the inner pixel is mid-gray, the outer is darker
-		// so the rule reads as a 2px stroke with a subtle anti-aliased edge.
+		// 2-px solid PaperBlack rule. The previous outer/inner gray pair
+		// only read as "soft" because the Bayer dither broke up the
+		// strokes; without dithering, PaperGray40 threshold-snaps away
+		// entirely and the inner line vanishes. Solid black on both
+		// strokes is the durable choice now.
 		ruleX := bounds.Min.X + eventPadX
-		drawVLine(frame, ruleX, y-lineHeight+2, y+2, widget.PaperGray60)
-		drawVLine(frame, ruleX+1, y-lineHeight+2, y+2, widget.PaperGray40)
+		drawVLine(frame, ruleX, y-lineHeight+2, y+2, widget.PaperBlack)
+		drawVLine(frame, ruleX+1, y-lineHeight+2, y+2, widget.PaperBlack)
 
 		textX := ruleX + eventRuleW + eventGap
 
@@ -50,9 +53,12 @@ func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calend
 		} else {
 			timeLine = e.Start.Format("15:04")
 		}
-		// Time line is secondary information — render in muted gray so the
-		// event title becomes the primary read.
-		drawTextGray(frame, textX, y, truncateText(timeLine, maxChars), widget.PaperGray70)
+		// All event text renders in solid PaperBlack. A gray source color
+		// loses its AA fringe to the BW threshold and small body text
+		// fragments. The event title's role as the primary read is
+		// carried by being the second line in the cell (visually below
+		// the time), not by being darker than the surrounding text.
+		drawText(frame, textX, y, truncateText(timeLine, maxChars))
 		y += lineHeight + eventLineGap
 
 		if y > bounds.Max.Y-lineHeight {
@@ -64,7 +70,7 @@ func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calend
 		y += lineHeight + eventLineGap
 
 		if showLocation && e.Location != "" && y <= bounds.Max.Y-lineHeight {
-			drawTextGray(frame, textX, y, truncateText(e.Location, maxChars), widget.PaperGray70)
+			drawText(frame, textX, y, truncateText(e.Location, maxChars))
 			y += lineHeight + eventLineGap
 		}
 

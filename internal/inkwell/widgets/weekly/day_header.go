@@ -20,7 +20,14 @@ var (
 func init() {
 	dayAbbrFace = mustLoadHeaderFace(fonts.SemiBold, 12, "day abbr")
 	dateNumFace = mustLoadHeaderFace(fonts.SemiBold, 16, "date num")
-	monthFace = mustLoadHeaderFace(fonts.Regular, 12, "month")
+	// Month abbr is SemiBold (not Regular) because Terminus's Regular
+	// "J" at 12 pt renders with a 1-px stem and a hook that sits to the
+	// left of that stem, which reads on-device as a disconnected
+	// ".UN" — the user couldn't see the J at all from across the room.
+	// SemiBold widens the stem to 2 px and ties the hook into it, so
+	// "JUN" reads cleanly black-on-white. Today's inverted column was
+	// fine in Regular because the white-on-black contrast hid the gap.
+	monthFace = mustLoadHeaderFace(fonts.SemiBold, 12, "month")
 }
 
 // mustLoadHeaderFace is extracted so the per-face panic branches are
@@ -36,17 +43,23 @@ func mustLoadHeaderFace(weight fonts.Weight, size float64, role string) font.Fac
 }
 
 // renderDayHeader draws the day header for a column: abbreviated day name,
-// date number, and month abbreviation, all centered. Today's column gets a
-// soft gray background tint with normal dark text on top, plus a subtle
-// underscore — far easier on the eye than the old hard inverse block.
+// date number, and month abbreviation, all centered. Today's column inverts
+// to a solid PaperBlack block with PaperWhite text — a soft gray tint
+// vanishes on BW (pure threshold) and collapses to pure white in Gray4's
+// light bucket, so the inversion is the only device-durable signal.
 func renderDayHeader(frame *image.Paletted, bounds image.Rectangle, day time.Time, isToday bool) {
+	// All text in the day header renders in solid PaperBlack so the AA
+	// fringe doesn't get chopped by the BW threshold path — a gray
+	// source color leaves anti-aliased edge pixels above Y=128, which
+	// the threshold then drops, leaving glyphs visibly fragmented. The
+	// visual hierarchy comes from font weight + size (semi-bold day
+	// abbr, large date number, regular month abbr), not color.
+	primaryIdx := widget.PaperBlack
+	mutedIdx := widget.PaperBlack
 	if isToday {
-		fillRect(frame, bounds, widget.PaperGray10)
-		// 1-px underline grounding the today cell. PaperBlack is the
-		// only device-safe choice for a 1-pixel stroke — a flat
-		// PaperGray60 row dithers into a dashed dotted line, which
-		// reads as broken rather than as a "subtle hairline".
-		drawHLine(frame, bounds.Min.X, bounds.Max.X, bounds.Max.Y-1, widget.PaperBlack)
+		fillRect(frame, bounds, widget.PaperBlack)
+		primaryIdx = widget.PaperWhite
+		mutedIdx = widget.PaperWhite
 	}
 
 	dayAbbr := strings.ToUpper(day.Format("Mon"))
@@ -65,15 +78,12 @@ func renderDayHeader(frame *image.Paletted, bounds image.Rectangle, day time.Tim
 	totalH := abbrH + gap + dateH + gap + monthH
 	startY := bounds.Min.Y + (bounds.Dy()-totalH)/2
 
-	// Day-of-week (MON, TUE, …) and month abbr render in muted gray so the
-	// date number stays the visual anchor. Today inherits the same treatment;
-	// the background tint already signals "today" without needing inverse text.
 	y := startY + abbrMetrics.Ascent.Ceil()
-	drawTextCenteredGrayWithFace(frame, bounds.Min.X, bounds.Max.X, y, dayAbbr, dayAbbrFace, widget.PaperGray70)
+	drawTextCenteredGrayWithFace(frame, bounds.Min.X, bounds.Max.X, y, dayAbbr, dayAbbrFace, mutedIdx)
 
 	y += abbrMetrics.Descent.Ceil() + gap + dateMetrics.Ascent.Ceil()
-	drawTextCenteredWithFace(frame, bounds.Min.X, bounds.Max.X, y, dateNum, dateNumFace)
+	drawTextCenteredGrayWithFace(frame, bounds.Min.X, bounds.Max.X, y, dateNum, dateNumFace, primaryIdx)
 
 	y += dateMetrics.Descent.Ceil() + gap + monthMetrics.Ascent.Ceil()
-	drawTextCenteredGrayWithFace(frame, bounds.Min.X, bounds.Max.X, y, monthAbbr, monthFace, widget.PaperGray70)
+	drawTextCenteredGrayWithFace(frame, bounds.Min.X, bounds.Max.X, y, monthAbbr, monthFace, mutedIdx)
 }

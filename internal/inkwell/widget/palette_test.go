@@ -55,41 +55,38 @@ func TestPaperPalette_MonotonicGrayRamp(t *testing.T) {
 	}
 }
 
-// On the 1-bit panel, each PaperGrayNN must produce a *distinct* halftone
-// stipple after Bayer-4×4 ordered dithering — otherwise the entry is
-// palette bloat with no on-device benefit. Simulate the dither across a
-// 32×32 tile (large enough to express every threshold in the matrix
-// multiple times) and assert that the number of "on" pixels strictly
-// increases from PaperGray05 to PaperGray90.
-func TestPaperPalette_PostDitherDistinctness(t *testing.T) {
-	// Same threshold table used by packBW in internal/inkwell/buffer.go.
-	// Kept in sync by convention; if packBW's matrix changes, update here.
-	bayer := [4][4]int{
-		{0, 8, 2, 10},
-		{12, 4, 14, 6},
-		{3, 11, 1, 9},
-		{15, 7, 13, 5},
+// On the 1-bit panel, the BW packer threshold-snaps each pixel at Y<128.
+// That means PaperGray05..PaperGray50 (Y=0x80..0xF2) all collapse to pure
+// white and PaperGray60..PaperGray90 (Y=0x1A..0x66) all collapse to pure
+// black — they only stay visually distinct on the Gray4 path and in the
+// source-design preview. Pin the bucket boundary so a palette shuffle
+// that quietly drops a "subtle" shade across the Y=128 line shows up in
+// CI rather than only on hardware. Anything a widget needs to be visible
+// on the BW threshold path has to land at PaperGray60 or darker.
+func TestPaperPalette_BWBucket(t *testing.T) {
+	cases := []struct {
+		idx       uint8
+		wantBlack bool
+	}{
+		{PaperWhite, false},
+		{PaperGray05, false},
+		{PaperGray10, false},
+		{PaperGray20, false},
+		{PaperGray30, false},
+		{PaperGray40, false},
+		{PaperGray50, false}, // Y=0x80 is exactly the threshold; treated as white
+		{PaperGray60, true},
+		{PaperGray70, true},
+		{PaperGray80, true},
+		{PaperGray90, true},
+		{PaperBlack, true},
 	}
-	onPixels := func(y uint8) int {
-		count := 0
-		for py := range 32 {
-			for px := range 32 {
-				threshold := bayer[py%4][px%4]*16 + 8
-				if int(y) < threshold {
-					count++
-				}
-			}
+	for _, c := range cases {
+		g := PaperPalette[c.idx].(color.Gray)
+		gotBlack := g.Y < 128
+		if gotBlack != c.wantBlack {
+			t.Errorf("palette[%d] Y=0x%02X gotBlack=%v wantBlack=%v",
+				c.idx, g.Y, gotBlack, c.wantBlack)
 		}
-		return count
-	}
-
-	prev := -1
-	for i := int(PaperGray05); i <= int(PaperGray90); i++ {
-		g := PaperPalette[i].(color.Gray)
-		n := onPixels(g.Y)
-		if n <= prev {
-			t.Errorf("palette[%d] (Y=0x%02X) on-pixel count %d is not greater than previous %d — entries collapse to the same stipple on the device", i, g.Y, n, prev)
-		}
-		prev = n
 	}
 }
