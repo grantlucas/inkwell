@@ -27,35 +27,17 @@ func New(bounds image.Rectangle, thickness int) *Widget {
 // Bounds returns the widget's display rectangle.
 func (w *Widget) Bounds() image.Rectangle { return w.bounds }
 
-// Render draws a soft horizontal divider at the bottom of the bounds. A
-// 1px line is a single mid-gray row; thicker lines render the interior in
-// gray with a darker pixel at the top edge for a subtle hairline.
+// Render draws a horizontal divider at the bottom of the bounds. Every
+// row renders in PaperBlack: with the BW packer threshold-snapping (no
+// more Bayer dither) a "soft" gray interior just disappears, so the
+// separator is now a solid bar across its full thickness.
 func (w *Widget) Render(frame *image.Paletted) error {
 	draw.Draw(frame, w.bounds, image.NewUniform(color.White), image.Point{}, draw.Src)
 
-	// Compute the highest (topmost) row we'll actually draw, so we can put
-	// the darker accent there even when the requested thickness is clipped
-	// by the widget's bounds.
 	topY := max(w.bounds.Max.Y-w.thickness, w.bounds.Min.Y)
-
-	height := w.bounds.Max.Y - topY
 	for y := w.bounds.Max.Y - 1; y >= topY; y-- {
-		// 1-px strokes must be black on the device — a flat PaperGrayNN
-		// row dithers to a dashed dotted line, not a hairline.
-		// Multi-row separators can still afford a gray interior because
-		// the dither has vertical room to express a halftone pattern.
-		var idx uint8
-		switch {
-		case height == 1:
-			idx = widget.PaperBlack
-		case y == topY:
-			// Top edge of a multi-row separator: keep crisp.
-			idx = widget.PaperBlack
-		default:
-			idx = widget.PaperGray40
-		}
 		for x := w.bounds.Min.X; x < w.bounds.Max.X; x++ {
-			frame.SetColorIndex(x, y, idx)
+			frame.SetColorIndex(x, y, widget.PaperBlack)
 		}
 	}
 

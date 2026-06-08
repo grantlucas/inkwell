@@ -71,13 +71,18 @@ func RenderHourlyChart(frame *image.Paletted, bounds image.Rectangle, hourly []w
 	barTop := bounds.Min.Y + tempH + sepH
 
 	// Axis line between the temperature curve and the precipitation
-	// bars. 1-px strokes have to be PaperBlack on the device — a flat
-	// PaperGrayNN row dithers into a dashed dotted line, which read
-	// as broken instead of "soft guideline" on the panel.
+	// bars. Solid PaperBlack so it reads as a single crisp rule on both
+	// the BW threshold path and Gray4.
 	drawHLine(frame, bounds.Min.X, bounds.Max.X, barTop-1, widget.PaperBlack)
 
-	// Soft hour-highlight band: a thin vertical fill behind the data for
-	// today's current hour. Much easier to parse than the old dashed line.
+	// "Now" indicator: a 2-px solid PaperBlack vertical stroke at the
+	// current hour. The previous soft-gray fill vanished on hardware —
+	// PaperGray20 collapses to white in Gray4's light bucket and BW now
+	// thresholds without dither, so any subtle fill disappears. A solid
+	// stroke is the only treatment that survives unchanged across all
+	// three render paths (source, gray4, BW). Drawn before the data so
+	// the temp polyline and bars overlay it; the user still sees one
+	// clear vertical marker that intersects the data at the right hour.
 	if opts.IsToday {
 		for _, hp := range filtered {
 			if hp.Hour != opts.HighlightHour {
@@ -85,9 +90,9 @@ func RenderHourlyChart(frame *image.Paletted, bounds image.Rectangle, hourly []w
 			}
 			i := hp.Hour - chartStartHour
 			cx := bounds.Min.X + int(float64(i)*step) + barW/2
-			bandW := max(barW+2, 6)
-			band := image.Rect(cx-bandW/2, bounds.Min.Y, cx+bandW/2+1, barTop+barMaxH)
-			fillRect(frame, band, widget.PaperGray20)
+			markerW := 2
+			marker := image.Rect(cx-markerW/2, bounds.Min.Y, cx+markerW/2+markerW%2, barTop+barMaxH)
+			fillRect(frame, marker, widget.PaperBlack)
 			break
 		}
 	}
@@ -131,13 +136,12 @@ func RenderHourlyChart(frame *image.Paletted, bounds image.Rectangle, hourly []w
 			barH = 2
 		}
 		if barH > 0 {
-			// Precip bars: soft gray fill with a device-safe black top
-			// edge. The interior gets enough vertical room to dither
-			// as a halftone; a 1-px top in PaperGrayNN would just
-			// stipple, so make the cap PaperBlack to read as a crisp
-			// rim.
+			// Precip bars: PaperGray70 fill (Y=0x4D) so they land black on
+			// the BW threshold and dark-gray on Gray4. PaperGray40 would
+			// disappear without the old Bayer dither. Cap stays
+			// PaperBlack for a crisp rim against the chart background.
 			r := image.Rect(bx, barTop+barMaxH-barH, bx+barW, barTop+barMaxH)
-			fillRect(frame, r, widget.PaperGray40)
+			fillRect(frame, r, widget.PaperGray70)
 			drawHLine(frame, r.Min.X, r.Max.X, r.Min.Y, widget.PaperBlack)
 		}
 
@@ -156,7 +160,11 @@ func RenderHourlyChart(frame *image.Paletted, bounds image.Rectangle, hourly []w
 		cx := bounds.Min.X + int(float64(i)*step) + barW/2
 		labelY := barTop + barMaxH + lineHeight
 		textW := len(label) * charWidth
-		drawTextCenteredGray(frame, cx-textW/2, cx-textW/2+textW, labelY, label, widget.PaperGray70)
+		// Hour labels in solid PaperBlack so they survive the BW
+		// threshold cleanly. A muted-gray source color would lose its
+		// AA fringe and at this small size (10pt) the labels would
+		// fragment badly.
+		drawTextCentered(frame, cx-textW/2, cx-textW/2+textW, labelY, label)
 	}
 }
 

@@ -26,25 +26,30 @@ func TestRenderDayHeader_Normal(t *testing.T) {
 }
 
 func TestRenderDayHeader_Today(t *testing.T) {
-	// Today renders as a soft gray background tint with dark text on top,
-	// and a hairline accent at the bottom edge — no more inverse block.
+	// Today renders as a solid PaperBlack block with PaperWhite text.
+	// Inversion is the only treatment that survives the device path
+	// without dithering — a soft gray fill would either snap to white
+	// (BW threshold) or collapse to the light-gray bucket and vanish
+	// (Gray4). Asserts both the fill is present *and* that there is
+	// white text inside it (otherwise an all-black rect would silently
+	// satisfy the fill check).
 	frame := newTestFrame(114, 44)
 	day := time.Date(2026, 4, 28, 0, 0, 0, 0, time.UTC)
 	renderDayHeader(frame, image.Rect(0, 0, 114, 44), day, true)
 
-	var tintCount, accentCount int
+	var blackCount, whiteCount int
 	for _, px := range frame.Pix {
 		switch px {
-		case widget.PaperGray10:
-			tintCount++
-		case widget.PaperGray60:
-			accentCount++
+		case widget.PaperBlack:
+			blackCount++
+		case widget.PaperWhite:
+			whiteCount++
 		}
 	}
-	if tintCount == 0 {
-		t.Error("today header has no background tint pixels (PaperGray10)")
+	if blackCount == 0 {
+		t.Error("today header has no PaperBlack fill pixels")
 	}
-	if accentCount == 0 {
-		t.Error("today header has no hairline accent pixels (PaperGray60)")
+	if whiteCount == 0 {
+		t.Error("today header has no PaperWhite text pixels inside the inverted block")
 	}
 }

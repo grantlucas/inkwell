@@ -26,15 +26,14 @@ func TestWidget_RenderDefault(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 
-	// Multi-row separator: top edge is crisp PaperBlack so the 1-px
-	// stroke survives dithering, and the interior fills in with
-	// PaperGray40 so the band reads as a soft hairline overall.
+	// All separator rows are solid PaperBlack now that the device path
+	// is pure threshold — there's no halftone interior to render any
+	// gray as a "soft" hairline, so the whole band is black.
 	for x := bounds.Min.X; x < bounds.Max.X; x++ {
-		if got := frame.ColorIndexAt(x, 51); got != widget.PaperGray40 {
-			t.Fatalf("base row pixel (%d, 51): got %d, want %d (PaperGray40)", x, got, widget.PaperGray40)
-		}
-		if got := frame.ColorIndexAt(x, 50); got != widget.PaperBlack {
-			t.Fatalf("top row pixel (%d, 50): got %d, want %d (PaperBlack)", x, got, widget.PaperBlack)
+		for _, y := range []int{50, 51} {
+			if got := frame.ColorIndexAt(x, y); got != widget.PaperBlack {
+				t.Fatalf("row pixel (%d, %d): got %d, want %d (PaperBlack)", x, y, got, widget.PaperBlack)
+			}
 		}
 	}
 
@@ -52,15 +51,10 @@ func TestWidget_RenderCustomThickness(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 
-	// Interior rows render at PaperGray40; only the topmost row gets
-	// the device-safe PaperBlack accent.
-	for _, y := range []int{12, 13} {
-		if got := frame.ColorIndexAt(50, y); got != widget.PaperGray40 {
-			t.Errorf("base row (50, %d): got %d, want %d (PaperGray40)", y, got, widget.PaperGray40)
+	for _, y := range []int{11, 12, 13} {
+		if got := frame.ColorIndexAt(50, y); got != widget.PaperBlack {
+			t.Errorf("row (50, %d): got %d, want %d (PaperBlack)", y, got, widget.PaperBlack)
 		}
-	}
-	if got := frame.ColorIndexAt(50, 11); got != widget.PaperBlack {
-		t.Errorf("top row (50, 11): got %d, want %d (PaperBlack)", got, widget.PaperBlack)
 	}
 	if frame.ColorIndexAt(50, 10) != widget.PaperWhite {
 		t.Error("row 10 should be white (only 3 of 4 rows filled)")
@@ -76,19 +70,15 @@ func TestWidget_RenderThicknessExceedsBounds(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 
-	// Within bounds (rows 0 and 1) the separator still draws as
-	// black top edge + gray interior.
-	if got := frame.ColorIndexAt(5, 1); got != widget.PaperGray40 {
-		t.Errorf("base row (5,1): got %d, want %d (PaperGray40)", got, widget.PaperGray40)
-	}
-	if got := frame.ColorIndexAt(5, 0); got != widget.PaperBlack {
-		t.Errorf("top row (5,0): got %d, want %d (PaperBlack)", got, widget.PaperBlack)
+	// Within bounds (rows 0 and 1) every row is solid PaperBlack.
+	for _, y := range []int{0, 1} {
+		if got := frame.ColorIndexAt(5, y); got != widget.PaperBlack {
+			t.Errorf("row (5,%d): got %d, want %d (PaperBlack)", y, got, widget.PaperBlack)
+		}
 	}
 }
 
 func TestWidget_RenderSingleRowUsesBlack(t *testing.T) {
-	// A 1-px separator must be PaperBlack — flat gray dithers into a
-	// dashed dotted line on the e-paper device.
 	bounds := image.Rect(0, 5, 10, 6)
 	w := New(bounds, 1)
 

@@ -130,7 +130,11 @@ func (w *Widget) Render(frame *image.Paletted) error {
 		renderEvents(frame, col.Events, dayEvents, w.config.MaxEvents, w.config.ShowLocation)
 
 		if !col.IsLast {
-			drawVLine(frame, col.Bounds.Max.X-1, w.bounds.Min.Y, w.bounds.Max.Y, widget.PaperGray40)
+			// Column divider in PaperBlack so it stays a continuous rule
+			// on the device. PaperGray40 (Y=0x99) only read as a "soft"
+			// divider under the now-removed Bayer dither; without it the
+			// stroke disappears on both the BW threshold and Gray4 paths.
+			drawVLine(frame, col.Bounds.Max.X-1, w.bounds.Min.Y, w.bounds.Max.Y, widget.PaperBlack)
 		}
 	}
 
