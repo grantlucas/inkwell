@@ -1,9 +1,11 @@
 display: waveshare_7in5_v2
 backend: preview
-# color_mode: bw  # default; set to "gray4" for 4-level grayscale.
-#                 # Gray4 trade-offs: slower refresh, no partial refresh,
-#                 # larger framebuffer. Only opt in once you've tested it
-#                 # on real hardware.
+color_mode: gray4  # 4-level grayscale (recommended). Set to "bw" for
+#                  # 1-bit black/white. Both paths use the same threshold
+#                  # rendering; gray4 keeps soft accents like precip-bar
+#                  # interiors visible as dark gray, BW collapses them to
+#                  # solid black. Gray4 trade-offs: slower refresh, no
+#                  # partial refresh, larger framebuffer.
 # clear_on_shutdown: true  # default; clears the panel to white on
 #                          # graceful shutdown (SIGINT/SIGTERM) before
 #                          # sleeping the controller. Set to false to

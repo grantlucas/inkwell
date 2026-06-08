@@ -217,8 +217,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Image.OutputDir != "output" {
 		t.Errorf("Image.OutputDir = %q, want output", cfg.Image.OutputDir)
 	}
-	if cfg.ColorMode != "bw" {
-		t.Errorf("ColorMode = %q, want bw", cfg.ColorMode)
+	if cfg.ColorMode != "gray4" {
+		t.Errorf("ColorMode = %q, want gray4", cfg.ColorMode)
 	}
 	if !cfg.ClearOnShutdown {
 		t.Errorf("ClearOnShutdown = false, want true (default)")
@@ -270,7 +270,7 @@ func TestLoadConfig_ColorMode(t *testing.T) {
 		{
 			label: "default omitted",
 			yaml:  "display: waveshare_7in5_v2",
-			want:  "bw",
+			want:  "gray4",
 		},
 		{
 			label: "explicit bw",

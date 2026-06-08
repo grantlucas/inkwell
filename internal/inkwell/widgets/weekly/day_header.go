@@ -20,7 +20,14 @@ var (
 func init() {
 	dayAbbrFace = mustLoadHeaderFace(fonts.SemiBold, 12, "day abbr")
 	dateNumFace = mustLoadHeaderFace(fonts.SemiBold, 16, "date num")
-	monthFace = mustLoadHeaderFace(fonts.Regular, 12, "month")
+	// Month abbr is SemiBold (not Regular) because Terminus's Regular
+	// "J" at 12 pt renders with a 1-px stem and a hook that sits to the
+	// left of that stem, which reads on-device as a disconnected
+	// ".UN" — the user couldn't see the J at all from across the room.
+	// SemiBold widens the stem to 2 px and ties the hook into it, so
+	// "JUN" reads cleanly black-on-white. Today's inverted column was
+	// fine in Regular because the white-on-black contrast hid the gap.
+	monthFace = mustLoadHeaderFace(fonts.SemiBold, 12, "month")
 }
 
 // mustLoadHeaderFace is extracted so the per-face panic branches are

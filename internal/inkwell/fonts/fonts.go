@@ -79,17 +79,20 @@ func Face(weight Weight, sizePt float64) (font.Face, error) {
 	if weight >= SemiBold {
 		idx = 1
 	}
-	// HintingFull snaps every glyph edge to whole-pixel boundaries, so
-	// no fringe pixel is partially anti-aliased. That's the only choice
-	// that survives the BW packer's pure threshold: with the prior
-	// HintingVertical, horizontal edges of muted-gray text (Y=77 source)
-	// produced mid-luminance AA pixels which the threshold then chopped
-	// — leaving glyphs visibly fragmented. With Full hinting the source
-	// luminance lands as-is at every pixel, so PaperGray70 (Y < 128)
-	// renders as solid black on BW and as the dark-gray bucket on Gray4.
+	// HintingVertical keeps baselines and stems aligned to whole pixels
+	// while permitting horizontal anti-aliasing along glyph edges. With
+	// every text path now sourcing PaperBlack (Y=0), the AA fringe spans
+	// 0..255 and the BW packer's Y<128 threshold cuts it down the middle
+	// — half of each fringe stays black, keeping glyph shapes intact.
+	// HintingFull was briefly tried here to suppress AA entirely, but at
+	// 10–12 pt sizes it snapped thin features (notably the J's descender
+	// hook in Terminus) to zero pixels at some column offsets, so "JUN"
+	// rendered as ".UN" in several day-header columns. Vertical hinting
+	// + a black text source is the combination that's actually
+	// device-durable.
 	return opentype.NewFace(parsedFonts[idx], &opentype.FaceOptions{
 		Size:    sizePt,
 		DPI:     96,
-		Hinting: font.HintingFull,
+		Hinting: font.HintingVertical,
 	})
 }

@@ -24,7 +24,12 @@ var (
 func init() {
 	labelFace = mustLoadFace(fonts.SemiBold, 10, "label")
 	tempHiFace = mustLoadFace(fonts.Bold, 12, "temp hi")
-	tempLoFace = mustLoadFace(fonts.Regular, 10, "temp lo")
+	// Lo temp is SemiBold (not Regular) for the same reason monthFace
+	// in day_header.go is — Terminus's Regular at 10 pt produces glyphs
+	// with 1-px stems and detached features that fragment on-device
+	// after the BW threshold. SemiBold's 2-px stems are robust. The
+	// hi/lo hierarchy is still readable: Bold 12 vs. SemiBold 10.
+	tempLoFace = mustLoadFace(fonts.SemiBold, 10, "temp lo")
 }
 
 // mustLoadFace is extracted so the per-face panic branches are
