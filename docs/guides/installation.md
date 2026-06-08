@@ -60,15 +60,21 @@ On the Pi (or on your workstation if you'd rather `scp` the result):
 # Pick your arch from the table above
 ARCH=linux-arm64
 
-# Always-latest URL — GitHub redirects to the most recent published
-# release. The asset name does not include the version, so this URL
-# stays stable across releases.
+# Always-latest URLs — GitHub redirects to the most recent published
+# release. The asset names do not include the version, so these URLs
+# stay stable across releases.
 curl -L -o inkwell.tar.gz \
   "https://github.com/grantlucas/inkwell/releases/latest/download/inkwell-${ARCH}.tar.gz"
+curl -L -o checksums.txt \
+  "https://github.com/grantlucas/inkwell/releases/latest/download/checksums.txt"
+
+# Verify the download against checksums.txt — fails loudly if the
+# tarball was truncated, tampered with, or has the wrong arch.
+grep "inkwell-${ARCH}.tar.gz" checksums.txt | sha256sum -c
 
 tar -xzf inkwell.tar.gz
 chmod +x inkwell
-./inkwell --help 2>&1 | head -1 || echo "binary is in place"
+./inkwell --version   # confirm the binary runs on this Pi
 ```
 
 To pin to a specific tagged version instead of `latest`:
@@ -241,8 +247,51 @@ stays blank, double-check that SPI is enabled
 
 ## 7. Updating
 
-To move to a newer release, download the new tarball (step 2), drop
-the new binary in place, and restart the service:
+Inkwell ships a built-in self-updater that pulls the matching arch
+tarball, sha256-verifies it against `checksums.txt`, and atomically
+replaces the running binary:
+
+```bash
+inkwell --version                  # version + commit + build date + runtime
+sudo inkwell self-update --check   # see what's available, no writes
+sudo inkwell self-update           # apply the latest release
+sudo systemctl restart inkwell     # bring the new binary up
+```
+
+`inkwell --version` and `-v` print the same multi-line block; the
+first line is always `inkwell vX.Y.Z` so shell scripts can grep it
+without a separate one-line form.
+
+`sudo` is needed because the installed binary at
+`/usr/local/bin/inkwell` is owned by root by default. If you'd
+rather not invoke `sudo`, `chown` the binary to the service user
+so that user can replace it: `sudo chown pi:pi /usr/local/bin/inkwell`.
+
+If the running version is already at the latest release,
+`self-update` is a no-op and exits 0. To reinstall the current
+version (recover from a corrupted binary, or repull after a
+republished release), pass `--force`:
+
+```bash
+sudo inkwell self-update --force
+```
+
+**Failure semantics.** If the download or sha256 verification fails,
+the existing binary is left in place and the partial download is
+removed — re-run the command after fixing the underlying issue
+(network, disk space, rate limit). The atomic rename means the
+running service keeps the old binary's open inode mapped, so an
+in-flight update never interrupts the running dashboard.
+
+**Restart behavior.** `systemctl restart inkwell` sends SIGTERM,
+which triggers a graceful shutdown: Inkwell clears the panel to
+white before exiting, so the brief window between the old binary
+stopping and the new one drawing the first frame shows a blank
+screen rather than a frozen dashboard.
+
+The manual path still works if you prefer it: download the tarball
+and checksums (step 2), drop the new binary in place, and restart
+the service:
 
 ```bash
 sudo install -m 0755 -o pi -g pi inkwell /usr/local/bin/inkwell

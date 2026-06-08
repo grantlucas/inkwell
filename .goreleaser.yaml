@@ -20,6 +20,10 @@ builds:
       - -tags=hardware
     ldflags:
       - -s -w
+      - -X github.com/grantlucas/inkwell/internal/buildinfo.Version={{ .Version }}
+      - -X github.com/grantlucas/inkwell/internal/buildinfo.Commit={{ .ShortCommit }}
+      - -X github.com/grantlucas/inkwell/internal/buildinfo.Date={{ .Date }}
+      - -X github.com/grantlucas/inkwell/internal/buildinfo.GOARM={{ .Arm }}
     goos:
       - linux
     goarch:

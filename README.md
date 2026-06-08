@@ -128,6 +128,27 @@ end-to-end workflow: cross-compile from your workstation, deploy the
 binary to the Pi via `scp`, configure `inkwell.yaml`, and run as a
 systemd service.
 
+### Upgrading
+
+An installed Inkwell can update itself from the latest GitHub
+release:
+
+```bash
+inkwell --version                  # see what's installed
+sudo inkwell self-update --check   # see what's available, no writes
+sudo inkwell self-update           # download, sha256-verify, replace
+sudo systemctl restart inkwell     # bring the new binary up
+```
+
+`sudo` is needed because `/usr/local/bin/inkwell` is owned by root
+on a default install; `chown` it to the service user if you'd prefer
+to run the updater without elevation. A failed update leaves the
+existing binary untouched, and `--force` re-applies the current
+version for recovery. See
+[`docs/guides/installation.md`](docs/guides/installation.md#7-updating)
+for the full upgrade workflow including manual download and the
+graceful-shutdown panel-clear during restart.
+
 ## Supported Hardware
 
 <!-- markdownlint-disable MD013 -->

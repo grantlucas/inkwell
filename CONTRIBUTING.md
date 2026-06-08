@@ -28,16 +28,23 @@ go run ./cmd/inkwell
 ## Project Structure
 
 ```text
-cmd/inkwell/          Entry point (main.go)
-internal/inkwell/     All framework code (single package)
+cmd/inkwell/          Entry point (thin shim — delegates to internal/cli)
+cmd/testcal/          Synthetic iCal server for local widget dev
+internal/inkwell/     Framework code: hardware backends, compositor, widgets, profiles
   testdata/           Golden files for test assertions
-docs/                 Hardware and architecture reference
-inkwell.yaml          Default configuration
+internal/buildinfo/   Version / Commit / GOARM stamped via -ldflags by GoReleaser
+internal/cli/         Subcommand router (default app, self-update, version)
+internal/selfupdate/  GitHub release fetch, sha256-verify, atomic binary replace
+docs/                 Hardware, architecture, and user-facing guides
+inkwell.example.yaml  Bundled example config (the runtime inkwell.yaml is gitignored)
 Makefile              Build, test, and CI targets
 ```
 
-All source code lives in a single `internal/inkwell` package by design. The
-`Hardware` interface is the extension point for new backends.
+Most framework code lives in `internal/inkwell` and the `Hardware`
+interface is the extension point for new display backends. Self-update
+tooling and the subcommand router are split into their own packages so
+the release-management surface doesn't pull display/SPI dependencies
+into the CLI plumbing.
 
 ## Testing Requirements
 
