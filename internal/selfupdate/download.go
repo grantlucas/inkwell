@@ -31,14 +31,26 @@ type Downloader struct {
 }
 
 // NewDownloader constructs a Downloader using the given HTTP client.
-// Pass an *http.Client with a sane Timeout in production; tests
-// inject httptest.NewServer.Client(). When hc is nil we fall back to
-// a client with a 30s timeout rather than http.DefaultClient (which
-// has no timeout and would let a stalled connection hang the
-// updater forever).
+// A timeout is enforced regardless of how the caller supplied the
+// client:
+//
+//   - hc == nil → fresh *http.Client with defaultHTTPTimeout.
+//   - hc.Timeout == 0 (e.g. the caller passed http.DefaultClient
+//     directly, as cmd/inkwell does) → shallow copy with
+//     defaultHTTPTimeout. The copy avoids mutating a shared client
+//     whose Timeout other packages may be relying on staying zero.
+//   - hc.Timeout > 0 → used as-is.
+//
+// Without this, a stalled connection through the production caller
+// would hang the updater forever.
 func NewDownloader(hc *http.Client) *Downloader {
-	if hc == nil {
+	switch {
+	case hc == nil:
 		hc = &http.Client{Timeout: defaultHTTPTimeout}
+	case hc.Timeout == 0:
+		copy := *hc
+		copy.Timeout = defaultHTTPTimeout
+		hc = &copy
 	}
 	return &Downloader{hc: hc, writeFile: os.WriteFile}
 }

@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // makeTarGz builds an in-memory .tar.gz containing files named in the
@@ -304,6 +305,42 @@ func TestNewDownloader_NilDefaults(t *testing.T) {
 	}
 	if d.writeFile == nil {
 		t.Fatal("writeFile must have a default")
+	}
+}
+
+// TestNewDownloader_ZeroTimeoutClientGetsCopy guards the
+// production case where cmd/inkwell passes http.DefaultClient
+// (Timeout == 0). The Downloader must enforce a timeout without
+// mutating the caller's shared client — other packages that
+// happen to use http.DefaultClient would otherwise inherit our
+// 30s deadline.
+func TestNewDownloader_ZeroTimeoutClientGetsCopy(t *testing.T) {
+	shared := &http.Client{} // Timeout: 0
+	d := NewDownloader(shared)
+
+	if d.hc.Timeout == 0 {
+		t.Errorf("Downloader must enforce a timeout on a zero-timeout input client")
+	}
+	if d.hc == shared {
+		t.Errorf("Downloader must not reuse the caller's client pointer when applying a timeout")
+	}
+	if shared.Timeout != 0 {
+		t.Errorf("caller's shared client was mutated: Timeout = %v, want 0", shared.Timeout)
+	}
+}
+
+// TestNewDownloader_NonZeroTimeoutClientUsedAsIs confirms a caller
+// that supplied their own positive timeout keeps that exact client
+// (no copy, no override).
+func TestNewDownloader_NonZeroTimeoutClientUsedAsIs(t *testing.T) {
+	caller := &http.Client{Timeout: 7 * time.Second}
+	d := NewDownloader(caller)
+
+	if d.hc != caller {
+		t.Errorf("non-zero-timeout client should be used as-is, got a copy")
+	}
+	if d.hc.Timeout != 7*time.Second {
+		t.Errorf("Timeout = %v, want 7s", d.hc.Timeout)
 	}
 }
 
