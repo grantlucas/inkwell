@@ -223,6 +223,52 @@ func TestDefaultConfig(t *testing.T) {
 	if !cfg.ClearOnShutdown {
 		t.Errorf("ClearOnShutdown = false, want true (default)")
 	}
+	if cfg.Refresh.FullEvery != 60 {
+		t.Errorf("Refresh.FullEvery = %d, want 60", cfg.Refresh.FullEvery)
+	}
+	if cfg.Refresh.FastEvery != 10 {
+		t.Errorf("Refresh.FastEvery = %d, want 10", cfg.Refresh.FastEvery)
+	}
+}
+
+func TestLoadConfig_RefreshSection(t *testing.T) {
+	input := `display: waveshare_7in5_v2
+backend: preview
+refresh:
+  full_every: 120
+  fast_every: 5
+`
+	cfg, err := LoadConfig(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Refresh.FullEvery != 120 {
+		t.Errorf("Refresh.FullEvery = %d, want 120", cfg.Refresh.FullEvery)
+	}
+	if cfg.Refresh.FastEvery != 5 {
+		t.Errorf("Refresh.FastEvery = %d, want 5", cfg.Refresh.FastEvery)
+	}
+}
+
+func TestLoadConfig_NegativeRefreshCadence(t *testing.T) {
+	cases := []struct {
+		label string
+		yaml  string
+	}{
+		{"negative full_every", "display: waveshare_7in5_v2\nbackend: preview\nrefresh:\n  full_every: -1\n"},
+		{"negative fast_every", "display: waveshare_7in5_v2\nbackend: preview\nrefresh:\n  fast_every: -1\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			_, err := LoadConfig(strings.NewReader(tc.yaml))
+			if err == nil {
+				t.Fatal("expected error for negative cadence")
+			}
+			if !strings.Contains(err.Error(), "non-negative") {
+				t.Errorf("error = %q, want mention of non-negative", err.Error())
+			}
+		})
+	}
 }
 
 func TestLoadConfig_ClearOnShutdown(t *testing.T) {

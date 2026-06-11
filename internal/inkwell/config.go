@@ -53,6 +53,17 @@ type Config struct {
 	Preview         PreviewConfig   `yaml:"preview,omitempty"`
 	Image           ImageConfig     `yaml:"image,omitempty"`
 	Dashboard       DashboardConfig `yaml:"dashboard,omitempty"`
+	Refresh         RefreshConfig   `yaml:"refresh,omitempty"`
+}
+
+// RefreshConfig tunes the refresh-mode cadence (see refreshPlanner). The
+// values count render cycles, so at the default 60s interval FullEvery: 60
+// is roughly hourly. Only bw mode uses fast/partial refreshes; gray4
+// honors FullEvery for its periodic forced refresh and otherwise refreshes
+// on content change.
+type RefreshConfig struct {
+	FullEvery int `yaml:"full_every"` // cycles between full / forced grayscale refreshes
+	FastEvery int `yaml:"fast_every"` // cycles between fast refreshes (bw only; 0 = never)
 }
 
 // PreviewConfig holds web preview server settings.
@@ -80,6 +91,7 @@ func DefaultConfig() *Config {
 		ClearOnShutdown: true,
 		Preview:         PreviewConfig{Port: 8080},
 		Image:           ImageConfig{OutputDir: "output"},
+		Refresh:         RefreshConfig{FullEvery: 60, FastEvery: 10},
 	}
 }
 
@@ -112,6 +124,10 @@ func LoadConfig(r io.Reader) (*Config, error) {
 
 	if cfg.Dashboard.RotateInterval < 0 {
 		return nil, fmt.Errorf("dashboard.rotate_interval must be non-negative")
+	}
+
+	if cfg.Refresh.FullEvery < 0 || cfg.Refresh.FastEvery < 0 {
+		return nil, fmt.Errorf("refresh cadence must be non-negative")
 	}
 
 	return cfg, nil
