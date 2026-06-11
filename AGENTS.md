@@ -84,6 +84,16 @@ to verify both paths; what looks fine on Gray4 can still fragment on
 BW (and vice versa for thin gray fills that survive only because of
 the Gray4 bucket).
 
+### Refresh mode (flashing)
+
+How often the panel flashes is a separate axis from how a frame is
+rendered. The render loop picks a refresh waveform per cycle
+(`refreshPlanner` in `refresh.go`): BW cycles full → fast → partial so
+routine ticks stay flicker-free, while Gray4 has no flicker-free waveform
+and only skips refreshing when the frame is unchanged. The flash is
+hardware-only — the web preview can't show it. See
+[`docs/tech-specs/08-refresh-strategy.md`](docs/tech-specs/08-refresh-strategy.md).
+
 ## Workflow
 
 - All feature and bug fix work **must** use the `/tdd` skill
