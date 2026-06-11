@@ -1,6 +1,7 @@
 package inkwell
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"image"
@@ -415,39 +416,48 @@ func changingRegistry() *widget.Registry {
 	return reg
 }
 
-// TestRun_BWUsesPartialRefreshForRoutineCycles confirms that in BW mode,
-// after the initial full refresh, changing content drives flicker-free
-// partial refreshes — identifiable by the partial-window command (0x90).
-func TestRun_BWUsesPartialRefreshForRoutineCycles(t *testing.T) {
-	cfg, err := LoadConfig(strings.NewReader(`
+// newBWRefreshApp builds a BW-mode App for driving App.refresh directly. We
+// exercise the per-cycle dispatch deterministically rather than racing the
+// render loop's wall-clock ticker (a timeout-based assertion is flaky under
+// CI load). The render loop's own wiring is covered by the Run tests that
+// terminate deterministically on an injected hardware error.
+func newBWRefreshApp(t *testing.T, fastEvery int) (*App, *MockHardware) {
+	t.Helper()
+	cfg, err := LoadConfig(strings.NewReader(fmt.Sprintf(`
 display: waveshare_7in5_v2
 backend: preview
 color_mode: bw
-clear_on_shutdown: false
 refresh:
   full_every: 1000
-  fast_every: 0
-dashboard:
-  screens:
-    - name: main
-      widgets:
-        - type: changing
-          bounds: [0, 0, 100, 100]
-`))
+  fast_every: %d
+`, fastEvery)))
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-
 	mock := &MockHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond), WithRegistry(changingRegistry()))
+	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Hour))
 	if err != nil {
 		t.Fatalf("NewApp: %v", err)
 	}
+	return app, mock
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-	if err := app.Run(ctx); err != nil {
-		t.Fatalf("Run: %v", err)
+// TestApp_RefreshBWRoutineCycleIsPartial confirms that in BW mode, once an
+// initial full refresh has run, changing content drives a flicker-free
+// partial refresh — identifiable by the partial-window command (0x90).
+func TestApp_RefreshBWRoutineCycleIsPartial(t *testing.T) {
+	app, mock := newBWRefreshApp(t, 0)
+	size := app.profile.BufferSize()
+	window := Region{X: 0, Y: 0, W: app.profile.Width, H: app.profile.Height}
+	mode := InitFull // the LUT a startup full init leaves loaded
+	frameA := make([]byte, size)
+	frameB := bytes.Repeat([]byte{0xFF}, size)
+
+	if pushed, err := app.refresh(frameA, nil, &mode, window); err != nil || !pushed {
+		t.Fatalf("cycle 1 (full): pushed=%v err=%v", pushed, err)
+	}
+	if pushed, err := app.refresh(frameB, frameA, &mode, window); err != nil || !pushed {
+		t.Fatalf("cycle 2 (partial): pushed=%v err=%v", pushed, err)
 	}
 
 	if !slices.Contains(mock.Commands(), 0x90) {
@@ -921,39 +931,19 @@ backend: preview
 	}
 }
 
-// TestRun_BWFastRefreshOnCadence confirms the fast-refresh cadence wires
-// through to an InitFast load (0xE5 force-temperature data 0x5A is unique to
-// InitFast in a BW run; InitPartial uses 0x6E, Init4Gray 0x5F).
-func TestRun_BWFastRefreshOnCadence(t *testing.T) {
-	cfg, err := LoadConfig(strings.NewReader(`
-display: waveshare_7in5_v2
-backend: preview
-color_mode: bw
-clear_on_shutdown: false
-refresh:
-  full_every: 1000
-  fast_every: 2
-dashboard:
-  screens:
-    - name: main
-      widgets:
-        - type: changing
-          bounds: [0, 0, 100, 100]
-`))
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
+// TestApp_RefreshBWFastCadence confirms the fast-refresh cadence wires through
+// to an InitFast load (0xE5 force-temperature data 0x5A is unique to InitFast
+// in a BW run; InitPartial uses 0x6E, Init4Gray 0x5F).
+func TestApp_RefreshBWFastCadence(t *testing.T) {
+	app, mock := newBWRefreshApp(t, 2) // fast on every 2nd cycle
+	size := app.profile.BufferSize()
+	window := Region{X: 0, Y: 0, W: app.profile.Width, H: app.profile.Height}
+	mode := InitFull
+	frameA := make([]byte, size)
+	frameB := bytes.Repeat([]byte{0xFF}, size)
 
-	mock := &MockHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond), WithRegistry(changingRegistry()))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-	if err := app.Run(ctx); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	app.refresh(frameA, nil, &mode, window)    // cycle 1: full
+	app.refresh(frameB, frameA, &mode, window) // cycle 2: fast (tick%2 == 0)
 
 	var sawFastTemp bool
 	for i, c := range mock.Calls {
@@ -1303,14 +1293,14 @@ func TestRun_GracefulShutdownClearsBeforeSleep(t *testing.T) {
 		cmd  byte
 		data []byte
 	}{
-		{typ: "busy"},                              // Display's ReadBusy after refresh
-		{typ: "command", cmd: 0x50},                // sleep VCOM setting
-		{typ: "data", data: []byte{0xF7}},          // VCOM data
-		{typ: "command", cmd: 0x02},                // power off
-		{typ: "busy"},                              // execSequence busy after nil-data
-		{typ: "command", cmd: 0x07},                // deep sleep
-		{typ: "data", data: []byte{0xA5}},          // deep sleep data
-		{typ: "close"},                             // hw.Close
+		{typ: "busy"},                     // Display's ReadBusy after refresh
+		{typ: "command", cmd: 0x50},       // sleep VCOM setting
+		{typ: "data", data: []byte{0xF7}}, // VCOM data
+		{typ: "command", cmd: 0x02},       // power off
+		{typ: "busy"},                     // execSequence busy after nil-data
+		{typ: "command", cmd: 0x07},       // deep sleep
+		{typ: "data", data: []byte{0xA5}}, // deep sleep data
+		{typ: "close"},                    // hw.Close
 	}
 	if len(after) < len(want) {
 		t.Fatalf("calls after last refresh = %d, want >= %d", len(after), len(want))
