@@ -105,10 +105,19 @@ func (d *EPD) Display(buffer []byte) error {
 
 // DisplayPartial updates a rectangular region of the display without
 // redrawing the full screen. The region's X is aligned down to a byte
-// boundary (multiple of 8) and width is aligned up. The buffer contains
-// the packed pixel data for the partial region only.
+// boundary (multiple of 8) and width is aligned up. newBuf and oldBuf
+// contain the packed pixel data for the partial region only — newBuf is
+// the frame to show, oldBuf is the frame currently on the panel.
+//
+// Both planes must be written: the 7.5" V2 controller computes which
+// pixels to flip by diffing OldBufferCmd against NewBufferCmd, but a
+// partial refresh never repopulates the old plane on its own. Feeding it
+// the previous frame each time keeps the diff correct — otherwise stale
+// or degraded controller RAM produces visible noise during partial
+// updates.
+//
 // Returns an error if the profile doesn't support partial refresh.
-func (d *EPD) DisplayPartial(buffer []byte, region Region) error {
+func (d *EPD) DisplayPartial(newBuf, oldBuf []byte, region Region) error {
 	if !d.profile.Capabilities.PartialRefresh {
 		return fmt.Errorf("display %s does not support partial refresh", d.profile.Name)
 	}
@@ -117,11 +126,19 @@ func (d *EPD) DisplayPartial(buffer []byte, region Region) error {
 		return err
 	}
 
-	// Send partial buffer data
+	// Resync the controller's "old" plane with the frame on the panel.
+	if err := d.hw.SendCommand(d.profile.OldBufferCmd); err != nil {
+		return err
+	}
+	if err := d.hw.SendData(oldBuf); err != nil {
+		return err
+	}
+
+	// Send the new partial buffer data.
 	if err := d.hw.SendCommand(d.profile.NewBufferCmd); err != nil {
 		return err
 	}
-	if err := d.hw.SendData(buffer); err != nil {
+	if err := d.hw.SendData(newBuf); err != nil {
 		return err
 	}
 
