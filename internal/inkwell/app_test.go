@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"image/color"
 	"net"
 	"net/http"
 	"slices"
@@ -379,6 +380,80 @@ type brokenWidget struct {
 
 func (e *brokenWidget) Bounds() image.Rectangle      { return e.bounds }
 func (e *brokenWidget) Render(*image.Paletted) error { return fmt.Errorf("widget broke") }
+
+// changingWidget fills its bounds with a different shade on each render so
+// the packed device buffer differs every cycle — used to exercise the
+// render loop's "content changed" path. It alternates black/white, which
+// survives both the BW threshold and the Gray4 quantizer.
+type changingWidget struct {
+	bounds image.Rectangle
+	n      int
+}
+
+func (c *changingWidget) Bounds() image.Rectangle { return c.bounds }
+
+func (c *changingWidget) Render(img *image.Paletted) error {
+	c.n++
+	shade := color.Gray{Y: 0} // black
+	if c.n%2 == 0 {
+		shade = color.Gray{Y: 255} // white
+	}
+	for y := c.bounds.Min.Y; y < c.bounds.Max.Y; y++ {
+		for x := c.bounds.Min.X; x < c.bounds.Max.X; x++ {
+			img.Set(x, y, shade)
+		}
+	}
+	return nil
+}
+
+// changingRegistry registers a "changing" widget type backed by changingWidget.
+func changingRegistry() *widget.Registry {
+	reg := widget.NewRegistry()
+	reg.Register("changing", func(bounds image.Rectangle, _ map[string]any, _ widget.Deps) (widget.Widget, error) {
+		return &changingWidget{bounds: bounds}, nil
+	})
+	return reg
+}
+
+// TestRun_BWUsesPartialRefreshForRoutineCycles confirms that in BW mode,
+// after the initial full refresh, changing content drives flicker-free
+// partial refreshes — identifiable by the partial-window command (0x90).
+func TestRun_BWUsesPartialRefreshForRoutineCycles(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+color_mode: bw
+clear_on_shutdown: false
+refresh:
+  full_every: 1000
+  fast_every: 0
+dashboard:
+  screens:
+    - name: main
+      widgets:
+        - type: changing
+          bounds: [0, 0, 100, 100]
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	mock := &MockHardware{}
+	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond), WithRegistry(changingRegistry()))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if err := app.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if !slices.Contains(mock.Commands(), 0x90) {
+		t.Error("expected a partial-window command (0x90) for routine BW cycles, got none")
+	}
+}
 
 func TestRun_WidgetRenderError(t *testing.T) {
 	cfg, err := LoadConfig(strings.NewReader(`
@@ -843,6 +918,147 @@ backend: preview
 	}
 	if !strings.Contains(err.Error(), "display") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestRun_BWFastRefreshOnCadence confirms the fast-refresh cadence wires
+// through to an InitFast load (0xE5 force-temperature data 0x5A is unique to
+// InitFast in a BW run; InitPartial uses 0x6E, Init4Gray 0x5F).
+func TestRun_BWFastRefreshOnCadence(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+color_mode: bw
+clear_on_shutdown: false
+refresh:
+  full_every: 1000
+  fast_every: 2
+dashboard:
+  screens:
+    - name: main
+      widgets:
+        - type: changing
+          bounds: [0, 0, 100, 100]
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	mock := &MockHardware{}
+	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond), WithRegistry(changingRegistry()))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if err := app.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	var sawFastTemp bool
+	for i, c := range mock.Calls {
+		if c.Type == "command" && c.Data[0] == 0xE5 && i+1 < len(mock.Calls) &&
+			mock.Calls[i+1].Type == "data" && len(mock.Calls[i+1].Data) == 1 && mock.Calls[i+1].Data[0] == 0x5A {
+			sawFastTemp = true
+			break
+		}
+	}
+	if !sawFastTemp {
+		t.Error("expected an InitFast load (0xE5 -> 0x5A) on the fast cadence, got none")
+	}
+}
+
+// resetFailAfterHardware fails Reset after failAfter successful resets, used
+// to hit the render loop's re-init error path (distinct from startup init).
+type resetFailAfterHardware struct {
+	MockHardware
+	failAfter int
+	resets    int
+}
+
+func (h *resetFailAfterHardware) Reset() error {
+	h.resets++
+	if h.resets > h.failAfter {
+		return fmt.Errorf("reset failed on switch")
+	}
+	return h.MockHardware.Reset()
+}
+
+// TestRun_RefreshInitError covers the loop re-initializing for a new waveform
+// (full -> partial) and the Init failing there.
+func TestRun_RefreshInitError(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+color_mode: bw
+refresh:
+  full_every: 1000
+  fast_every: 0
+dashboard:
+  screens:
+    - name: main
+      widgets:
+        - type: changing
+          bounds: [0, 0, 100, 100]
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	// Startup full init resets once (ok); the first partial cycle's re-init
+	// resets again and fails.
+	mock := &resetFailAfterHardware{failAfter: 1}
+	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond), WithRegistry(changingRegistry()))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	err = app.Run(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "init display") {
+		t.Fatalf("expected re-init error, got %v", err)
+	}
+}
+
+// partialWindowErrorHardware fails on the partial-window command (0x90), which
+// only the partial-refresh path issues.
+type partialWindowErrorHardware struct{ MockHardware }
+
+func (h *partialWindowErrorHardware) SendCommand(cmd byte) error {
+	if cmd == 0x90 {
+		return fmt.Errorf("partial window failed")
+	}
+	return h.MockHardware.SendCommand(cmd)
+}
+
+// TestRun_DisplayPartialError covers the partial-refresh error path.
+func TestRun_DisplayPartialError(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+color_mode: bw
+refresh:
+  full_every: 1000
+  fast_every: 0
+dashboard:
+  screens:
+    - name: main
+      widgets:
+        - type: changing
+          bounds: [0, 0, 100, 100]
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	mock := &partialWindowErrorHardware{}
+	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond), WithRegistry(changingRegistry()))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	err = app.Run(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "display partial") {
+		t.Fatalf("expected display partial error, got %v", err)
 	}
 }
 
