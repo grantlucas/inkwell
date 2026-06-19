@@ -2,6 +2,7 @@
 
 # YAML-Driven Dashboard Configuration
 
+<!-- markdownlint-disable-next-line MD036 -->
 *2026-04-18T21:14:36Z by Showboat 0.6.1*
 <!-- showboat-id: 28d364dc-77d9-436b-9b9f-bbfb41c8e399 -->
 
@@ -27,6 +28,7 @@ dashboard:
       widgets:
         - type: clock
           bounds: [300, 210, 500, 270]
+          refresh: "1m"
           config:
             format: "15:04"
 ```
@@ -111,6 +113,7 @@ dashboard:
       widgets:
         - type: clock
           bounds: [650, 0, 800, 30]
+          refresh: "1m"
           config:
             format: "3:04 PM"
 ```
@@ -170,6 +173,7 @@ cat inkwell.yaml | grep -A2 bounds
 
 ```output
           bounds: [700, 0, 900, 50]
+          refresh: "1m"
           config:
             format: "15:04"
 ```

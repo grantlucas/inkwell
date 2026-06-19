@@ -1,4 +1,4 @@
-<!-- markdownlint-disable MD013 MD040 -->
+<!-- markdownlint-disable MD013 MD040 MD036 -->
 
 # From 1-bit to Grayscale: A Dashboard Visual Refresh
 

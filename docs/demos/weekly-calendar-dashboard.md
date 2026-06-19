@@ -1,13 +1,20 @@
 # Weekly Calendar + Weather Dashboard
 
+<!-- markdownlint-disable-next-line MD036 -->
 *2026-04-29T01:01:38Z by Showboat 0.6.1*
 <!-- showboat-id: d452bf6c-04db-403a-8f30-67ff227488e8 -->
 
-The weekly calendar+weather dashboard composes three widgets into a single 800×480 e-ink screen: a date header, a right-aligned clock, and a 7-day calendar with weather forecasts. Each widget is independently configured via YAML bounds and rendered by the compositor in order.
+The weekly calendar+weather dashboard composes three widgets into a single
+800×480 e-ink screen: a date header, a right-aligned clock, and a 7-day
+calendar with weather forecasts. Each widget is independently configured via
+YAML bounds and rendered by the compositor in order.
 
 ## Screen Configuration
 
-The dashboard is defined entirely in `inkwell.yaml` (copy `inkwell.example.yaml` to get started). The date widget spans the full 800px header band, the clock overlays the right edge, and the weekly-calendar fills the remaining 428px body:
+The dashboard is defined entirely in `inkwell.yaml` (copy
+`inkwell.example.yaml` to get started). The date widget spans the full 800px
+header band, the clock overlays the right edge, and the weekly-calendar fills
+the remaining 428px body:
 
 ```bash
 cat inkwell.example.yaml
@@ -25,15 +32,18 @@ dashboard:
       widgets:
         - type: date
           bounds: [0, 0, 800, 52]
+          refresh: "24h"
           config:
             format: "Monday, January 2"
         - type: clock
           bounds: [700, 0, 800, 52]
+          refresh: "1m"
           config:
             format: "15:04"
             align: right
         - type: weekly-calendar
           bounds: [0, 52, 800, 480]
+          refresh: "15m"
           config:
             feeds:
               - "https://example.com/my-calendar.ics"
@@ -45,7 +55,12 @@ dashboard:
             max_events: 5
 ```
 
-The compositor renders widgets in declaration order — the clock paints over the date widget's right edge, both sharing the 52px header band. The weekly-calendar widget fetches events from the iCal feed configured in `feeds:` (the example uses a placeholder `example.com` URL — point this at any iCal endpoint) and weather from Open-Meteo's ensemble of three models (GFS, ECMWF, GEM).
+The compositor renders widgets in declaration order — the clock paints over
+the date widget's right edge, both sharing the 52px header band. The
+weekly-calendar widget fetches events from the iCal feed configured in
+`feeds:` (the example uses a placeholder `example.com` URL — point this at any
+iCal endpoint) and weather from Open-Meteo's ensemble of three models (GFS,
+ECMWF, GEM).
 
 ## Widget Registry
 
@@ -77,7 +92,10 @@ func NewDefaultRegistry() *widget.Registry {
 
 ## Tests and Coverage
 
-Most packages maintain 100% statement coverage; the only exception is `weatherview` at 99.5% (see footnote below). The weekly widget alone has 57 tests covering layout computation, day headers, event rendering, weather integration, config parsing, and error paths:
+Most packages maintain 100% statement coverage; the only exception is
+`weatherview` at 99.5% (see footnote below). The weekly widget alone has 57
+tests covering layout computation, day headers, event rendering, weather
+integration, config parsing, and error paths:
 
 ```bash
 go test ./... -count=1 2>&1
@@ -117,11 +135,14 @@ ok  	github.com/grantlucas/inkwell/internal/inkwell/widgets/weekly	2.340s	covera
 total:											(statements)		99.9%
 ```
 
-The 99.5% on weatherview is a single unreachable error path in the opentype font parsing stdlib — the font is embedded at compile time and always valid.
+The 99.5% on weatherview is a single unreachable error path in the opentype
+font parsing stdlib — the font is embedded at compile time and always valid.
 
 ## Live Preview
 
-Starting the preview server renders the composed dashboard at http://localhost:8080. The server fetches live weather data from Open-Meteo and calendar events from the Blue Jays iCal feed:
+Starting the preview server renders the composed dashboard at
+<http://localhost:8080>. The server fetches live weather data from Open-Meteo
+and calendar events from the Blue Jays iCal feed:
 
 ```bash
 go run ./cmd/inkwell &>/dev/null & sleep 5 && curl -s -o /tmp/weekly-frame.png http://localhost:8080/frame.png && echo 'Preview server started, frame captured (800x480, 1-bit B/W)' && file /tmp/weekly-frame.png

@@ -97,6 +97,13 @@ type Widget interface {
   display.
 - **`Render(frame)`** — draws the widget's content onto the frame.
 
+A widget's refresh cadence is **not** set in widget code — it's a required
+field on every widget's config entry (see [Setting a widget's refresh cadence
+(required)](#setting-a-widgets-refresh-cadence-required) below). So as a widget
+author there's nothing extra to implement here; just write `Bounds()` and
+`Render(frame)`. The render cadence governs *when the screen is allowed to
+refresh*, separate from any data freshness your widget manages internally.
+
 ### Your first widget: a static label
 
 Create a new file `internal/inkwell/widgets/label/label.go`:
@@ -193,22 +200,57 @@ dashboard:
       widgets:
         - type: clock
           bounds: [650, 0, 800, 50]
+          refresh: "1m"
           config:
             format: "15:04"
         - type: label
           bounds: [0, 0, 650, 50]
+          refresh: "static"   # fixed text never changes
           config:
             text: "My Dashboard"
     - name: detail
       widgets:
         - type: clock
           bounds: [0, 0, 200, 50]
+          refresh: "1m"
 ```
 
 ### Bounds format
 
 `bounds` is `[x0, y0, x1, y1]` matching Go's `image.Rect()`. The
 origin `(0, 0)` is the top-left corner of the display.
+
+### Setting a widget's refresh cadence (required)
+
+Every widget entry **must** set a top-level `refresh:` — it's a sibling of
+`type`, `bounds`, and `config` (not nested inside `config`). There is no
+default; loading the config fails if a widget omits it. The value is either:
+
+- a duration of at least `1m` (`"5m"`, `"1h"`, `"24h"`) — how often this widget
+  may refresh the panel; or
+- `"static"` (alias `"never"`) — the widget never changes and so never triggers
+  a refresh on its own.
+
+```yaml
+- type: clock
+  bounds: [650, 0, 800, 50]
+  refresh: "5m"        # refresh the clock every 5 minutes
+  config:
+    format: "15:04"
+- type: label
+  bounds: [0, 0, 650, 50]
+  refresh: "static"    # fixed text; never refreshes
+  config:
+    text: "My Dashboard"
+```
+
+Cadences are **wall-clock aligned**: a widget set to `"5m"` refreshes when the
+minute-of-day is divisible by 5, so widgets sharing a cadence coalesce onto the
+same mark (two `"5m"` widgets both refresh on `:00/:05/:10`) instead of each
+flashing the panel independently — important on `gray4`, where every refresh
+flickers. This controls **when the screen is allowed to refresh** for this
+widget, distinct from any data-refresh setting a widget exposes under `config`
+(e.g. the weekly-calendar's `config.refresh` cache TTL).
 
 ### Planning your layout
 
@@ -237,18 +279,22 @@ dashboard:
       widgets:
         - type: label
           bounds: [0, 0, 650, 50]
+          refresh: "static"
           config:
             text: "My Dashboard"
         - type: clock
           bounds: [650, 0, 800, 50]
+          refresh: "1m"
           config:
             format: "15:04"
         - type: weather
           bounds: [0, 50, 550, 480]
+          refresh: "30m"
           config:
             location: "Toronto, CA"
         - type: calendar
           bounds: [550, 50, 800, 480]
+          refresh: "15m"
 ```
 
 ### Layout tips

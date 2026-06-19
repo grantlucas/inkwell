@@ -92,12 +92,14 @@ dashboard:
       widgets:
         - type: clock
           bounds: [300, 200, 500, 260]
+          refresh: "1m"
           config:
             format: "15:04"
     - name: detail
       widgets:
         - type: clock
           bounds: [0, 0, 200, 50]
+          refresh: "1m"
 `
 	cfg, err := LoadConfig(strings.NewReader(input))
 	if err != nil {
@@ -223,49 +225,77 @@ func TestDefaultConfig(t *testing.T) {
 	if !cfg.ClearOnShutdown {
 		t.Errorf("ClearOnShutdown = false, want true (default)")
 	}
-	if cfg.Refresh.FullEvery != 60 {
-		t.Errorf("Refresh.FullEvery = %d, want 60", cfg.Refresh.FullEvery)
-	}
-	if cfg.Refresh.FastEvery != 10 {
-		t.Errorf("Refresh.FastEvery = %d, want 10", cfg.Refresh.FastEvery)
-	}
 }
 
-func TestLoadConfig_RefreshSection(t *testing.T) {
-	input := `display: waveshare_7in5_v2
-backend: preview
-refresh:
-  full_every: 120
-  fast_every: 5
-`
-	cfg, err := LoadConfig(strings.NewReader(input))
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
+func TestLoadConfig_WidgetRefresh(t *testing.T) {
+	base := func(widget string) string {
+		return "display: waveshare_7in5_v2\nbackend: preview\n" +
+			"dashboard:\n  screens:\n    - name: main\n      widgets:\n" + widget
 	}
-	if cfg.Refresh.FullEvery != 120 {
-		t.Errorf("Refresh.FullEvery = %d, want 120", cfg.Refresh.FullEvery)
-	}
-	if cfg.Refresh.FastEvery != 5 {
-		t.Errorf("Refresh.FastEvery = %d, want 5", cfg.Refresh.FastEvery)
-	}
-}
-
-func TestLoadConfig_NegativeRefreshCadence(t *testing.T) {
 	cases := []struct {
-		label string
-		yaml  string
+		label       string
+		widget      string
+		wantErr     string        // "" means expect success
+		wantCadence time.Duration // expected schedule cadence on success
 	}{
-		{"negative full_every", "display: waveshare_7in5_v2\nbackend: preview\nrefresh:\n  full_every: -1\n"},
-		{"negative fast_every", "display: waveshare_7in5_v2\nbackend: preview\nrefresh:\n  fast_every: -1\n"},
+		{
+			label:       "valid duration parses",
+			widget:      "        - type: clock\n          bounds: [0, 0, 100, 50]\n          refresh: \"5m\"\n",
+			wantCadence: 5 * time.Minute,
+		},
+		{
+			label:       "static never refreshes",
+			widget:      "        - type: separator\n          bounds: [0, 0, 100, 50]\n          refresh: \"static\"\n",
+			wantCadence: 0,
+		},
+		{
+			label:       "never is an alias for static",
+			widget:      "        - type: separator\n          bounds: [0, 0, 100, 50]\n          refresh: \"never\"\n",
+			wantCadence: 0,
+		},
+		{
+			label:   "missing refresh is rejected",
+			widget:  "        - type: clock\n          bounds: [0, 0, 100, 50]\n",
+			wantErr: "refresh is required",
+		},
+		{
+			label:   "sub-minute refresh is rejected",
+			widget:  "        - type: clock\n          bounds: [0, 0, 100, 50]\n          refresh: \"30s\"\n",
+			wantErr: "whole-minute duration",
+		},
+		{
+			label:   "non-whole-minute refresh is rejected",
+			widget:  "        - type: clock\n          bounds: [0, 0, 100, 50]\n          refresh: \"90s\"\n",
+			wantErr: "whole-minute duration",
+		},
+		{
+			label:   "garbage refresh is rejected",
+			widget:  "        - type: clock\n          bounds: [0, 0, 100, 50]\n          refresh: \"soon\"\n",
+			wantErr: "invalid refresh",
+		},
+		{
+			label:   "non-string refresh is rejected",
+			widget:  "        - type: clock\n          bounds: [0, 0, 100, 50]\n          refresh:\n            nested: true\n",
+			wantErr: "parse config",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
-			_, err := LoadConfig(strings.NewReader(tc.yaml))
-			if err == nil {
-				t.Fatal("expected error for negative cadence")
+			cfg, err := LoadConfig(strings.NewReader(base(tc.widget)))
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error mentioning %q, got nil", tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %q, want mention of %q", err.Error(), tc.wantErr)
+				}
+				return
 			}
-			if !strings.Contains(err.Error(), "non-negative") {
-				t.Errorf("error = %q, want mention of non-negative", err.Error())
+			if err != nil {
+				t.Fatalf("LoadConfig: %v", err)
+			}
+			if got := cfg.Dashboard.Screens[0].Widgets[0].Refresh.cadence(); got != tc.wantCadence {
+				t.Errorf("widget refresh cadence = %v, want %v", got, tc.wantCadence)
 			}
 		})
 	}

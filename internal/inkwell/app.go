@@ -31,6 +31,7 @@ type App struct {
 	profile         *DisplayProfile
 	dashboard       *Dashboard
 	planner         *refreshPlanner
+	now             func() time.Time
 	interval        time.Duration
 	listenAddr      string
 	listener        net.Listener
@@ -152,7 +153,8 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 		comp:            comp,
 		profile:         profile,
 		dashboard:       dashboard,
-		planner:         newRefreshPlanner(profile.Color, cfg.Refresh.FullEvery, cfg.Refresh.FastEvery),
+		planner:         newRefreshPlanner(profile.Color, defaultFullEvery, defaultFastEvery),
+		now:             deps.Now,
 		interval:        o.interval,
 		listenAddr:      fmt.Sprintf(":%d", cfg.Preview.Port),
 		ready:           make(chan struct{}),
@@ -240,8 +242,10 @@ func (a *App) Run(ctx context.Context) error {
 
 	for {
 		var ws []widget.Widget
+		due := false
 		if screen := a.dashboard.CurrentScreen(); screen != nil {
 			ws = screen.Widgets()
+			due = screen.AnyDue(a.now())
 		}
 
 		frame, err := a.comp.Render(ws)
@@ -260,7 +264,7 @@ func (a *App) Run(ctx context.Context) error {
 			return fmt.Errorf("pack image: %w", err)
 		}
 
-		pushed, err := a.refresh(buf, lastBuffer, &appliedMode, fullWindow)
+		pushed, err := a.refresh(buf, lastBuffer, due, &appliedMode, fullWindow)
 		if err != nil {
 			a.epd.Close()
 			return err
@@ -286,8 +290,15 @@ func (a *App) Run(ctx context.Context) error {
 // (full or partial). appliedMode is updated in place. It reports whether a
 // frame was actually pushed (false on a skip), so the caller knows whether to
 // advance its last-pushed buffer.
-func (a *App) refresh(buf, lastBuffer []byte, appliedMode *InitMode, window Region) (bool, error) {
-	kind := a.planner.next(!bytes.Equal(buf, lastBuffer))
+//
+// due is the refresh-queue gate: a content change is only allowed to drive a
+// refresh when at least one widget is due this minute, so widgets on
+// independent cadences coalesce instead of each flashing the panel. The
+// planner still issues its periodic full/grayscale refresh regardless of due
+// (burn-in protection), and an undue change is simply held until the next due
+// cycle rather than dropped.
+func (a *App) refresh(buf, lastBuffer []byte, due bool, appliedMode *InitMode, window Region) (bool, error) {
+	kind := a.planner.next(due && !bytes.Equal(buf, lastBuffer))
 	if kind == refreshSkip {
 		return false, nil
 	}
@@ -361,6 +372,7 @@ func buildDashboard(cfg *Config, profile *DisplayProfile, registry *widget.Regis
 
 	for _, sc := range cfg.Dashboard.Screens {
 		var ws []widget.Widget
+		var cadences []time.Duration
 		for _, wc := range sc.Widgets {
 			bounds := image.Rect(wc.Bounds[0], wc.Bounds[1], wc.Bounds[2], wc.Bounds[3])
 			if bounds.Empty() {
@@ -376,8 +388,11 @@ func buildDashboard(cfg *Config, profile *DisplayProfile, registry *widget.Regis
 				return nil, fmt.Errorf("screen %q: widget %q: %w", sc.Name, wc.Type, err)
 			}
 			ws = append(ws, w)
+			cadences = append(cadences, wc.Refresh.cadence())
 		}
-		screens = append(screens, NewScreen(sc.Name, ws))
+		screen := NewScreen(sc.Name, ws)
+		screen.schedule = refreshSchedule{cadences: cadences}
+		screens = append(screens, screen)
 	}
 
 	return NewDashboard(screens, time.Duration(cfg.Dashboard.RotateInterval), deps.Now), nil
