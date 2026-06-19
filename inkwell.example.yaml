@@ -11,6 +11,25 @@ color_mode: gray4  # 4-level grayscale (recommended). Set to "bw" for
 #                          # sleeping the controller. Set to false to
 #                          # keep the last frame visible — useful for
 #                          # post-mortem debugging of a render bug.
+# refresh:                 # how often the panel flashes. Values are counts of
+#   full_every: 60         # render CYCLES, not seconds/minutes: wall-clock time
+#   fast_every: 10         # = value x render interval (60s by default). So at
+#                          # the defaults, full_every: 60 ~= 1 hour and
+#                          # fast_every: 10 ~= 10 minutes.
+#                          #
+#                          # full_every: cycles between full refreshes (the
+#                          # multi-flash that clears ghosting; in gray4 this is
+#                          # the periodic forced grayscale refresh). Runs on the
+#                          # first cycle too. Lower = cleaner contrast, more
+#                          # frequent flashing.
+#                          # fast_every: cycles between fast refreshes (single
+#                          # flicker, bw only). 0 disables fast refreshes.
+#                          #
+#                          # In bw mode the loop cycles full -> fast -> partial
+#                          # so routine ticks stay flicker-free; gray4 has no
+#                          # flicker-free waveform and only skips refreshing
+#                          # when the frame is unchanged.
+#                          # See docs/tech-specs/08-refresh-strategy.md.
 preview:
   port: 8080
 
