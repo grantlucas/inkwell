@@ -2,6 +2,7 @@
 
 # YAML-Driven Dashboard Configuration
 
+<!-- markdownlint-disable-next-line MD036 -->
 *2026-04-18T21:14:36Z by Showboat 0.6.1*
 <!-- showboat-id: 28d364dc-77d9-436b-9b9f-bbfb41c8e399 -->
 
