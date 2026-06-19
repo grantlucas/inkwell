@@ -261,7 +261,12 @@ func TestLoadConfig_WidgetRefresh(t *testing.T) {
 		{
 			label:   "sub-minute refresh is rejected",
 			widget:  "        - type: clock\n          bounds: [0, 0, 100, 50]\n          refresh: \"30s\"\n",
-			wantErr: "refresh must be >= 1m",
+			wantErr: "whole-minute duration",
+		},
+		{
+			label:   "non-whole-minute refresh is rejected",
+			widget:  "        - type: clock\n          bounds: [0, 0, 100, 50]\n          refresh: \"90s\"\n",
+			wantErr: "whole-minute duration",
 		},
 		{
 			label:   "garbage refresh is rejected",

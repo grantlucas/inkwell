@@ -170,8 +170,8 @@ func LoadConfig(r io.Reader) (*Config, error) {
 			if !wc.Refresh.set {
 				return nil, fmt.Errorf("widget %q: refresh is required (e.g. refresh: \"5m\", or \"static\")", wc.Type)
 			}
-			if !wc.Refresh.static && wc.Refresh.every < time.Minute {
-				return nil, fmt.Errorf("widget %q: refresh must be >= 1m or \"static\", got %v", wc.Type, wc.Refresh.every)
+			if !wc.Refresh.static && (wc.Refresh.every < time.Minute || wc.Refresh.every%time.Minute != 0) {
+				return nil, fmt.Errorf("widget %q: refresh must be a whole-minute duration >= 1m or \"static\", got %v", wc.Type, wc.Refresh.every)
 			}
 		}
 	}
