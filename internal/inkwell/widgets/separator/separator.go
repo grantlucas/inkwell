@@ -5,11 +5,15 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
-var _ widget.Widget = (*Widget)(nil)
+var (
+	_ widget.Widget         = (*Widget)(nil)
+	_ widget.RefreshCadence = (*Widget)(nil)
+)
 
 // Widget draws a horizontal hairline across its full bounds. A multi-row
 // separator anti-aliases the edge rows so the line reads as a soft division
@@ -26,6 +30,10 @@ func New(bounds image.Rectangle, thickness int) *Widget {
 
 // Bounds returns the widget's display rectangle.
 func (w *Widget) Bounds() image.Rectangle { return w.bounds }
+
+// RefreshEvery marks the separator static: a fixed divider never changes, so
+// it should never trigger a panel refresh on its own.
+func (w *Widget) RefreshEvery() time.Duration { return 0 }
 
 // Render draws a horizontal divider at the bottom of the bounds. Every
 // row renders in PaperBlack: with the BW packer threshold-snapping (no

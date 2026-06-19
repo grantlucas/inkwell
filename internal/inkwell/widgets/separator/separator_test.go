@@ -138,3 +138,10 @@ func TestFactory_NegativeThickness(t *testing.T) {
 		t.Fatal("expected error for negative thickness")
 	}
 }
+
+func TestWidget_RefreshEvery(t *testing.T) {
+	w := New(image.Rect(0, 0, 10, 10), 2)
+	if got := w.RefreshEvery(); got != 0 {
+		t.Errorf("RefreshEvery() = %v, want 0 (static)", got)
+	}
+}

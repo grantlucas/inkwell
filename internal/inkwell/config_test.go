@@ -356,3 +356,46 @@ func TestLoadConfig_ColorMode(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadConfig_WidgetRefreshOverride(t *testing.T) {
+	yaml := `
+display: waveshare_7in5_v2
+backend: preview
+dashboard:
+  screens:
+    - name: main
+      widgets:
+        - type: clock
+          bounds: [0, 0, 100, 50]
+          refresh: "5m"
+`
+	cfg, err := LoadConfig(strings.NewReader(yaml))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	got := time.Duration(cfg.Dashboard.Screens[0].Widgets[0].Refresh)
+	if got != 5*time.Minute {
+		t.Errorf("widget refresh = %v, want 5m", got)
+	}
+}
+
+func TestLoadConfig_WidgetRefreshBelowFloor(t *testing.T) {
+	yaml := `
+display: waveshare_7in5_v2
+backend: preview
+dashboard:
+  screens:
+    - name: main
+      widgets:
+        - type: clock
+          bounds: [0, 0, 100, 50]
+          refresh: "30s"
+`
+	_, err := LoadConfig(strings.NewReader(yaml))
+	if err == nil {
+		t.Fatal("expected error for sub-minute widget refresh")
+	}
+	if !strings.Contains(err.Error(), "refresh must be >= 1m") {
+		t.Errorf("error = %q, want it to mention 'refresh must be >= 1m'", err.Error())
+	}
+}

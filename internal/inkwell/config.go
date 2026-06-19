@@ -38,10 +38,18 @@ type ScreenConfig struct {
 }
 
 // WidgetConfig defines a single widget placement and configuration.
+//
+// Refresh overrides how often this widget may trigger a panel refresh (its
+// render cadence); when unset the widget's own declared cadence is used. Note
+// this is distinct from any widget-specific data-refresh setting nested under
+// Config (e.g. the weekly-calendar's config.refresh, which is its data cache
+// TTL): this top-level field controls when the screen is refreshed, not when
+// the widget refetches data.
 type WidgetConfig struct {
-	Type   string         `yaml:"type"`
-	Bounds [4]int         `yaml:"bounds"`
-	Config map[string]any `yaml:"config"`
+	Type    string         `yaml:"type"`
+	Bounds  [4]int         `yaml:"bounds"`
+	Refresh Duration       `yaml:"refresh,omitempty"`
+	Config  map[string]any `yaml:"config"`
 }
 
 // Config holds application configuration loaded from YAML.
@@ -128,6 +136,14 @@ func LoadConfig(r io.Reader) (*Config, error) {
 
 	if cfg.Refresh.FullEvery < 0 || cfg.Refresh.FastEvery < 0 {
 		return nil, fmt.Errorf("refresh cadence must be non-negative")
+	}
+
+	for _, sc := range cfg.Dashboard.Screens {
+		for _, wc := range sc.Widgets {
+			if d := time.Duration(wc.Refresh); d != 0 && d < time.Minute {
+				return nil, fmt.Errorf("widget %q: refresh must be >= 1m, got %v", wc.Type, d)
+			}
+		}
 	}
 
 	return cfg, nil

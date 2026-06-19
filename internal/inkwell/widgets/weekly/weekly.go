@@ -14,7 +14,10 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
-var _ widget.Widget = (*Widget)(nil)
+var (
+	_ widget.Widget         = (*Widget)(nil)
+	_ widget.RefreshCadence = (*Widget)(nil)
+)
 
 const defaultWeatherH = 145
 
@@ -55,6 +58,11 @@ func New(bounds image.Rectangle, cal calendar.Source, ws weather.Source, now fun
 
 // Bounds returns the rectangle this widget occupies on the display.
 func (w *Widget) Bounds() image.Rectangle { return w.bounds }
+
+// RefreshEvery reports how often the dashboard's content can change. It tracks
+// the configured data-refresh interval — there's no value in refreshing the
+// panel faster than the underlying calendar/weather data is refetched.
+func (w *Widget) RefreshEvery() time.Duration { return w.config.Refresh }
 
 // Render draws the 7-day calendar+weather dashboard into frame.
 func (w *Widget) Render(frame *image.Paletted) error {

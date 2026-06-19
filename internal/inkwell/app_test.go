@@ -445,6 +445,32 @@ refresh:
 // TestApp_RefreshBWRoutineCycleIsPartial confirms that in BW mode, once an
 // initial full refresh has run, changing content drives a flicker-free
 // partial refresh — identifiable by the partial-window command (0x90).
+// TestApp_RefreshGateDefersUntilDue confirms the refresh queue gate: a content
+// change is only pushed when a widget is due this minute. An off-cadence change
+// is held (not dropped) and ships on the next due cycle — and the forced full
+// refresh still fires regardless of the gate.
+func TestApp_RefreshGateDefersUntilDue(t *testing.T) {
+	app, _ := newBWRefreshApp(t, 0)
+	size := app.profile.BufferSize()
+	window := Region{X: 0, Y: 0, W: app.profile.Width, H: app.profile.Height}
+	mode := InitFull
+	frameA := make([]byte, size)
+	frameB := bytes.Repeat([]byte{0xFF}, size)
+
+	// Cycle 1: forced full refresh (tick==1) regardless of due.
+	if pushed, err := app.refresh(frameA, nil, false, &mode, window); err != nil || !pushed {
+		t.Fatalf("cycle 1 forced full: pushed=%v err=%v, want pushed=true", pushed, err)
+	}
+	// Cycle 2: content changed but nothing is due — defer (skip).
+	if pushed, err := app.refresh(frameB, frameA, false, &mode, window); err != nil || pushed {
+		t.Fatalf("cycle 2 not-due: pushed=%v err=%v, want pushed=false", pushed, err)
+	}
+	// Cycle 3: the same deferred change is now due — push it.
+	if pushed, err := app.refresh(frameB, frameA, true, &mode, window); err != nil || !pushed {
+		t.Fatalf("cycle 3 due: pushed=%v err=%v, want pushed=true", pushed, err)
+	}
+}
+
 func TestApp_RefreshBWRoutineCycleIsPartial(t *testing.T) {
 	app, mock := newBWRefreshApp(t, 0)
 	size := app.profile.BufferSize()
@@ -453,10 +479,10 @@ func TestApp_RefreshBWRoutineCycleIsPartial(t *testing.T) {
 	frameA := make([]byte, size)
 	frameB := bytes.Repeat([]byte{0xFF}, size)
 
-	if pushed, err := app.refresh(frameA, nil, &mode, window); err != nil || !pushed {
+	if pushed, err := app.refresh(frameA, nil, true, &mode, window); err != nil || !pushed {
 		t.Fatalf("cycle 1 (full): pushed=%v err=%v", pushed, err)
 	}
-	if pushed, err := app.refresh(frameB, frameA, &mode, window); err != nil || !pushed {
+	if pushed, err := app.refresh(frameB, frameA, true, &mode, window); err != nil || !pushed {
 		t.Fatalf("cycle 2 (partial): pushed=%v err=%v", pushed, err)
 	}
 
@@ -942,10 +968,10 @@ func TestApp_RefreshBWFastCadence(t *testing.T) {
 	frameA := make([]byte, size)
 	frameB := bytes.Repeat([]byte{0xFF}, size)
 
-	if pushed, err := app.refresh(frameA, nil, &mode, window); err != nil || !pushed {
+	if pushed, err := app.refresh(frameA, nil, true, &mode, window); err != nil || !pushed {
 		t.Fatalf("cycle 1 (full): pushed=%v err=%v", pushed, err)
 	}
-	if pushed, err := app.refresh(frameB, frameA, &mode, window); err != nil || !pushed {
+	if pushed, err := app.refresh(frameB, frameA, true, &mode, window); err != nil || !pushed {
 		t.Fatalf("cycle 2 (fast): pushed=%v err=%v", pushed, err)
 	}
 
@@ -1077,6 +1103,7 @@ func TestRun_PackImageError(t *testing.T) {
 		comp:      NewCompositor(&bwProfile),
 		profile:   &color7Profile,
 		dashboard: NewDashboard([]*Screen{NewScreen("default", nil)}, 0, time.Now),
+		now:       time.Now,
 		interval:  time.Millisecond,
 	}
 

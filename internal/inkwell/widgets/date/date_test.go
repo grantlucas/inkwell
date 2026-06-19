@@ -125,3 +125,10 @@ func TestNew_NilNow(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 }
+
+func TestWidget_RefreshEvery(t *testing.T) {
+	w := New(image.Rect(0, 0, 10, 10), time.Now, "Monday")
+	if got := w.RefreshEvery(); got != 24*time.Hour {
+		t.Errorf("RefreshEvery() = %v, want 24h", got)
+	}
+}
