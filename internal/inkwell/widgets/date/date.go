@@ -17,10 +17,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
-var (
-	_ widget.Widget         = (*Widget)(nil)
-	_ widget.RefreshCadence = (*Widget)(nil)
-)
+var _ widget.Widget = (*Widget)(nil)
 
 var dateFace font.Face
 
@@ -57,10 +54,6 @@ func New(bounds image.Rectangle, now func() time.Time, format string) *Widget {
 
 // Bounds returns the widget's display rectangle.
 func (w *Widget) Bounds() image.Rectangle { return w.bounds }
-
-// RefreshEvery reports how often the date's content can change. The displayed
-// date rolls over only at local midnight, so a daily cadence is sufficient.
-func (w *Widget) RefreshEvery() time.Duration { return 24 * time.Hour }
 
 // Render draws the formatted date centered in the bounds.
 func (w *Widget) Render(frame *image.Paletted) error {

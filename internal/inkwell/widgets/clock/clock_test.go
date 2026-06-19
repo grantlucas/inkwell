@@ -313,10 +313,3 @@ func TestMustLoadClockFace_PanicsOnFontError(t *testing.T) {
 
 	_ = mustLoadClockFace()
 }
-
-func TestWidget_RefreshEvery(t *testing.T) {
-	w := New(image.Rect(0, 0, 10, 10), time.Now, "15:04")
-	if got := w.RefreshEvery(); got != time.Minute {
-		t.Errorf("RefreshEvery() = %v, want 1m", got)
-	}
-}

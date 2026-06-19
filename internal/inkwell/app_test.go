@@ -423,14 +423,11 @@ func changingRegistry() *widget.Registry {
 // terminate deterministically on an injected hardware error.
 func newBWRefreshApp(t *testing.T, fastEvery int) (*App, *MockHardware) {
 	t.Helper()
-	cfg, err := LoadConfig(strings.NewReader(fmt.Sprintf(`
+	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2
 backend: preview
 color_mode: bw
-refresh:
-  full_every: 1000
-  fast_every: %d
-`, fastEvery)))
+`))
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
@@ -439,6 +436,10 @@ refresh:
 	if err != nil {
 		t.Fatalf("NewApp: %v", err)
 	}
+	// Burn-in cadence is no longer config-driven; set a planner directly so
+	// these dispatch tests stay deterministic (full only on the first cycle,
+	// fast on the requested cadence).
+	app.planner = newRefreshPlanner(BW, 1000, fastEvery)
 	return app, mock
 }
 
@@ -501,6 +502,7 @@ dashboard:
       widgets:
         - type: broken
           bounds: [0, 0, 10, 10]
+          refresh: "1m"
 `))
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
@@ -578,6 +580,7 @@ dashboard:
       widgets:
         - type: clock
           bounds: [0, 0, 200, 50]
+          refresh: "1m"
           config:
             format: "15:04"
 `))
@@ -614,6 +617,7 @@ dashboard:
       widgets:
         - type: stub
           bounds: [0, 0, 0, 0]
+          refresh: "1m"
 `))
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
@@ -643,6 +647,7 @@ dashboard:
       widgets:
         - type: stub
           bounds: [0, 0, 900, 50]
+          refresh: "1m"
 `))
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
@@ -672,6 +677,7 @@ dashboard:
       widgets:
         - type: nonexistent
           bounds: [0, 0, 100, 50]
+          refresh: "1m"
 `))
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
@@ -697,6 +703,7 @@ dashboard:
       widgets:
         - type: nonexistent
           bounds: [0, 0, 100, 50]
+          refresh: "1m"
 `))
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
@@ -780,6 +787,7 @@ dashboard:
       widgets:
         - type: clock
           bounds: [0, 0, 200, 50]
+          refresh: "1m"
 `))
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
@@ -1011,15 +1019,13 @@ func TestRun_RefreshInitError(t *testing.T) {
 display: waveshare_7in5_v2
 backend: preview
 color_mode: bw
-refresh:
-  full_every: 1000
-  fast_every: 0
 dashboard:
   screens:
     - name: main
       widgets:
         - type: changing
           bounds: [0, 0, 100, 100]
+          refresh: "1m"
 `))
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
@@ -1056,15 +1062,13 @@ func TestRun_DisplayPartialError(t *testing.T) {
 display: waveshare_7in5_v2
 backend: preview
 color_mode: bw
-refresh:
-  full_every: 1000
-  fast_every: 0
 dashboard:
   screens:
     - name: main
       widgets:
         - type: changing
           bounds: [0, 0, 100, 100]
+          refresh: "1m"
 `))
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
@@ -1398,6 +1402,7 @@ dashboard:
       widgets:
         - type: broken
           bounds: [0, 0, 10, 10]
+          refresh: "1m"
 `))
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)

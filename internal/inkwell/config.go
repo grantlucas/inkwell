@@ -25,6 +25,46 @@ func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+// WidgetRefresh is a widget's required refresh setting: either a cadence
+// duration (how often the widget may refresh the panel, >= 1m) or the literal
+// "static" (equivalently "never"), marking a widget whose content never
+// changes so it should never trigger a refresh on its own.
+type WidgetRefresh struct {
+	set    bool          // whether the field was present in the config
+	static bool          // "static"/"never": never refresh
+	every  time.Duration // cadence when not static
+}
+
+// UnmarshalYAML parses a refresh value: the strings "static"/"never", or a
+// duration like "5m"/"24h".
+func (r *WidgetRefresh) UnmarshalYAML(value *yaml.Node) error {
+	var s string
+	if err := value.Decode(&s); err != nil {
+		return err
+	}
+	r.set = true
+	switch s {
+	case "static", "never":
+		r.static = true
+		return nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return fmt.Errorf("invalid refresh %q: %w", s, err)
+	}
+	r.every = d
+	return nil
+}
+
+// cadence returns the schedule cadence for this setting: 0 for a static widget
+// (never due), otherwise the configured duration.
+func (r WidgetRefresh) cadence() time.Duration {
+	if r.static {
+		return 0
+	}
+	return r.every
+}
+
 // DashboardConfig defines the screen collection and rotation behavior.
 type DashboardConfig struct {
 	RotateInterval Duration       `yaml:"rotate_interval"`
@@ -39,16 +79,19 @@ type ScreenConfig struct {
 
 // WidgetConfig defines a single widget placement and configuration.
 //
-// Refresh overrides how often this widget may trigger a panel refresh (its
-// render cadence); when unset the widget's own declared cadence is used. Note
-// this is distinct from any widget-specific data-refresh setting nested under
-// Config (e.g. the weekly-calendar's config.refresh, which is its data cache
-// TTL): this top-level field controls when the screen is refreshed, not when
-// the widget refetches data.
+// Refresh is required: it sets how often this widget may trigger a panel
+// refresh (its render cadence), as a duration of at least one minute (e.g.
+// "5m", "24h"), or the literal "static" for a widget that never changes. It is
+// the only refresh setting in the config and is fed into the refresh queue,
+// which aligns cadences to wall-clock boundaries so widgets sharing a cadence
+// coalesce. It is distinct from any widget-specific data-refresh setting nested
+// under Config (e.g. the weekly-calendar's config.refresh, which is its data
+// cache TTL): Refresh controls when the screen is refreshed, not when the
+// widget refetches data.
 type WidgetConfig struct {
 	Type    string         `yaml:"type"`
 	Bounds  [4]int         `yaml:"bounds"`
-	Refresh Duration       `yaml:"refresh,omitempty"`
+	Refresh WidgetRefresh  `yaml:"refresh"`
 	Config  map[string]any `yaml:"config"`
 }
 
@@ -61,17 +104,6 @@ type Config struct {
 	Preview         PreviewConfig   `yaml:"preview,omitempty"`
 	Image           ImageConfig     `yaml:"image,omitempty"`
 	Dashboard       DashboardConfig `yaml:"dashboard,omitempty"`
-	Refresh         RefreshConfig   `yaml:"refresh,omitempty"`
-}
-
-// RefreshConfig tunes the refresh-mode cadence (see refreshPlanner). The
-// values count render cycles, so at the default 60s interval FullEvery: 60
-// is roughly hourly. Only bw mode uses fast/partial refreshes; gray4
-// honors FullEvery for its periodic forced refresh and otherwise refreshes
-// on content change.
-type RefreshConfig struct {
-	FullEvery int `yaml:"full_every"` // cycles between full / forced grayscale refreshes
-	FastEvery int `yaml:"fast_every"` // cycles between fast refreshes (bw only; 0 = never)
 }
 
 // PreviewConfig holds web preview server settings.
@@ -99,7 +131,6 @@ func DefaultConfig() *Config {
 		ClearOnShutdown: true,
 		Preview:         PreviewConfig{Port: 8080},
 		Image:           ImageConfig{OutputDir: "output"},
-		Refresh:         RefreshConfig{FullEvery: 60, FastEvery: 10},
 	}
 }
 
@@ -134,14 +165,13 @@ func LoadConfig(r io.Reader) (*Config, error) {
 		return nil, fmt.Errorf("dashboard.rotate_interval must be non-negative")
 	}
 
-	if cfg.Refresh.FullEvery < 0 || cfg.Refresh.FastEvery < 0 {
-		return nil, fmt.Errorf("refresh cadence must be non-negative")
-	}
-
 	for _, sc := range cfg.Dashboard.Screens {
 		for _, wc := range sc.Widgets {
-			if d := time.Duration(wc.Refresh); d != 0 && d < time.Minute {
-				return nil, fmt.Errorf("widget %q: refresh must be >= 1m, got %v", wc.Type, d)
+			if !wc.Refresh.set {
+				return nil, fmt.Errorf("widget %q: refresh is required (e.g. refresh: \"5m\", or \"static\")", wc.Type)
+			}
+			if !wc.Refresh.static && wc.Refresh.every < time.Minute {
+				return nil, fmt.Errorf("widget %q: refresh must be >= 1m or \"static\", got %v", wc.Type, wc.Refresh.every)
 			}
 		}
 	}

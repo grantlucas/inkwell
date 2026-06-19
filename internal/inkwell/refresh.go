@@ -28,6 +28,17 @@ type refreshPlanner struct {
 	tick      int
 }
 
+// Burn-in / ghosting cadence is fixed internally rather than user-configurable:
+// it's a property of the panel hardware (how often it needs a full clearing
+// flash), not a per-widget concern. A full / forced-grayscale refresh runs
+// roughly hourly (every 60 cycles at the default interval) and, in BW, a fast
+// refresh every 10 cycles. These feed the planner; the per-widget cadence the
+// refresh queue gates on is separate.
+const (
+	defaultFullEvery = 60
+	defaultFastEvery = 10
+)
+
 // newRefreshPlanner builds a planner for the given color depth and cadence.
 func newRefreshPlanner(color ColorDepth, fullEvery, fastEvery int) *refreshPlanner {
 	return &refreshPlanner{color: color, fullEvery: fullEvery, fastEvery: fastEvery}

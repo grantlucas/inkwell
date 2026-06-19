@@ -15,11 +15,8 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
-// Compile-time interface checks.
-var (
-	_ widget.Widget         = (*Widget)(nil)
-	_ widget.RefreshCadence = (*Widget)(nil)
-)
+// Compile-time interface check.
+var _ widget.Widget = (*Widget)(nil)
 
 var clockFace font.Face
 
@@ -109,10 +106,6 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 func (w *Widget) Bounds() image.Rectangle {
 	return w.bounds
 }
-
-// RefreshEvery reports how often the clock's content can change. A minute-
-// resolution clock changes every minute (also the hard refresh floor).
-func (w *Widget) RefreshEvery() time.Duration { return time.Minute }
 
 // Render draws the current time into frame using IBM Plex Mono Bold.
 func (w *Widget) Render(frame *image.Paletted) error {

@@ -13,11 +13,11 @@ type Screen struct {
 	schedule refreshSchedule
 }
 
-// NewScreen creates a Screen with the given name and widgets. Each widget's
-// refresh cadence is resolved from its declared RefreshEvery (or the default);
-// per-instance config overrides are applied by buildDashboard.
+// NewScreen creates a Screen with the given name and widgets. The refresh
+// schedule starts empty (no widget is due); buildDashboard populates it from
+// each widget's required config cadence.
 func NewScreen(name string, widgets []widget.Widget) *Screen {
-	return &Screen{Name: name, widgets: widgets, schedule: buildSchedule(widgets, nil)}
+	return &Screen{Name: name, widgets: widgets}
 }
 
 // Widgets returns the screen's widget list.

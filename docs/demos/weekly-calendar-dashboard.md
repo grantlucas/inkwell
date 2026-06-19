@@ -25,15 +25,18 @@ dashboard:
       widgets:
         - type: date
           bounds: [0, 0, 800, 52]
+          refresh: "24h"
           config:
             format: "Monday, January 2"
         - type: clock
           bounds: [700, 0, 800, 52]
+          refresh: "1m"
           config:
             format: "15:04"
             align: right
         - type: weekly-calendar
           bounds: [0, 52, 800, 480]
+          refresh: "15m"
           config:
             feeds:
               - "https://example.com/my-calendar.ics"

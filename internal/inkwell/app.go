@@ -153,7 +153,7 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 		comp:            comp,
 		profile:         profile,
 		dashboard:       dashboard,
-		planner:         newRefreshPlanner(profile.Color, cfg.Refresh.FullEvery, cfg.Refresh.FastEvery),
+		planner:         newRefreshPlanner(profile.Color, defaultFullEvery, defaultFastEvery),
 		now:             deps.Now,
 		interval:        o.interval,
 		listenAddr:      fmt.Sprintf(":%d", cfg.Preview.Port),
@@ -372,7 +372,7 @@ func buildDashboard(cfg *Config, profile *DisplayProfile, registry *widget.Regis
 
 	for _, sc := range cfg.Dashboard.Screens {
 		var ws []widget.Widget
-		var overrides []time.Duration
+		var cadences []time.Duration
 		for _, wc := range sc.Widgets {
 			bounds := image.Rect(wc.Bounds[0], wc.Bounds[1], wc.Bounds[2], wc.Bounds[3])
 			if bounds.Empty() {
@@ -388,10 +388,10 @@ func buildDashboard(cfg *Config, profile *DisplayProfile, registry *widget.Regis
 				return nil, fmt.Errorf("screen %q: widget %q: %w", sc.Name, wc.Type, err)
 			}
 			ws = append(ws, w)
-			overrides = append(overrides, time.Duration(wc.Refresh))
+			cadences = append(cadences, wc.Refresh.cadence())
 		}
 		screen := NewScreen(sc.Name, ws)
-		screen.schedule = buildSchedule(ws, overrides)
+		screen.schedule = refreshSchedule{cadences: cadences}
 		screens = append(screens, screen)
 	}
 

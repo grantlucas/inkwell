@@ -689,10 +689,3 @@ type stubHTTPClient struct{}
 func (s *stubHTTPClient) Do(_ *nethttp.Request) (*nethttp.Response, error) {
 	return nil, context.DeadlineExceeded
 }
-
-func TestWidget_RefreshEvery(t *testing.T) {
-	w := New(image.Rect(0, 0, 10, 10), nil, nil, time.Now, Config{Refresh: 15 * time.Minute})
-	if got := w.RefreshEvery(); got != 15*time.Minute {
-		t.Errorf("RefreshEvery() = %v, want 15m", got)
-	}
-}
