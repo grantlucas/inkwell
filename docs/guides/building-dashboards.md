@@ -97,6 +97,41 @@ type Widget interface {
   display.
 - **`Render(frame)`** — draws the widget's content onto the frame.
 
+### Declaring a refresh cadence (important)
+
+A widget may *also* implement the optional `RefreshCadence` interface to
+tell Inkwell how often its content can change:
+
+```go
+type RefreshCadence interface {
+    RefreshEvery() time.Duration
+}
+```
+
+This matters because the panel only physically refreshes when a widget is
+**due**. Cadences are whole minutes (1 minute is the hard floor — nothing
+refreshes faster) and are **wall-clock aligned**: a widget with cadence *N*
+refreshes when the minute-of-day is divisible by *N*, so widgets sharing a
+cadence coalesce onto the same mark (two `5m` widgets both refresh on
+`:00/:05/:10`) instead of each flashing the panel independently. On `gray4`
+every refresh flickers, so an unnecessary refresh is an unnecessary flicker.
+
+- Return your widget's natural change interval — e.g. `time.Minute` for a
+  clock, `24 * time.Hour` for a date that only rolls at midnight.
+- Return `0` (or any non-positive value) to mark the widget **static** — it
+  never triggers a refresh on its own (use this for fixed labels, separators,
+  logos, anything that doesn't change).
+- A value below one minute is clamped up to the floor.
+- **If you don't implement it at all, the widget is treated as refreshing
+  every minute.** That's a safe default, but it means a never-changing widget
+  would keep the screen eligible to refresh every minute — so prefer to
+  declare a real cadence (or `0` for static).
+
+A widget should also declare its own data freshness separately if it fetches
+data: the refresh cadence governs *when the screen is allowed to refresh*, not
+*when the widget refetches* (see the weekly-calendar's `config.refresh` data
+TTL, which is a distinct setting).
+
 ### Your first widget: a static label
 
 Create a new file `internal/inkwell/widgets/label/label.go`:
@@ -108,6 +143,7 @@ import (
     "image"
     "image/color"
     "image/draw"
+    "time"
 
     "golang.org/x/image/font"
     "golang.org/x/image/font/basicfont"
@@ -116,8 +152,11 @@ import (
     "github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
-// Compile-time interface check.
-var _ widget.Widget = (*Widget)(nil)
+// Compile-time interface checks.
+var (
+    _ widget.Widget         = (*Widget)(nil)
+    _ widget.RefreshCadence = (*Widget)(nil)
+)
 
 // Widget displays a line of text.
 type Widget struct {
@@ -130,6 +169,10 @@ func New(bounds image.Rectangle, text string) *Widget {
 }
 
 func (w *Widget) Bounds() image.Rectangle { return w.bounds }
+
+// RefreshEvery marks the label static: a fixed string never changes, so it
+// should never trigger a panel refresh on its own.
+func (w *Widget) RefreshEvery() time.Duration { return 0 }
 
 func (w *Widget) Render(frame *image.Paletted) error {
     // White background
@@ -209,6 +252,26 @@ dashboard:
 
 `bounds` is `[x0, y0, x1, y1]` matching Go's `image.Rect()`. The
 origin `(0, 0)` is the top-left corner of the display.
+
+### Overriding refresh cadence per widget
+
+Each widget entry accepts an optional top-level `refresh:` that overrides the
+widget's built-in cadence (see [Declaring a refresh
+cadence](#declaring-a-refresh-cadence-important)). It's a sibling of `type`,
+`bounds`, and `config` — not nested inside `config`:
+
+```yaml
+- type: clock
+  bounds: [650, 0, 800, 50]
+  refresh: "5m"   # only refresh the clock every 5 minutes (default is 1m)
+  config:
+    format: "15:04"
+```
+
+Values are durations (`"5m"`, `"1h"`) and must be at least `1m`. This controls
+**when the screen is allowed to refresh** for this widget — distinct from any
+data-refresh setting a widget exposes under `config` (e.g. the
+weekly-calendar's `config.refresh` cache TTL).
 
 ### Planning your layout
 

@@ -38,7 +38,7 @@ Source-of-truth files:
 |-------|------|
 | Application wiring + render loop | [`internal/inkwell/app.go`][app] |
 | Dashboard + screen rotation | [`internal/inkwell/dashboard.go`][dashboard], [`internal/inkwell/screen.go`][screen] |
-| Widget interface + factory registry | [`internal/inkwell/widget/`][widget] |
+| Widget interface (+ optional `RefreshCadence`) + factory registry | [`internal/inkwell/widget/`][widget] |
 | Built-in widget implementations | [`internal/inkwell/widgets/`][widgets] |
 | Compositor (frame assembly) | [`internal/inkwell/compositor.go`][compositor] |
 | Generic EPD driver | [`internal/inkwell/epd.go`][epd] |

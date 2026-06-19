@@ -102,6 +102,25 @@ the correct commands and data.
 - New backends implement the `Hardware` interface (5 methods: `SendCommand`,
   `SendData`, `ReadBusy`, `Reset`, `Close`)
 
+## Adding a New Widget
+
+1. Create a package under `internal/inkwell/widgets/<name>/`.
+2. Implement the `Widget` interface (`Bounds()` and `Render(frame)`).
+3. **Implement the optional `RefreshCadence` interface** (`RefreshEvery()
+   time.Duration`) to declare how often the widget can change. Return its
+   natural change interval (whole minutes; 1m floor), or `0` for a static
+   widget that never needs to refresh on its own. Skipping it makes the widget
+   default to a 1-minute cadence, which keeps the screen eligible to refresh
+   every minute — so declare a real cadence even when it's static. See
+   [Refresh Strategy](docs/tech-specs/08-refresh-strategy.md#per-widget-refresh-cadence-the-refresh-queue).
+4. Export a `Factory(bounds, config, deps) (widget.Widget, error)`.
+5. Register it in `internal/inkwell/widgets/registry.go`.
+6. Add tests to 100% coverage.
+
+See the [Building Dashboards
+guide](docs/guides/building-dashboards.md#creating-a-widget) for a full
+walkthrough.
+
 ## CI Pipeline
 
 `make ci` mirrors what GitHub Actions runs on every PR and push to `main`:

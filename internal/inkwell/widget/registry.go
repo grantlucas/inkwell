@@ -13,6 +13,11 @@ type Deps struct {
 }
 
 // Factory creates a Widget from bounds, a raw config map, and dependencies.
+//
+// A returned Widget may optionally implement RefreshCadence to declare how
+// often it can change; if it doesn't, it is treated as refreshing every
+// minute. Static widgets (fixed labels, separators, logos) should implement it
+// and return 0 so they don't keep the screen eligible to refresh.
 type Factory func(bounds image.Rectangle, config map[string]any, deps Deps) (Widget, error)
 
 // Registry maps widget type names to their factory functions.
