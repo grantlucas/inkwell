@@ -942,8 +942,12 @@ func TestApp_RefreshBWFastCadence(t *testing.T) {
 	frameA := make([]byte, size)
 	frameB := bytes.Repeat([]byte{0xFF}, size)
 
-	app.refresh(frameA, nil, &mode, window)    // cycle 1: full
-	app.refresh(frameB, frameA, &mode, window) // cycle 2: fast (tick%2 == 0)
+	if pushed, err := app.refresh(frameA, nil, &mode, window); err != nil || !pushed {
+		t.Fatalf("cycle 1 (full): pushed=%v err=%v", pushed, err)
+	}
+	if pushed, err := app.refresh(frameB, frameA, &mode, window); err != nil || !pushed {
+		t.Fatalf("cycle 2 (fast): pushed=%v err=%v", pushed, err)
+	}
 
 	var sawFastTemp bool
 	for i, c := range mock.Calls {
