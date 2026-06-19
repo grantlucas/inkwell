@@ -34,6 +34,14 @@ preview:
   port: 8080
 
 dashboard:
+  # Each widget may set a top-level `refresh:` controlling how often it is
+  # allowed to refresh the panel. Cadences are whole minutes (1m floor) and
+  # wall-clock aligned, so widgets sharing a cadence coalesce onto the same
+  # mark (e.g. two `5m` widgets both refresh on :00/:05/:10) instead of each
+  # flashing independently. When unset, the widget's built-in cadence is used
+  # (clock 1m, date daily, separator never, weekly-calendar = its data
+  # refresh). NOTE: this top-level `refresh` (screen-refresh cadence) is
+  # distinct from weekly-calendar's `config.refresh` (data cache TTL) below.
   screens:
     - name: weekly
       widgets:
@@ -43,6 +51,7 @@ dashboard:
             format: "Monday, January 2"
         - type: clock
           bounds: [700, 0, 800, 50]
+          # refresh: "5m"   # e.g. update the clock only every 5 minutes
           config:
             format: "15:04"
             align: right

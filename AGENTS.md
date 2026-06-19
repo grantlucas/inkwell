@@ -91,7 +91,15 @@ rendered. The render loop picks a refresh waveform per cycle
 (`refreshPlanner` in `refresh.go`): BW cycles full → fast → partial so
 routine ticks stay flicker-free, while Gray4 has no flicker-free waveform
 and only skips refreshing when the frame is unchanged. The flash is
-hardware-only — the web preview can't show it. See
+hardware-only — the web preview can't show it.
+
+*When* a change is allowed to push is a further axis: each widget declares a
+whole-minute refresh cadence (`widget.RefreshCadence`, 1m floor), overridable
+per instance with a top-level `refresh:` in the widget config. A per-screen
+`refreshSchedule` (`refresh_queue.go`) gates the planner — a frame change only
+pushes when a widget is *due* this minute (wall-clock aligned, so equal
+cadences coalesce). Don't confuse a widget's top-level `refresh` (render
+cadence) with `weekly-calendar`'s nested `config.refresh` (data cache TTL). See
 [`docs/tech-specs/08-refresh-strategy.md`](docs/tech-specs/08-refresh-strategy.md).
 
 ## Workflow

@@ -101,6 +101,68 @@ Defaults are `full_every: 60`, `fast_every: 10`.
 - **gray4 can't be made flicker-free** — if flicker matters more than the
   grayscale legibility, run `color_mode: bw`.
 
+## Per-widget refresh cadence (the refresh queue)
+
+`full_every` / `fast_every` decide *which waveform* a push uses. A separate
+axis decides *whether a content change is allowed to push at all this minute*.
+
+The problem: a dashboard's widgets change on uncorrelated cadences (the clock
+every minute, the calendar every 15 min, weather every few hours). Because the
+loop pushed the moment the composited frame differed, two widgets that update on
+the same period but offset in phase produced *two* refreshes per period instead
+of one — and on gray4 that's two flickers.
+
+So each widget declares a **refresh cadence** in whole minutes (1 minute is the
+hard floor — nothing refreshes faster). The cadence is resolved per widget:
+
+1. a per-instance `refresh:` override in the widget's config (top-level, a
+   sibling of `type`/`bounds`/`config`),
+2. else the widget's built-in `widget.RefreshEvery()`
+   (`RefreshCadence` interface),
+3. else the default, 1 minute.
+
+A value below 1 minute clamps up to the floor; a non-positive value marks the
+widget **static** (it never triggers a refresh on its own — `separator` is the
+canonical case). Built-in defaults: `clock` 1m, `date` daily, `separator`
+static, `weekly-calendar` = its configured data-refresh interval.
+
+`refreshSchedule` (`refresh_queue.go`) holds the resolved cadences for a screen
+and answers `anyDue(now)`: a widget with cadence *N* is due when the
+**minute-of-day** is divisible by *N*. Aligning to the wall-clock minute-of-day
+(not to an arbitrary start time) is what makes widgets sharing a cadence fall
+due *together* — two `5m` widgets both fire on `:00/:05/:10` and coalesce.
+
+The render loop (`App.refresh` in `app.go`) then feeds `due && changed` to the
+planner instead of bare `changed`. Consequences:
+
+- A change that lands on an **undue** minute is *held*, not dropped — the loop
+  skips and leaves the last-pushed buffer untouched, so the change ships on the
+  next due minute (alongside anything else due then).
+- The planner's **periodic full/grayscale refresh still fires regardless** of
+  the gate, preserving the burn-in / ghosting cadence above.
+
+```yaml
+dashboard:
+  screens:
+    - name: weekly
+      widgets:
+        - type: clock
+          bounds: [700, 0, 800, 50]
+          refresh: "5m"   # render cadence: only refresh the clock every 5 min
+        - type: weekly-calendar
+          bounds: [0, 52, 800, 480]
+          config:
+            refresh: "15m" # DATA cache TTL — distinct from the cadence above
+```
+
+**Naming caveat:** the top-level `refresh` (render cadence) and
+`weekly-calendar`'s nested `config.refresh` (data cache TTL) are different
+settings at different nesting levels. Don't conflate them.
+
+A static-only screen (e.g. just separators) never satisfies the gate, so it
+only ever sees the periodic burn-in refresh — which is correct, since nothing
+on it changes.
+
 ## Verification
 
 The web preview reconstructs the device buffer from the captured planes, so
