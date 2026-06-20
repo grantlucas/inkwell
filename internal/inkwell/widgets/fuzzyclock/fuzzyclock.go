@@ -1,5 +1,5 @@
 // Package fuzzyclock implements a widget that renders the current time as
-// natural-language English ("About half past eight", "Nearly ten past five")
+// natural-language English ("half past eight", "about ten past five")
 // for e-ink displays.
 //
 // Unlike the precise clock widget, a fuzzy clock only changes meaningfully
@@ -176,10 +176,10 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 // deterministic core of the widget: the same (t, opts) always yields the same
 // string.
 //
-// Minutes are rounded to the nearest five-minute mark; a qualifier
-// ("About"/"Nearly"/"Just gone") expresses how far the real minute sits from
-// that mark, chosen deterministically from the signed offset so the string
-// never changes mid-mark.
+// Minutes are rounded to the nearest five-minute mark; when the real minute
+// sits off that mark an "about" qualifier is prepended, while landing exactly
+// on the mark yields the plain phrase. The result is deterministic, so the
+// string never changes mid-mark.
 func fuzzyTime(t time.Time, opts options) string {
 	hour := t.Hour()
 	m := t.Minute()
@@ -193,38 +193,38 @@ func fuzzyTime(t time.Time, opts options) string {
 		hour++
 	}
 
-	qualifier := pickQualifier(offset)
 	minutes, nextHour := minutesPhrase(r)
 	if nextHour {
 		hour++
 	}
 	hourWord := hourPhrase(hour, opts)
 
-	var phrase string
+	var core string
 	switch {
 	case minutes != "":
-		phrase = qualifier + " " + minutes + " " + hourWord
+		core = minutes + " " + hourWord
 	case hourWord == "noon" || hourWord == "midnight":
 		// "noon"/"midnight" are complete hour references; "noon o'clock"
 		// would read wrong, so the o'clock suffix is dropped.
-		phrase = qualifier + " " + hourWord
+		core = hourWord
 	default:
-		phrase = qualifier + " " + hourWord + " o'clock"
+		core = hourWord + " o'clock"
+	}
+
+	phrase := core
+	if qualifier := pickQualifier(offset); qualifier != "" {
+		phrase = qualifier + " " + core
 	}
 	return applyStyle(phrase, opts.style)
 }
 
-// pickQualifier maps the signed offset from the five-minute mark to a
-// deterministic qualifier word.
+// pickQualifier returns "about" when the real minute sits off the five-minute
+// mark, and "" when it lands exactly on it (a plain phrase, no qualifier).
 func pickQualifier(offset int) string {
-	switch {
-	case offset < 0:
-		return "nearly"
-	case offset > 0:
-		return "just gone"
-	default:
-		return "about"
+	if offset == 0 {
+		return ""
 	}
+	return "about"
 }
 
 // minutesPhrase returns the minutes portion of the phrase for a rounded mark r
