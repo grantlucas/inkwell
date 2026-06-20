@@ -123,11 +123,14 @@ func TestPackBW_Checkerboard(t *testing.T) {
 	}
 }
 
-// TestPackBW_ThresholdAtBoundary pins the exact Y < 128 cutoff so a
+// TestPackBW_ThresholdAtBoundary pins the exact Y <= 128 cutoff so a
 // future "let's just shift it a little" tweak surfaces in CI rather than
 // quietly changing how every gray in the palette lands on the device.
-// Y=127 is the darkest value that still rounds to black; Y=128 is the
-// lightest that stays white.
+// The boundary inks any pixel that is at least half covered: Y=128 is the
+// midpoint (50% ink over white) and rounds to black, while Y=129 is the
+// darkest value that still stays white. This is what keeps thin anti-
+// aliased glyph stems — whose ~50%-covered centres quantise to
+// PaperGray50 (Y=128) — from dropping out under the threshold (inkwell-5yh).
 func TestPackBW_ThresholdAtBoundary(t *testing.T) {
 	p := bwTestProfile()
 	cases := []struct {
@@ -136,8 +139,9 @@ func TestPackBW_ThresholdAtBoundary(t *testing.T) {
 		wantOn bool
 	}{
 		{"Y=0 → black", 0, true},
-		{"Y=127 (just below threshold) → black", 127, true},
-		{"Y=128 (threshold) → white", 128, false},
+		{"Y=127 (below threshold) → black", 127, true},
+		{"Y=128 (half covered) → black", 128, true},
+		{"Y=129 (just above threshold) → white", 129, false},
 		{"Y=255 → white", 255, false},
 	}
 	for _, c := range cases {

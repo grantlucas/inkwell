@@ -23,7 +23,7 @@ func PackImage(profile *DisplayProfile, img image.Image) ([]byte, error) {
 // MSB first). Convention: black pixel → bit 1, white pixel → bit 0.
 //
 // The Waveshare 7.5" V2 panel is fundamentally 1-bit. We threshold each
-// pixel at Y < 128 → black so the device sees pure black or pure white —
+// pixel at Y <= 128 → black so the device sees pure black or pure white —
 // no halftone stipple. Anti-aliased glyph edges from the font drawer (and
 // any other intermediate grays) collapse along the same threshold, which
 // keeps text crisp without leaving halftone dots scattered through what
@@ -31,6 +31,16 @@ func PackImage(profile *DisplayProfile, img image.Image) ([]byte, error) {
 // it as a solid PaperBlack stroke (a line, outline, or tick) rather than
 // a gray fill; gray fills below the threshold render solid black and
 // gray fills above it disappear, so they read as "all-or-nothing" in BW.
+//
+// The cutoff is "at least half covered" (Y <= 128), not "strictly more
+// than half" (Y < 128): a thin anti-aliased stem straddling two columns
+// deposits ~50% ink in each, which the compositor quantises to
+// PaperGray50 (Y=128). A strict Y < 128 dropped exactly those stem
+// centres, so 1px features (the colon in times, the 1/i/l/j stems,
+// Terminus Regular body text) disconnected and faded out on the panel
+// while reading fine in the grayscale source preview. Inking the 50%
+// midpoint keeps them whole (inkwell-5yh). Gray4 is unaffected — it has
+// its own bucket mapping in packGray4.
 func packBW(profile *DisplayProfile, img image.Image) []byte {
 	buf := make([]byte, profile.BufferSize())
 	w := profile.Width
@@ -38,7 +48,7 @@ func packBW(profile *DisplayProfile, img image.Image) []byte {
 	for y := range h {
 		for x := range w {
 			g := color.GrayModel.Convert(img.At(x, y)).(color.Gray)
-			if g.Y < 128 { // dark → black → bit = 1
+			if g.Y <= 128 { // at least half covered → black → bit = 1
 				idx := (y*w + x) / 8
 				bit := uint(7 - (x % 8)) // MSB first
 				buf[idx] |= 1 << bit

@@ -16,16 +16,17 @@ What the panel can show:
   BW; no partial refresh. This is the recommended mode and the default
   in `DefaultConfig()`.
 - **`bw` mode:** 1 bit per pixel — pure black or pure white via a
-  `Y<128` threshold. Faster refresh, smaller framebuffer.
+  `Y<=128` threshold (any pixel at least half covered is inked).
+  Faster refresh, smaller framebuffer.
 
 There is **no native 8-level or 12-level grayscale, and there is no
 dithering.** Both packers collapse the compositor's frame straight to
 the device's bit depth:
 
 - `packBW` (`internal/inkwell/buffer.go`) — pure threshold. Anything
-  with luminance ≥ 128 becomes white; anything below becomes black.
-  No Bayer / Floyd-Steinberg stipple anywhere; soft grays don't
-  "survive" — they collapse all-or-nothing.
+  with luminance > 128 becomes white; `Y <= 128` (at least half
+  covered) becomes black. No Bayer / Floyd-Steinberg stipple anywhere;
+  soft grays don't "survive" — they collapse all-or-nothing.
 - `packGray4` — 4-level luminance buckets via the boundaries baked
   into `gray4Palette`: `Y > 192` → white, `> 128` → light gray,
   `> 64` → dark gray, else black. Used by the `Init4Gray` device
@@ -71,7 +72,7 @@ mistake the source canvas for what the device will show.
    collapse to black vs white under the BW threshold; adding a new
    entry doesn't help unless it lands in a Gray4 bucket nothing else
    occupies, and the two device-real shades (`PaperGray70` for the
-   dark-gray bucket, anything `PaperGray60`+ for the black side of
+   dark-gray bucket, anything `PaperGray50`+ for the black side of
    the threshold) already cover the design space.
 
 ### When in doubt
