@@ -18,6 +18,11 @@ var _ widget.Widget = (*Widget)(nil)
 
 const defaultWeatherH = 145
 
+// weatherCacheTTL is how long a fetched forecast is reused before the
+// widget refetches. Matches the previous app-level default; the panel
+// refresh cadence is governed separately by the top-level refresh config.
+const weatherCacheTTL = 3 * time.Hour
+
 // Config holds parsed weekly-calendar configuration.
 type Config struct {
 	Feeds            []string
@@ -30,6 +35,7 @@ type Config struct {
 	ShowWeather      bool
 	ShowWeatherLabel bool
 	TempUnit         string
+	WeatherModel     weather.Model
 	HighlightHour    int
 }
 
@@ -179,8 +185,23 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 
 	var ws weather.Source
 	if cfg.ShowWeather {
+		// A caller-injected weather_source (tests, custom transports) wins;
+		// otherwise build an Open-Meteo source for the configured model,
+		// wrapped in the same time-based cache the calendar uses.
 		if src, ok := deps.DataSources["weather_source"].(weather.Source); ok {
 			ws = src
+		} else {
+			var wClient weather.HTTPClient
+			if deps.DataSources != nil {
+				if c, ok := deps.DataSources["http_client"].(weather.HTTPClient); ok {
+					wClient = c
+				}
+			}
+			if wClient == nil {
+				wClient = http.DefaultClient
+			}
+			base := weather.NewOpenMeteoSource(cfg.WeatherModel, wClient)
+			ws = weather.NewCachedSource(base, weatherCacheTTL, now)
 		}
 	}
 
@@ -196,6 +217,7 @@ func parseConfig(config map[string]any) (Config, error) {
 		ShowWeather:      true,
 		ShowWeatherLabel: true,
 		TempUnit:         "C",
+		WeatherModel:     weather.ModelGEM,
 		HighlightHour:    15,
 	}
 
@@ -327,6 +349,18 @@ func parseConfig(config map[string]any) (Config, error) {
 			return cfg, fmt.Errorf("weekly-calendar: highlight_hour must be in [0, 23], got %d", n)
 		}
 		cfg.HighlightHour = n
+	}
+
+	if v, ok := config["weather_model"]; ok {
+		s, ok := v.(string)
+		if !ok {
+			return cfg, fmt.Errorf("weekly-calendar: weather_model must be a string, got %T", v)
+		}
+		m, err := weather.ParseModel(s)
+		if err != nil {
+			return cfg, fmt.Errorf("weekly-calendar: invalid weather_model: %w", err)
+		}
+		cfg.WeatherModel = m
 	}
 
 	return cfg, nil

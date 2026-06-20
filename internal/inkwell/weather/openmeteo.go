@@ -34,6 +34,19 @@ var modelBaseURLs = map[Model]string{
 	ModelGEM:   "https://api.open-meteo.com/v1/gem",
 }
 
+// ParseModel validates a model identifier string against the known models
+// and returns the corresponding Model. Unlike NewOpenMeteoSource, which
+// silently falls back to GFS for an unknown model, ParseModel surfaces an
+// error so config parsing can reject a mistyped weather_model instead of
+// quietly fetching the wrong forecast.
+func ParseModel(s string) (Model, error) {
+	m := Model(s)
+	if _, ok := modelBaseURLs[m]; !ok {
+		return "", fmt.Errorf("unknown weather model %q (must be gfs, ecmwf, or gem)", s)
+	}
+	return m, nil
+}
+
 // newRequestWithContext is the indirection over http.NewRequestWithContext
 // that tests override to exercise the otherwise-unreachable "build request"
 // error branch (the URL comes from url.Parse → Encode so it's always

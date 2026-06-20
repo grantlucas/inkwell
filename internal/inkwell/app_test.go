@@ -748,35 +748,6 @@ backend: preview
 	}
 }
 
-// A caller-injected DataSources["http_client"] that doesn't satisfy
-// weather.HTTPClient must still produce a working App: NewApp falls
-// back to http.DefaultClient for the default weather_source rather
-// than panicking at first request.
-func TestNewApp_HTTPClientDoesNotSatisfyWeatherClient(t *testing.T) {
-	cfg, err := LoadConfig(strings.NewReader(`
-display: waveshare_7in5_v2
-backend: preview
-`))
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-
-	mock := &MockHardware{}
-	deps := widget.Deps{
-		DataSources: map[string]any{
-			// A string is the simplest "doesn't satisfy weather.HTTPClient" value.
-			"http_client": "not-a-client",
-		},
-	}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond), WithDeps(deps))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
-	if app == nil {
-		t.Fatal("NewApp returned nil")
-	}
-}
-
 func TestNewApp_WithDashboardConfig(t *testing.T) {
 	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2

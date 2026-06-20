@@ -409,3 +409,35 @@ func TestOpenMeteoSource_GEMModel(t *testing.T) {
 		t.Errorf("URL = %q, want gem endpoint", client.lastURL)
 	}
 }
+
+func TestParseModel(t *testing.T) {
+	tests := []struct {
+		label   string
+		input   string
+		want    Model
+		wantErr bool
+	}{
+		{label: "gfs", input: "gfs", want: ModelGFS},
+		{label: "ecmwf", input: "ecmwf", want: ModelECMWF},
+		{label: "gem", input: "gem", want: ModelGEM},
+		{label: "empty", input: "", wantErr: true},
+		{label: "unknown", input: "xyz", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			got, err := ParseModel(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("ParseModel(%q) = %q, want error", tt.input, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ParseModel(%q) unexpected error: %v", tt.input, err)
+			}
+			if got != tt.want {
+				t.Errorf("ParseModel(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
