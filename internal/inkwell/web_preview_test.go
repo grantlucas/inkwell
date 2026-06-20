@@ -34,12 +34,12 @@ func TestWebPreview_CapturesBufferOnDisplay(t *testing.T) {
 	}
 }
 
-// TestWebPreview_ReconstructsAfterDisplayPartialBox locks the reason
-// DisplayPartialBox keeps full-screen planes: the capture/preview backend
-// reconstructs the device frame from the full new plane via reconstructFrame,
-// which rejects anything smaller than BufferSize(). A future change that slices
-// the partial buffers to the region would break this — and this test.
-func TestWebPreview_ReconstructsAfterDisplayPartialBox(t *testing.T) {
+// TestWebPreview_ReconstructsAfterDisplayPartial locks the reason DisplayPartial
+// keeps full-screen planes: the capture/preview backend reconstructs the device
+// frame from the full new plane via reconstructFrame, which rejects anything
+// smaller than BufferSize(). A future change that slices the partial buffers to
+// the region would break this — and this test.
+func TestWebPreview_ReconstructsAfterDisplayPartial(t *testing.T) {
 	p := imageTestProfile()
 	p.PartialWindowCmd = 0x90
 	p.PartialEnterCmd = 0x91
@@ -53,7 +53,7 @@ func TestWebPreview_ReconstructsAfterDisplayPartialBox(t *testing.T) {
 	newBuf[0] = 0x80 // pixel (0,0) black
 	prevBuf := make([]byte, p.BufferSize())
 
-	if err := epd.DisplayPartialBox(newBuf, prevBuf, Region{X: 0, Y: 0, W: 16, H: 16}); err != nil {
+	if err := epd.DisplayPartial(newBuf, prevBuf, Region{X: 0, Y: 0, W: 16, H: 16}); err != nil {
 		t.Fatal(err)
 	}
 

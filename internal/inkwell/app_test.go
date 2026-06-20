@@ -421,7 +421,7 @@ func changingRegistry() *widget.Registry {
 // render loop's wall-clock ticker (a timeout-based assertion is flaky under
 // CI load). The render loop's own wiring is covered by the Run tests that
 // terminate deterministically on an injected hardware error.
-func newBWRefreshApp(t *testing.T, fastEvery int) (*App, *MockHardware) {
+func newBWRefreshApp(t *testing.T) (*App, *MockHardware) {
 	t.Helper()
 	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2
@@ -436,10 +436,10 @@ color_mode: bw
 	if err != nil {
 		t.Fatalf("NewApp: %v", err)
 	}
-	// Burn-in cadence is no longer config-driven; set a planner directly so
-	// these dispatch tests stay deterministic (full only on the first cycle,
-	// fast on the requested cadence).
-	app.planner = newRefreshPlanner(BW, 1000, fastEvery)
+	// Burn-in cadence is no longer config-driven; set a planner with a far-off
+	// full cadence directly so these dispatch tests stay deterministic (full
+	// only on the first cycle, fast on every changed cycle thereafter).
+	app.planner = newRefreshPlanner(BW, 1000)
 	return app, mock
 }
 
@@ -448,138 +448,49 @@ color_mode: bw
 // is held (not dropped) and ships on the next due cycle — and the forced full
 // refresh still fires regardless of the gate.
 func TestApp_RefreshGateDefersUntilDue(t *testing.T) {
-	app, _ := newBWRefreshApp(t, 0)
+	app, _ := newBWRefreshApp(t)
 	size := app.profile.BufferSize()
 	mode := InitFull
 	frameA := make([]byte, size)
 	frameB := bytes.Repeat([]byte{0xFF}, size)
 
 	// Cycle 1: forced full refresh (tick==1) regardless of due.
-	if pushed, err := app.refresh(frameA, nil, false, &mode, nil); err != nil || !pushed {
+	if pushed, err := app.refresh(frameA, nil, false, &mode); err != nil || !pushed {
 		t.Fatalf("cycle 1 forced full: pushed=%v err=%v, want pushed=true", pushed, err)
 	}
 	// Cycle 2: content changed but nothing is due — defer (skip).
-	if pushed, err := app.refresh(frameB, frameA, false, &mode, nil); err != nil || pushed {
+	if pushed, err := app.refresh(frameB, frameA, false, &mode); err != nil || pushed {
 		t.Fatalf("cycle 2 not-due: pushed=%v err=%v, want pushed=false", pushed, err)
 	}
 	// Cycle 3: the same deferred change is now due — push it.
-	if pushed, err := app.refresh(frameB, frameA, true, &mode, nil); err != nil || !pushed {
+	if pushed, err := app.refresh(frameB, frameA, true, &mode); err != nil || !pushed {
 		t.Fatalf("cycle 3 due: pushed=%v err=%v, want pushed=true", pushed, err)
 	}
 }
 
-// TestChangedWidgetRegion covers the change-to-region mapping that scopes a
-// partial refresh: a changed widget yields its bounds, multiple changed widgets
-// union, and a change matching no widget falls back to the differing-byte bbox.
-func TestChangedWidgetRegion(t *testing.T) {
-	p := partialTestProfile() // 800x480, rowBytes=100
-	rowBytes := p.Width / 8
-	size := p.BufferSize()
-
-	widgetA := &changingWidget{bounds: image.Rect(0, 0, 80, 40)}     // bytes 0-9, rows 0-39
-	widgetB := &changingWidget{bounds: image.Rect(400, 400, 480, 440)} // bytes 50-59, rows 400-439
-
-	// flip returns a fresh copy of base with one byte toggled.
-	flip := func(base []byte, row, byteCol int) []byte {
-		out := slices.Clone(base)
-		out[row*rowBytes+byteCol] ^= 0xFF
-		return out
-	}
-	base := make([]byte, size)
-
-	cases := []struct {
-		label      string
-		ws         []widget.Widget
-		newBuf     []byte
-		wantOK     bool
-		wantRegion Region
-	}{
-		{
-			label:  "no change",
-			ws:     []widget.Widget{widgetA, widgetB},
-			newBuf: slices.Clone(base),
-			wantOK: false,
-		},
-		{
-			label:      "only widget A changed → its bounds",
-			ws:         []widget.Widget{widgetA, widgetB},
-			newBuf:     flip(base, 5, 3),
-			wantOK:     true,
-			wantRegion: Region{X: 0, Y: 0, W: 80, H: 40},
-		},
-		{
-			label:      "only widget B changed → its bounds",
-			ws:         []widget.Widget{widgetA, widgetB},
-			newBuf:     flip(base, 410, 55),
-			wantOK:     true,
-			wantRegion: Region{X: 400, Y: 400, W: 80, H: 40},
-		},
-		{
-			label:      "both widgets changed → union",
-			ws:         []widget.Widget{widgetA, widgetB},
-			newBuf:     flip(flip(base, 5, 3), 410, 55),
-			wantOK:     true,
-			wantRegion: Region{X: 0, Y: 0, W: 480, H: 440},
-		},
-		{
-			label:      "nil widget skipped, others still detected",
-			ws:         []widget.Widget{nil, widgetA},
-			newBuf:     flip(base, 5, 3),
-			wantOK:     true,
-			wantRegion: Region{X: 0, Y: 0, W: 80, H: 40},
-		},
-		{
-			label:      "change outside all widgets → fallback byte bbox",
-			ws:         []widget.Widget{widgetA, widgetB},
-			newBuf:     flip(base, 200, 70), // col 560, outside both
-			wantOK:     true,
-			wantRegion: Region{X: 560, Y: 200, W: 8, H: 1},
-		},
-		{
-			label:      "nil widget list → fallback byte bbox",
-			ws:         nil,
-			newBuf:     flip(base, 200, 70),
-			wantOK:     true,
-			wantRegion: Region{X: 560, Y: 200, W: 8, H: 1},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.label, func(t *testing.T) {
-			region, ok := changedWidgetRegion(p, tc.ws, base, tc.newBuf)
-			if ok != tc.wantOK {
-				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
-			}
-			if ok && region != tc.wantRegion {
-				t.Errorf("region = %+v, want %+v", region, tc.wantRegion)
-			}
-		})
-	}
-}
-
-// TestApp_RefreshBWRoutineCycleWindowsFastWaveform confirms that in BW mode,
-// once an initial full refresh has run, a routine content change drives the
-// per-change windowed refresh: the FAST waveform (InitFast, identified by its
-// unique 0xE5 -> 0x5A force-temperature load) scoped to the changed box by the
-// partial-window command (0x90). The fast waveform settles cleanly on the new
-// plane (it shows the inverted image first, then the new), so the box's
-// force-driven old=^new plane lands correctly — unlike the partial waveform
-// (0xE5 -> 0x6E), which left the force-driven box inverted on real hardware.
-func TestApp_RefreshBWRoutineCycleWindowsFastWaveform(t *testing.T) {
-	app, mock := newBWRefreshApp(t, 0)
+// TestApp_RefreshBWRoutineCycleIsFullScreenFast confirms that in BW mode, once
+// an initial full refresh has run, a routine content change drives a full-screen
+// FAST refresh: the InitFast waveform (identified by its unique 0xE5 -> 0x5A
+// force-temperature load) with NO partial-window command (0x90). A windowed
+// partial refresh was abandoned because the force-drive it needs settles the box
+// inverted on real hardware (see inkwell-6jq); each change now does one
+// full-screen flash via the proven Display path instead.
+func TestApp_RefreshBWRoutineCycleIsFullScreenFast(t *testing.T) {
+	app, mock := newBWRefreshApp(t)
 	size := app.profile.BufferSize()
 	mode := InitFull // the LUT a startup full init leaves loaded
 	frameA := make([]byte, size)
 	frameB := bytes.Repeat([]byte{0xFF}, size)
 
-	if pushed, err := app.refresh(frameA, nil, true, &mode, nil); err != nil || !pushed {
+	if pushed, err := app.refresh(frameA, nil, true, &mode); err != nil || !pushed {
 		t.Fatalf("cycle 1 (full): pushed=%v err=%v", pushed, err)
 	}
-	if pushed, err := app.refresh(frameB, frameA, true, &mode, nil); err != nil || !pushed {
-		t.Fatalf("cycle 2 (windowed fast): pushed=%v err=%v", pushed, err)
+	if pushed, err := app.refresh(frameB, frameA, true, &mode); err != nil || !pushed {
+		t.Fatalf("cycle 2 (full-screen fast): pushed=%v err=%v", pushed, err)
 	}
 
-	if !slices.Contains(mock.Commands(), 0x90) {
-		t.Error("expected a partial-window command (0x90) for routine BW cycles, got none")
+	if slices.Contains(mock.Commands(), 0x90) {
+		t.Error("routine BW cycle must NOT issue a partial-window command (0x90); it is a full-screen refresh")
 	}
 	var sawFastTemp bool
 	for i, c := range mock.Calls {
@@ -590,7 +501,7 @@ func TestApp_RefreshBWRoutineCycleWindowsFastWaveform(t *testing.T) {
 		}
 	}
 	if !sawFastTemp {
-		t.Error("expected the fast waveform (InitFast, 0xE5 -> 0x5A) on a routine windowed BW cycle, got none")
+		t.Error("expected the fast waveform (InitFast, 0xE5 -> 0x5A) on a routine BW cycle, got none")
 	}
 }
 
@@ -1038,36 +949,6 @@ backend: preview
 	}
 }
 
-// TestApp_RefreshBWFastCadence confirms the fast-refresh cadence wires through
-// to an InitFast load (0xE5 force-temperature data 0x5A is unique to InitFast
-// in a BW run; InitPartial uses 0x6E, Init4Gray 0x5F).
-func TestApp_RefreshBWFastCadence(t *testing.T) {
-	app, mock := newBWRefreshApp(t, 2) // fast on every 2nd cycle
-	size := app.profile.BufferSize()
-	mode := InitFull
-	frameA := make([]byte, size)
-	frameB := bytes.Repeat([]byte{0xFF}, size)
-
-	if pushed, err := app.refresh(frameA, nil, true, &mode, nil); err != nil || !pushed {
-		t.Fatalf("cycle 1 (full): pushed=%v err=%v", pushed, err)
-	}
-	if pushed, err := app.refresh(frameB, frameA, true, &mode, nil); err != nil || !pushed {
-		t.Fatalf("cycle 2 (fast): pushed=%v err=%v", pushed, err)
-	}
-
-	var sawFastTemp bool
-	for i, c := range mock.Calls {
-		if c.Type == "command" && c.Data[0] == 0xE5 && i+1 < len(mock.Calls) &&
-			mock.Calls[i+1].Type == "data" && len(mock.Calls[i+1].Data) == 1 && mock.Calls[i+1].Data[0] == 0x5A {
-			sawFastTemp = true
-			break
-		}
-	}
-	if !sawFastTemp {
-		t.Error("expected an InitFast load (0xE5 -> 0x5A) on the fast cadence, got none")
-	}
-}
-
 // resetFailAfterHardware fails Reset after failAfter successful resets, used
 // to hit the render loop's re-init error path (distinct from startup init).
 type resetFailAfterHardware struct {
@@ -1085,7 +966,7 @@ func (h *resetFailAfterHardware) Reset() error {
 }
 
 // TestRun_RefreshInitError covers the loop re-initializing for a new waveform
-// (full -> partial) and the Init failing there.
+// (full -> fast) and the Init failing there.
 func TestRun_RefreshInitError(t *testing.T) {
 	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2
@@ -1103,7 +984,7 @@ dashboard:
 		t.Fatalf("LoadConfig: %v", err)
 	}
 
-	// Startup full init resets once (ok); the first partial cycle's re-init
+	// Startup full init resets once (ok); the first fast cycle's re-init
 	// resets again and fails.
 	mock := &resetFailAfterHardware{failAfter: 1}
 	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond), WithRegistry(changingRegistry()))
@@ -1114,47 +995,6 @@ dashboard:
 	err = app.Run(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "init display") {
 		t.Fatalf("expected re-init error, got %v", err)
-	}
-}
-
-// partialWindowErrorHardware fails on the partial-window command (0x90), which
-// only the partial-refresh path issues.
-type partialWindowErrorHardware struct{ MockHardware }
-
-func (h *partialWindowErrorHardware) SendCommand(cmd byte) error {
-	if cmd == 0x90 {
-		return fmt.Errorf("partial window failed")
-	}
-	return h.MockHardware.SendCommand(cmd)
-}
-
-// TestRun_DisplayPartialError covers the partial-refresh error path.
-func TestRun_DisplayPartialError(t *testing.T) {
-	cfg, err := LoadConfig(strings.NewReader(`
-display: waveshare_7in5_v2
-backend: preview
-color_mode: bw
-dashboard:
-  screens:
-    - name: main
-      widgets:
-        - type: changing
-          bounds: [0, 0, 100, 100]
-          refresh: "1m"
-`))
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-
-	mock := &partialWindowErrorHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond), WithRegistry(changingRegistry()))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
-
-	err = app.Run(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "display partial") {
-		t.Fatalf("expected display partial error, got %v", err)
 	}
 }
 
@@ -1432,13 +1272,13 @@ func TestRun_GracefulShutdownClearsBeforeSleep(t *testing.T) {
 }
 
 // TestShutdown_ClearReinitsToFullWaveform covers the BW shutdown bug:
-// the render loop's steady state in BW is a partial refresh, which leaves
-// the controller in partial-window mode. A clear issued in that state
-// won't drive a full-screen refresh, so the panel keeps its last frame.
-// shutdown() must re-establish the full-refresh waveform (hardware reset +
+// the render loop's steady state in BW is the fast waveform (InitFast), which
+// the render loop only re-inits away from when the planned waveform changes. A
+// clear issued in that state won't drive a full multi-flash clearing refresh,
+// so shutdown() must re-establish the full-refresh waveform (hardware reset +
 // InitFull) before pushing the white clear frame.
 func TestShutdown_ClearReinitsToFullWaveform(t *testing.T) {
-	app, mock := newBWRefreshApp(t, 0)
+	app, mock := newBWRefreshApp(t)
 	app.clearOnShutdown = true
 
 	if err := app.shutdown(); err != nil {
@@ -1480,7 +1320,7 @@ func TestShutdown_ClearReinitsToFullWaveform(t *testing.T) {
 // if the full-waveform re-init fails, the clear is skipped but Close (deep
 // sleep) still runs so the panel isn't left drawing power.
 func TestShutdown_ReinitFailureStillCloses(t *testing.T) {
-	app, _ := newBWRefreshApp(t, 0)
+	app, _ := newBWRefreshApp(t)
 	app.clearOnShutdown = true
 	// Swap in a hardware that fails every Reset so the shutdown re-init fails.
 	fail := &resetFailHardware{}

@@ -95,14 +95,18 @@ the Gray4 bucket).
 
 How often the panel flashes is a separate axis from how a frame is
 rendered. The render loop picks a refresh waveform per cycle
-(`refreshPlanner` in `refresh.go`): BW cycles full → fast → partial so
-routine ticks stay flicker-free, while Gray4 has no flicker-free waveform
-and only skips refreshing when the frame is unchanged. The flash is
-hardware-only — the web preview can't show it.
+(`refreshPlanner` in `refresh.go`): BW does a full-screen fast refresh on
+every changed cycle (a single flash) plus a periodic full refresh to clear
+ghosting, while Gray4 has no fast waveform and only skips refreshing when
+the frame is unchanged. A windowed, flicker-free per-change refresh was
+tried and abandoned — the force-drive it needs to redraw changed pixels
+cleanly settles the box inverted under the partial waveform on real
+hardware (inkwell-6jq). The flash is hardware-only — the web preview can't
+show it.
 
 *When* a change is allowed to push is a further axis. The burn-in/waveform
-cadence is fixed internally (`defaultFullEvery`/`defaultFastEvery` in
-`refresh.go`), not user config. What the config controls is each widget's
+cadence is fixed internally (`defaultFullEvery` in `refresh.go`), not user
+config. What the config controls is each widget's
 **required** top-level `refresh:` — a duration (>= 1m) or `"static"` — parsed
 into `WidgetConfig.Refresh`; there is no widget-code cadence interface and no
 default (LoadConfig errors if a widget omits it). A per-screen `refreshSchedule`
