@@ -157,13 +157,20 @@ func (d *EPD) DisplayPartial(newBuf, oldBuf []byte, region Region) error {
 // inside region, where the old plane is set to the inverse of newBuf so the
 // controller drives every pixel in the box (mirroring the full Display path's
 // oldData = ^buffer trick). sendPartialWindow still narrows the physical update
-// to region, so the rest of the panel stays untouched and flicker-free.
+// to region, so the rest of the panel stays untouched.
+//
+// The force-drive only resolves correctly under the FAST (or full) waveform:
+// that LUT shows the inverted image first and then settles on the new plane, so
+// old=^new lands on the new image with a single localized flash inside the box.
+// The caller must therefore load InitFast before this call (see
+// initModeForKind). Under the partial waveform the same old=^new box never
+// resolves toward the new image and settles inverted on real hardware — that is
+// the regression this method's fast-windowed pairing fixes.
 //
 // Keeping the buffers full-screen (instead of slicing to the region) preserves
 // the controller's full-frame data contract, so the capture/preview backends
-// keep reconstructing the frame unchanged. This is BW-only: the differential
-// partial waveform under-drives isolated changed pixels, which is the artifact
-// this method fixes; Gray4 never takes the partial path.
+// keep reconstructing the frame unchanged. This is BW-only; Gray4 never takes
+// this path.
 //
 // Returns an error if the profile doesn't support partial refresh, the color
 // depth isn't BW, or the buffer sizes don't match the profile.

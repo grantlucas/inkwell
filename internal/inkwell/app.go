@@ -301,9 +301,10 @@ func (a *App) Run(ctx context.Context) error {
 // cycle rather than dropped.
 //
 // On a BW partial refresh, the changed widget's bounding box is force-redrawn
-// (every pixel in the box driven) rather than just the per-pixel diff, so the
-// weak partial waveform doesn't leave changed content faint or half-driven.
-// ws is the current screen's widgets, used to map the change to a widget box.
+// (every pixel in the box driven) using the fast waveform windowed to that box,
+// rather than the partial waveform — which under-drives isolated changed pixels
+// and, when force-driven, settles the box inverted on real hardware. ws is the
+// current screen's widgets, used to map the change to a widget box.
 func (a *App) refresh(buf, lastBuffer []byte, due bool, appliedMode *InitMode, ws []widget.Widget) (bool, error) {
 	kind := a.planner.next(due && !bytes.Equal(buf, lastBuffer))
 	if kind == refreshSkip {
@@ -402,12 +403,18 @@ func changedByteRegion(oldBuf, newBuf []byte, rowBytes int) (Region, bool) {
 
 // initModeForKind maps a planner decision to the init sequence whose waveform
 // LUT the panel needs loaded before that refresh.
+//
+// refreshPartial loads the FAST LUT, not the partial one: the per-change update
+// force-drives the changed box (old=^new, see DisplayPartialBox) and only the
+// fast/full waveform settles cleanly on the new plane. The partial waveform
+// leaves a force-driven box inverted on real hardware (it never fully resolves
+// old=^new toward the new image), so refreshPartial windows the fast waveform to
+// the box instead — one localized flash, correct image. refreshFast shares the
+// same LUT for a full-screen flash, so the two coalesce without re-initializing.
 func initModeForKind(kind refreshKind) InitMode {
 	switch kind {
-	case refreshFast:
+	case refreshFast, refreshPartial:
 		return InitFast
-	case refreshPartial:
-		return InitPartial
 	case refreshGray:
 		return Init4Gray
 	default: // refreshFull
@@ -424,10 +431,10 @@ func initModeForKind(kind refreshKind) InitMode {
 //
 // The clear first re-initializes the panel to its full-refresh waveform.
 // The render loop only re-inits when the planned waveform changes, so in BW
-// mode it settles into partial-window mode (the flicker-free steady state);
-// a clear issued in that state won't drive a full-screen refresh and the
-// panel would retain its last frame. Re-init (hardware reset + InitFull /
-// Init4Gray) restores a full-frame waveform before pushing the white frame.
+// mode it settles into the windowed fast-waveform steady state; a clear issued
+// in that state won't drive a full-screen refresh and the panel would retain
+// its last frame. Re-init (hardware reset + InitFull / Init4Gray) restores a
+// full-frame waveform before pushing the white frame.
 //
 // A re-init or Clear failure is reported but Close still runs — we want the
 // panel in deep sleep even if the refresh couldn't complete, otherwise we'd
