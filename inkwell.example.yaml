@@ -42,6 +42,21 @@ dashboard:
           config:
             format: "15:04"
             align: right
+        # LOW-FLASH PRESET: swap the precise clock above for a fuzzy clock to
+        # build a quiet dashboard. Fuzzy time ("About half past eight", "Nearly
+        # ten past five") only changes meaningfully every ~5 minutes, so a
+        # "5m" refresh keeps the panel from flashing for a clock tick that the
+        # eye wouldn't notice anyway. Pairs well with equally slow refresh on
+        # the rest of the screen (the wall-clock-aligned cadences coalesce, so
+        # a 5m clock and a 5m calendar flash together on :00/:05/:10).
+        # - type: fuzzy_clock
+        #   bounds: [500, 0, 800, 50]
+        #   refresh: "5m"    # fuzzy time only changes every ~5 minutes
+        #   config:
+        #     style: sentence   # sentence (default), title, or lower
+        #     use_words_for_noon_and_midnight: true   # "noon"/"midnight" vs "twelve"
+        #     use_24_hour: false                       # 12-hour by default
+        #     language: en                             # only "en" supported today
         - type: separator
           bounds: [0, 50, 800, 52]
           refresh: "static"   # never changes; never triggers a refresh
