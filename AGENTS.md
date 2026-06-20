@@ -32,10 +32,15 @@ the device's bit depth:
   `> 64` → dark gray, else black. Used by the `Init4Gray` device
   path.
 
-The compositor still draws into a 12-level `PaperPalette` because the
-font drawer needs intermediate grays for anti-aliased glyph edges and
-because `packGray4` can express two real gray buckets. Just don't
-mistake the source canvas for what the device will show.
+The compositor still draws into a 12-level `PaperPalette` so `packGray4`
+can express two real gray buckets and so gray *fills* (e.g. precip bars)
+and the anti-aliased weather-**icon** font have intermediate shades to
+land on. **Body text no longer relies on those grays:** Inkwell renders a
+true bitmap typeface (Tamzen, via the BDF parser in
+`internal/inkwell/fonts/bdf.go`) whose glyphs are pure 1-bit masks — no
+anti-aliasing, so nothing for the threshold to drop (see inkwell-5yh /
+inkwell-qd8). Just don't mistake the source canvas for what the device
+will show.
 
 ### Hard rules when adding visual elements
 
@@ -54,19 +59,20 @@ mistake the source canvas for what the device will show.
    is large enough for the Gray4 bucket to read (precip-bar
    interiors are the canonical case — they land `PaperGray70` so
    Gray4 gets dark gray and BW gets solid black).
-3. **For text, use `PaperBlack` as the source color.** A gray source
-   (`PaperGray70`) leaves the anti-aliased fringe above the BW
-   threshold and the glyphs fragment; only black source spans the
-   threshold cleanly enough to keep letterforms recognizable. Carry
-   visual hierarchy with font weight + size, not color. `HintingFull`
-   was tried and rejected — at 10–12 pt it snapped thin features (the
-   J's descender hook in Terminus) to zero pixels at certain offsets;
-   `HintingVertical` + a `PaperBlack` source is what's in `fonts.go`.
-4. **Tiny Regular-weight text (10–12 pt) breaks under threshold.**
-   Terminus Regular has 1-px stems and decorative features (the J's
-   detached hook) that disconnect on-device. Use `fonts.SemiBold` for
-   any body text below ~14 pt; reserve `fonts.Regular` for sizes where
-   stems are ≥ 2 px wide on their own.
+3. **For text, use `PaperBlack` as the source color.** Glyphs are 1-bit
+   bitmap masks, so a black source paints solid-black pixels that read on
+   both modes. A gray source still works (the mask is binary but painted
+   in the chosen gray, e.g. `PaperGray70` for a secondary label), but on
+   BW that gray then obeys the `Y<=128` threshold — so only use it where a
+   Gray4 dark bucket is the point. Carry visual hierarchy with font
+   weight + size, not color.
+4. **Text is a bitmap font (Tamzen) — `fonts.Regular` is safe at every
+   shipped size.** Because glyphs are pixel-perfect 1-bit masks there is
+   no anti-aliasing to fragment, so the old "use SemiBold below ~14 pt"
+   workaround is gone. Note `fonts.Face(weight, sizePt)` snaps the point
+   size to the nearest embedded Tamzen pixel tier (12/16/20px →
+   ~10/12/16 pt); pick sizes near those tiers and verify on the device
+   view. Use `fonts.SemiBold`/`fonts.Bold` for *emphasis*, not legibility.
 5. **Don't add new `PaperGrayNN` entries.** The palette is pinned by
    `TestPaperPalette_BWBucket` which records exactly which shades
    collapse to black vs white under the BW threshold; adding a new

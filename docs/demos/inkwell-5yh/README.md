@@ -133,3 +133,43 @@ moved, so the Gray4 path is identical to before:
 - **Tests:** `packBW` at 100% statement coverage; pinned boundary tests
   updated to the new intentional cutoff; full suite green.
 - **Docs:** `AGENTS.md` rendering rules updated to the `Y <= 128` boundary.
+
+---
+
+# Part 2 — the root-cause fix: a bitmap font (inkwell-qd8)
+
+The `Y <= 128` threshold above is a real improvement, but it treats a
+symptom. The deeper cause: Inkwell rendered **TerminusTTF — an outline
+font — through `x/image/opentype`, which always anti-aliases** (and
+ignores the TTF's own embedded bitmap strikes). Every small glyph arrives
+with a gray AA fringe that the 1-bit panel must threshold, so thin stems
+stay fragile.
+
+A survey of e-ink dashboards (TRMNL, InkyPi, MagInk*, Inkplate/GxEPD2) and
+the Go font ecosystem points to one root-cause fix: render a **true bitmap
+font** with no anti-aliasing. Bitmap glyphs are pure black/white masks —
+there is no fringe to lose.
+
+## What changed
+
+- New in-house BDF parser (`internal/inkwell/fonts/bdf.go`) → a
+  `golang.org/x/image/font.Face` backed by pure 1-bit glyph masks.
+- `fonts.Face(weight, sizePt)` now renders **Tamzen** (Regular + Bold,
+  embedded at 12/16/20px), snapping the point size to the nearest pixel
+  tier. The public API is unchanged, so no widget needed editing.
+- Chosen by a device-view bake-off (Tamzen vs Spleen vs Cozette);
+  Tamzen won because it ships a real Bold, preserving the same-size
+  weight contrast widgets rely on (day-headers vs events).
+
+## Result — BW device view, bitmap font
+
+Every event title, time, and bold header is crisp with zero
+fragmentation, and it no longer depends on the threshold band-aid:
+
+```bash {image}
+![BW device view with the Tamzen bitmap font — fully crisp](/Users/grant/.claude/jobs/eb1b0187/tmp/shots/tamzen_bw_device.png)
+```
+
+![BW device view with the Tamzen bitmap font — fully crisp](9abd3b2f-2026-06-20.png)
+
+Gray4 is also clean (text is now solid black rather than AA-gray), and the BDF parser is covered to 100%. The bitmap path makes `fonts.Regular` safe at every shipped size.
