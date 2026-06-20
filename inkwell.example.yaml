@@ -18,6 +18,15 @@ color_mode: gray4  # 4-level grayscale (recommended). Set to "bw" for
 preview:
   port: 8080
 
+# Dashboard-wide weather defaults, shared by every weather widget through one
+# cached provider (so widgets at the same location fetch once). Any widget may
+# override individual fields in its own config.
+weather:
+  latitude: 40.7128
+  longitude: -74.0060
+  model: gem        # forecast model: gfs | ecmwf | gem (see weekly widget README)
+  temp_unit: C      # C or F
+
 dashboard:
   # Every widget MUST set `refresh:` — a duration of at least 1m (e.g. "5m",
   # "24h") saying how often it may refresh the panel, or "static" for a widget
@@ -66,10 +75,11 @@ dashboard:
           config:
             feeds:
               - "https://example.com/my-calendar.ics"
-            latitude: 40.7128
-            longitude: -74.0060
-            temp_unit: C
-            weather_model: gem   # forecast model: gfs | ecmwf | gem (see widget README)
             show_weather: true
             show_weather_label: true
             max_events: 5
+            # Location, model, and temp_unit are inherited from the top-level
+            # weather: block above. Override any of them here per widget, e.g.:
+            #   longitude: -123.1   # show a different city in this widget
+            #   weather_model: ecmwf
+            #   temp_unit: F

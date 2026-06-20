@@ -18,11 +18,6 @@ var _ widget.Widget = (*Widget)(nil)
 
 const defaultWeatherH = 145
 
-// weatherCacheTTL is how long a fetched forecast is reused before the
-// widget refetches. Matches the previous app-level default; the panel
-// refresh cadence is governed separately by the top-level refresh config.
-const weatherCacheTTL = 3 * time.Hour
-
 // Config holds parsed weekly-calendar configuration.
 type Config struct {
 	Feeds            []string
@@ -37,6 +32,14 @@ type Config struct {
 	TempUnit         string
 	WeatherModel     weather.Model
 	HighlightHour    int
+
+	// Presence of each weather override in this widget's config. When false,
+	// Factory fills the corresponding field from the shared Provider's
+	// defaults, so a dashboard sets location/model/unit once at the top level.
+	latSet   bool
+	lonSet   bool
+	unitSet  bool
+	modelSet bool
 }
 
 // Widget renders a 7-day calendar+weather dashboard.
@@ -183,29 +186,52 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 	calSource := calendar.NewHTTPSource(cfg.Feeds, httpClient)
 	cachedCal := calendar.NewCachedSource(calSource, cfg.Refresh, now)
 
+	var provider *weather.Provider
+	if deps.DataSources != nil {
+		provider, _ = deps.DataSources["weather"].(*weather.Provider)
+	}
+	resolveWeatherDefaults(&cfg, provider)
+
 	var ws weather.Source
 	if cfg.ShowWeather {
 		// A caller-injected weather_source (tests, custom transports) wins;
-		// otherwise build an Open-Meteo source for the configured model,
-		// wrapped in the same time-based cache the calendar uses.
-		if src, ok := deps.DataSources["weather_source"].(weather.Source); ok {
+		// otherwise draw from the shared Provider, bound to the resolved model
+		// so every weather widget deduplicates fetches through one cache.
+		switch src, ok := deps.DataSources["weather_source"].(weather.Source); {
+		case ok:
 			ws = src
-		} else {
-			var wClient weather.HTTPClient
-			if deps.DataSources != nil {
-				if c, ok := deps.DataSources["http_client"].(weather.HTTPClient); ok {
-					wClient = c
-				}
-			}
-			if wClient == nil {
-				wClient = http.DefaultClient
-			}
-			base := weather.NewOpenMeteoSource(cfg.WeatherModel, wClient)
-			ws = weather.NewCachedSource(base, weatherCacheTTL, now)
+		case provider != nil:
+			ws = provider.SourceForModel(cfg.WeatherModel)
 		}
 	}
 
 	return New(bounds, cachedCal, ws, now, cfg), nil
+}
+
+// resolveWeatherDefaults fills any weather field the widget did not set from
+// the shared Provider's defaults, so a dashboard configures location, model,
+// and unit once at the top level. TempUnit falls back to "C" when no provider
+// supplies one.
+func resolveWeatherDefaults(cfg *Config, provider *weather.Provider) {
+	var def weather.Settings
+	if provider != nil {
+		def = provider.Defaults()
+	}
+	if !cfg.latSet {
+		cfg.Latitude = def.Location.Latitude
+	}
+	if !cfg.lonSet {
+		cfg.Longitude = def.Location.Longitude
+	}
+	if !cfg.unitSet {
+		cfg.TempUnit = def.TempUnit
+	}
+	if cfg.TempUnit == "" {
+		cfg.TempUnit = "C"
+	}
+	if !cfg.modelSet {
+		cfg.WeatherModel = def.Model
+	}
 }
 
 // parseConfig validates and extracts config values.
@@ -216,8 +242,6 @@ func parseConfig(config map[string]any) (Config, error) {
 		MaxEvents:        5,
 		ShowWeather:      true,
 		ShowWeatherLabel: true,
-		TempUnit:         "C",
-		WeatherModel:     weather.ModelGEM,
 		HighlightHour:    15,
 	}
 
@@ -298,6 +322,7 @@ func parseConfig(config map[string]any) (Config, error) {
 			return cfg, fmt.Errorf("weekly-calendar: latitude must be in [-90, 90], got %v", f)
 		}
 		cfg.Latitude = f
+		cfg.latSet = true
 	}
 
 	if v, ok := config["longitude"]; ok {
@@ -309,6 +334,7 @@ func parseConfig(config map[string]any) (Config, error) {
 			return cfg, fmt.Errorf("weekly-calendar: longitude must be in [-180, 180], got %v", f)
 		}
 		cfg.Longitude = f
+		cfg.lonSet = true
 	}
 
 	if v, ok := config["show_weather"]; ok {
@@ -335,6 +361,7 @@ func parseConfig(config map[string]any) (Config, error) {
 		switch s {
 		case "C", "F":
 			cfg.TempUnit = s
+			cfg.unitSet = true
 		default:
 			return cfg, fmt.Errorf("weekly-calendar: invalid temp_unit %q (must be C or F)", s)
 		}
@@ -361,6 +388,7 @@ func parseConfig(config map[string]any) (Config, error) {
 			return cfg, fmt.Errorf("weekly-calendar: invalid weather_model: %w", err)
 		}
 		cfg.WeatherModel = m
+		cfg.modelSet = true
 	}
 
 	return cfg, nil

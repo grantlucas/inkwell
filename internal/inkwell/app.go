@@ -11,9 +11,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets"
 )
+
+// weatherCacheTTL is how long the shared weather Provider reuses a fetched
+// forecast before refetching. The panel refresh cadence is governed separately
+// by each widget's top-level refresh config.
+const weatherCacheTTL = 3 * time.Hour
 
 // HTTPServer is implemented by Hardware backends that also serve HTTP.
 // App.Run starts an http.Server when the backend satisfies this interface.
@@ -120,9 +126,21 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 	if _, ok := deps.DataSources["http_client"]; !ok {
 		deps.DataSources["http_client"] = http.DefaultClient
 	}
-	// The weather source is built per-widget from the configured weather_model
-	// (see widgets/weekly), so no global default is wired here. Callers may
-	// still inject a "weather_source" into deps.DataSources to override it.
+	// Build the shared weather Provider once from the top-level weather config
+	// and inject it so every weather widget deduplicates fetches through one
+	// cache. Widgets resolve their per-widget overrides against the Provider's
+	// defaults. A caller may pre-inject "weather" to override it (e.g. tests).
+	if _, ok := deps.DataSources["weather"]; !ok {
+		httpClient, _ := deps.DataSources["http_client"].(weather.HTTPClient)
+		deps.DataSources["weather"] = weather.NewProvider(
+			httpClient, weatherCacheTTL, deps.Now,
+			weather.Settings{
+				Location: weather.Location{Latitude: cfg.Weather.Latitude, Longitude: cfg.Weather.Longitude},
+				Model:    weather.Model(cfg.Weather.Model),
+				TempUnit: cfg.Weather.TempUnit,
+			},
+		)
+	}
 
 	dashboard, err := buildDashboard(cfg, profile, registry, deps)
 	if err != nil {
