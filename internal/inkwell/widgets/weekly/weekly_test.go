@@ -697,12 +697,15 @@ func TestParseConfig_WeatherModel(t *testing.T) {
 		value   any
 		set     bool
 		want    weather.Model
+		wantSet bool
 		wantErr bool
 	}{
-		{label: "default is gem", set: false, want: weather.ModelGEM},
-		{label: "gfs", value: "gfs", set: true, want: weather.ModelGFS},
-		{label: "ecmwf", value: "ecmwf", set: true, want: weather.ModelECMWF},
-		{label: "gem", value: "gem", set: true, want: weather.ModelGEM},
+		// Unset is intentionally not defaulted here — Factory resolves it from
+		// the shared Provider's default. parseConfig only records overrides.
+		{label: "unset leaves override absent", set: false, want: "", wantSet: false},
+		{label: "gfs", value: "gfs", set: true, want: weather.ModelGFS, wantSet: true},
+		{label: "ecmwf", value: "ecmwf", set: true, want: weather.ModelECMWF, wantSet: true},
+		{label: "gem", value: "gem", set: true, want: weather.ModelGEM, wantSet: true},
 		{label: "invalid string", value: "bogus", set: true, wantErr: true},
 		{label: "wrong type", value: 123, set: true, wantErr: true},
 	}
@@ -725,6 +728,9 @@ func TestParseConfig_WeatherModel(t *testing.T) {
 			if got.WeatherModel != tt.want {
 				t.Errorf("WeatherModel = %q, want %q", got.WeatherModel, tt.want)
 			}
+			if got.modelSet != tt.wantSet {
+				t.Errorf("modelSet = %v, want %v", got.modelSet, tt.wantSet)
+			}
 		})
 	}
 }
@@ -739,22 +745,24 @@ func (c *recordingHTTPClient) Do(req *nethttp.Request) (*nethttp.Response, error
 	return nil, context.DeadlineExceeded
 }
 
-func TestFactory_BuildsWeatherSourceFromModel(t *testing.T) {
+func TestFactory_WeatherSourceQueriesResolvedModel(t *testing.T) {
 	tests := []struct {
 		label    string
-		model    any
+		model    any // nil → inherit the provider default (gem)
 		wantPath string
 	}{
-		{label: "default gem", model: nil, wantPath: "/v1/gem"},
-		{label: "ecmwf", model: "ecmwf", wantPath: "/v1/ecmwf"},
-		{label: "gfs", model: "gfs", wantPath: "/v1/forecast"},
+		{label: "inherits provider default gem", model: nil, wantPath: "/v1/gem"},
+		{label: "override ecmwf", model: "ecmwf", wantPath: "/v1/ecmwf"},
+		{label: "override gfs", model: "gfs", wantPath: "/v1/forecast"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			rec := &recordingHTTPClient{}
+			prov := weather.NewProvider(rec, time.Hour, fixedClock(testTime),
+				weather.Settings{Model: weather.ModelGEM, TempUnit: "C"})
 			deps := widget.Deps{
 				Now:         fixedClock(testTime),
-				DataSources: map[string]any{"http_client": rec},
+				DataSources: map[string]any{"weather": prov},
 			}
 			cfg := minimalConfig()
 			cfg["show_weather"] = true
@@ -767,7 +775,7 @@ func TestFactory_BuildsWeatherSourceFromModel(t *testing.T) {
 			}
 			ww := w.(*Widget)
 			if ww.weather == nil {
-				t.Fatal("Factory did not build a weather source")
+				t.Fatal("Factory did not wire a weather source")
 			}
 			_, _ = ww.weather.Forecast(context.Background(), weather.Location{}, 7)
 			if !strings.Contains(rec.lastURL, tt.wantPath) {
@@ -775,4 +783,61 @@ func TestFactory_BuildsWeatherSourceFromModel(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFactory_ResolvesWeatherFromProvider(t *testing.T) {
+	prov := weather.NewProvider(&recordingHTTPClient{}, time.Hour, fixedClock(testTime),
+		weather.Settings{
+			Location: weather.Location{Latitude: 43.244, Longitude: -79.837},
+			Model:    weather.ModelGEM,
+			TempUnit: "C",
+		})
+	deps := widget.Deps{
+		Now:         fixedClock(testTime),
+		DataSources: map[string]any{"weather": prov},
+	}
+
+	t.Run("inherits provider defaults when unset", func(t *testing.T) {
+		cfg := minimalConfig()
+		cfg["show_weather"] = true
+		w, err := Factory(image.Rect(0, 0, 800, 480), cfg, deps)
+		if err != nil {
+			t.Fatalf("Factory: %v", err)
+		}
+		c := w.(*Widget).config
+		if c.Latitude != 43.244 || c.Longitude != -79.837 {
+			t.Errorf("location = %v,%v want provider default 43.244,-79.837", c.Latitude, c.Longitude)
+		}
+		if c.TempUnit != "C" {
+			t.Errorf("TempUnit = %q, want inherited C", c.TempUnit)
+		}
+		if c.WeatherModel != weather.ModelGEM {
+			t.Errorf("WeatherModel = %q, want inherited gem", c.WeatherModel)
+		}
+	})
+
+	t.Run("per-widget overrides win", func(t *testing.T) {
+		cfg := minimalConfig()
+		cfg["show_weather"] = true
+		cfg["longitude"] = -123.1
+		cfg["temp_unit"] = "F"
+		cfg["weather_model"] = "ecmwf"
+		w, err := Factory(image.Rect(0, 0, 800, 480), cfg, deps)
+		if err != nil {
+			t.Fatalf("Factory: %v", err)
+		}
+		c := w.(*Widget).config
+		if c.Latitude != 43.244 {
+			t.Errorf("Latitude = %v, want inherited 43.244", c.Latitude)
+		}
+		if c.Longitude != -123.1 {
+			t.Errorf("Longitude = %v, want override -123.1", c.Longitude)
+		}
+		if c.TempUnit != "F" {
+			t.Errorf("TempUnit = %q, want override F", c.TempUnit)
+		}
+		if c.WeatherModel != weather.ModelECMWF {
+			t.Errorf("WeatherModel = %q, want override ecmwf", c.WeatherModel)
+		}
+	})
 }

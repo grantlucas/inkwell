@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 )
 
 // Duration wraps time.Duration for YAML unmarshaling from strings like "5m".
@@ -103,7 +105,19 @@ type Config struct {
 	ClearOnShutdown bool            `yaml:"clear_on_shutdown"`
 	Preview         PreviewConfig   `yaml:"preview,omitempty"`
 	Image           ImageConfig     `yaml:"image,omitempty"`
+	Weather         WeatherConfig   `yaml:"weather,omitempty"`
 	Dashboard       DashboardConfig `yaml:"dashboard,omitempty"`
+}
+
+// WeatherConfig holds the shared, dashboard-wide weather defaults. Widgets
+// inherit these and may override individual fields in their own config. It is
+// the single place to set location, model, and unit once for every weather
+// widget.
+type WeatherConfig struct {
+	Latitude  float64 `yaml:"latitude"`
+	Longitude float64 `yaml:"longitude"`
+	Model     string  `yaml:"model"`
+	TempUnit  string  `yaml:"temp_unit"`
 }
 
 // PreviewConfig holds web preview server settings.
@@ -131,6 +145,7 @@ func DefaultConfig() *Config {
 		ClearOnShutdown: true,
 		Preview:         PreviewConfig{Port: 8080},
 		Image:           ImageConfig{OutputDir: "output"},
+		Weather:         WeatherConfig{Model: "gem", TempUnit: "C"},
 	}
 }
 
@@ -161,6 +176,10 @@ func LoadConfig(r io.Reader) (*Config, error) {
 		return nil, fmt.Errorf("invalid color_mode: %q (must be bw or gray4)", cfg.ColorMode)
 	}
 
+	if err := validateWeather(&cfg.Weather); err != nil {
+		return nil, err
+	}
+
 	if cfg.Dashboard.RotateInterval < 0 {
 		return nil, fmt.Errorf("dashboard.rotate_interval must be non-negative")
 	}
@@ -177,4 +196,30 @@ func LoadConfig(r io.Reader) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// validateWeather applies defaults for omitted weather fields and validates
+// the model, unit, and coordinate ranges. An empty model or unit is treated as
+// unset (defaults applied) rather than an error, so a partial weather: block is
+// valid.
+func validateWeather(w *WeatherConfig) error {
+	if w.Model == "" {
+		w.Model = "gem"
+	}
+	if _, err := weather.ParseModel(w.Model); err != nil {
+		return fmt.Errorf("weather.model: %w", err)
+	}
+	if w.TempUnit == "" {
+		w.TempUnit = "C"
+	}
+	if w.TempUnit != "C" && w.TempUnit != "F" {
+		return fmt.Errorf("weather.temp_unit must be \"C\" or \"F\", got %q", w.TempUnit)
+	}
+	if w.Latitude < -90 || w.Latitude > 90 {
+		return fmt.Errorf("weather.latitude must be in [-90, 90], got %v", w.Latitude)
+	}
+	if w.Longitude < -180 || w.Longitude > 180 {
+		return fmt.Errorf("weather.longitude must be in [-180, 180], got %v", w.Longitude)
+	}
+	return nil
 }
