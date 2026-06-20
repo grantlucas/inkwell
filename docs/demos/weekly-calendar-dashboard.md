@@ -59,8 +59,9 @@ The compositor renders widgets in declaration order — the clock paints over
 the date widget's right edge, both sharing the 52px header band. The
 weekly-calendar widget fetches events from the iCal feed configured in
 `feeds:` (the example uses a placeholder `example.com` URL — point this at any
-iCal endpoint) and weather from Open-Meteo, using the single model named by
-`weather_model` (default `gem`; `gfs`, `ecmwf`, or `gem`).
+iCal endpoint) and weather from Open-Meteo, drawn from the shared top-level
+`weather:` config (location, `model`, `temp_unit`) that every weather widget
+inherits and can override per widget.
 
 ## Widget Registry
 
