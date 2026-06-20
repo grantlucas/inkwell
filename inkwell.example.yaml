@@ -66,6 +66,7 @@ dashboard:
         #     use_words_for_noon_and_midnight: true   # "noon"/"midnight" vs "twelve"
         #     use_24_hour: false                       # 12-hour by default
         #     language: en                             # only "en" supported today
+        #     align: center                            # center (default), left, or right
         - type: separator
           bounds: [0, 50, 800, 52]
           refresh: "static"   # never changes; never triggers a refresh
