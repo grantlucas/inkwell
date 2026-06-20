@@ -27,15 +27,17 @@ PASS  TestRenderEvents_SparseTitleWraps (sparse long title renders >1 title row)
 Per-CLAUDE.md the package must keep 100% statement coverage. Every new function is fully covered:
 
 ```bash
-go test ./internal/inkwell/widgets/weekly/ -coverprofile=/tmp/ehc-cov.out >/dev/null 2>&1 && go tool cover -func=/tmp/ehc-cov.out | grep -E "events.go.*(renderEvents|planEvents|distributeWrap|lineCapacity|wrapText)"
+go test ./internal/inkwell/widgets/weekly/ -coverprofile=/tmp/ehc-cov.out >/dev/null 2>&1 && go tool cover -func=/tmp/ehc-cov.out | grep -E "events.go.*(renderEvents|planEvents|assignTitleLines|lineCapacity|wrapLines|capLines|wrapText)"
 ```
 
 ```output
-github.com/grantlucas/inkwell/internal/inkwell/widgets/weekly/events.go:25:	renderEvents			100.0%
-github.com/grantlucas/inkwell/internal/inkwell/widgets/weekly/events.go:103:	planEvents			100.0%
-github.com/grantlucas/inkwell/internal/inkwell/widgets/weekly/events.go:145:	distributeWrap			100.0%
-github.com/grantlucas/inkwell/internal/inkwell/widgets/weekly/events.go:184:	lineCapacity			100.0%
-github.com/grantlucas/inkwell/internal/inkwell/widgets/weekly/events.go:194:	wrapText			100.0%
+github.com/grantlucas/inkwell/internal/inkwell/widgets/weekly/events.go:44:	renderEvents			100.0%
+github.com/grantlucas/inkwell/internal/inkwell/widgets/weekly/events.go:116:	planEvents			100.0%
+github.com/grantlucas/inkwell/internal/inkwell/widgets/weekly/events.go:160:	assignTitleLines		100.0%
+github.com/grantlucas/inkwell/internal/inkwell/widgets/weekly/events.go:217:	lineCapacity			100.0%
+github.com/grantlucas/inkwell/internal/inkwell/widgets/weekly/events.go:232:	wrapLines			100.0%
+github.com/grantlucas/inkwell/internal/inkwell/widgets/weekly/events.go:269:	capLines			100.0%
+github.com/grantlucas/inkwell/internal/inkwell/widgets/weekly/events.go:285:	wrapText			100.0%
 ```
 
 ## On-device proof
@@ -50,7 +52,7 @@ CLAUDE.md is emphatic that visual sign-off must use the **device view** (the pos
 
 ![Before: weekly dashboard, device view (gray4) — overflowing titles truncated to ellipsis with empty space below](inkwell-ehc/f8ab7cdf-2026-06-20.png)
 
-**After** — on a sparse day the leftover space wraps the title on word boundaries: `Architecture / Review with / the Platform` (Fri), the all-day `Midsummer / Neighbourhood / Block Party` (Sat & Sun), `Quarterly / Roadmap / Planning...` (Sat, hitting the 3-line cap). Crucially, **Monday's full 5-event column is identical to before** — the no-regression guarantee.
+**After** — on a sparse day the leftover space wraps the title on word boundaries: `Architecture / Review with / the Platform` (Fri), the all-day `Midsummer / Neighbourhood / Block Party` (Sat & Sun), `Quarterly / Roadmap / Planning...` (Sat, hitting the 3-line cap). The left rule now extends to span a wrapped event's whole block so its stacked lines read as one item, while single-line events keep the original one-line tick. Crucially, **Monday's full 5-event column is identical to before** — the no-regression guarantee.
 
 ```bash {image}
 ![After: weekly dashboard, device view (gray4) — sparse-day titles wrapped across multiple lines, full column unchanged](after-device-gray4.png)

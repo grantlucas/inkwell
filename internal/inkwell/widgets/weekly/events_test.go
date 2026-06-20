@@ -2,6 +2,7 @@ package weekly
 
 import (
 	"image"
+	"slices"
 	"testing"
 	"time"
 
@@ -46,6 +47,7 @@ func TestWrapText(t *testing.T) {
 		{"fits on one line", "Lunch", 13, 3, []string{"Lunch"}},
 		{"packs words up to width", "a bb ccc", 6, 3, []string{"a bb", "ccc"}},
 		{"hard-breaks an over-long word", "Supercalifragilistic", 8, 3, []string{"Supercal", "ifragili", "stic"}},
+		{"hard-breaks on rune boundaries, not bytes", "ααααββββ", 4, 3, []string{"αααα", "ββββ"}},
 		{"hard-break then wrap remaining words", "Wordsmithery rules", 6, 3, []string{"Wordsm", "ithery", "rules"}},
 		{"truncates past maxLines with ellipsis when room", "alpha beta gamma delta", 8, 2, []string{"alpha", "beta..."}},
 		{"truncates without ellipsis when last line is full", "aaaaa bbbbb ccccc", 5, 2, []string{"aaaaa", "bbbbb"}},
@@ -108,9 +110,10 @@ func TestPlanEvents(t *testing.T) {
 		capacity     int
 		maxChars     int
 		showLocation bool
-		wantBudgets  []int  // titleBudget per planned event
-		wantTitles   []bool // drawTitle per planned event
-		wantLocs     []bool // drawLocation per planned event
+		wantBudgets  []int      // titleBudget per planned event
+		wantTitles   []bool     // drawTitle per planned event
+		wantLocs     []bool     // drawLocation per planned event
+		wantLines    [][]string // titleLines per planned event (nil = skip)
 	}{
 		{
 			label:       "full column keeps every title at one line",
@@ -131,6 +134,29 @@ func TestPlanEvents(t *testing.T) {
 			wantBudgets: []int{3},
 			wantTitles:  []bool{true},
 			wantLocs:    []bool{false},
+			wantLines:   [][]string{{"A Very Long", "Event Title", "That..."}},
+		},
+		{
+			label:       "full column truncates an overflowing title at one line",
+			events:      []ical.Event{ev("Standup"), ev(long), ev("Sync"), ev("Review"), ev("Demo")},
+			maxEvents:   5,
+			capacity:    10, // 5 events x 2 lines, no leftover to wrap with
+			maxChars:    13,
+			wantBudgets: []int{1, 1, 1, 1, 1},
+			wantTitles:  []bool{true, true, true, true, true},
+			wantLocs:    []bool{false, false, false, false, false},
+			wantLines:   [][]string{{"Standup"}, {"A Very Lon..."}, {"Sync"}, {"Review"}, {"Demo"}},
+		},
+		{
+			label:       "title with collapsible whitespace is shown in full, not truncated",
+			events:      []ical.Event{ev("ab   cd")},
+			maxEvents:   5,
+			capacity:    10,
+			maxChars:    6,
+			wantBudgets: []int{1},
+			wantTitles:  []bool{true},
+			wantLocs:    []bool{false},
+			wantLines:   [][]string{{"ab cd"}},
 		},
 		{
 			label:       "sparse title that fits stays at one line",
@@ -210,8 +236,30 @@ func TestPlanEvents(t *testing.T) {
 				if plan[i].drawLocation != tc.wantLocs[i] {
 					t.Errorf("event %d drawLocation = %v, want %v", i, plan[i].drawLocation, tc.wantLocs[i])
 				}
+				if tc.wantLines != nil {
+					if got, want := plan[i].titleLines, tc.wantLines[i]; !slices.Equal(got, want) {
+						t.Errorf("event %d titleLines = %q, want %q", i, got, want)
+					}
+				}
 			}
 		})
+	}
+}
+
+func TestRenderEvents_WrappedTitleWithLocation(t *testing.T) {
+	// A sparse day with a long title AND a location: the title wraps to
+	// multiple lines and the location still draws below it, and the left rule
+	// spans the whole multi-line event.
+	frame := newTestFrame(114, 200)
+	events := []ical.Event{evLoc("A Very Long Event Title That Overflows", "Conference Room")}
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), events, 5, true)
+	if rendered != 1 {
+		t.Fatalf("rendered %d events, want 1", rendered)
+	}
+	// time + multiple title lines + location => well more than the 3 bands a
+	// single-line event would produce.
+	if bands := inkBands(frame, 8); bands < 4 {
+		t.Errorf("expected >=4 ink bands (time + wrapped title + location), got %d", bands)
 	}
 }
 
