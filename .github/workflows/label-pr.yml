@@ -1,0 +1,133 @@
+name: "PR: Auto-label"
+run-name: "PR: Auto-label #${{ github.event.pull_request.number }}"
+
+# Derives release-note labels from a PR's Conventional Commit title and keeps
+# them in sync whenever the title changes. The label set mirrors the categories
+# in .github/release.yml (leave that file alone — it is the source of truth for
+# how the labels map to release-note sections), so merged PRs land in the right
+# bucket of the auto-generated changelog.
+#
+# Mapping (Conventional Commit type -> label):
+#   feat            -> enhancement            (New Features 🎉)
+#   fix             -> bug-fix                (Bug Fixes 🐞)
+#   perf            -> enhancement            (New Features 🎉)
+#   docs            -> documentation          (DevEx Improvements 👷)
+#   style/refactor/
+#   test/build/ci/
+#   chore           -> developer-experience   (DevEx Improvements 👷)
+# Plus:
+#   scope of (deps) -> dependencies           (Dependencies 🔨), e.g. build(deps):
+#   "!" before ":"  -> breaking-change        (Breaking Changes 🛠), e.g. feat!:
+#
+# Only labels in this managed set are ever added or removed, so manually applied
+# labels (e.g. ignore-for-release) are left untouched.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: label-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    name: Sync labels from title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply labels from Conventional Commit title
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const title = process.env.PR_TITLE || "";
+
+            // Every label this workflow is allowed to add or remove. Anything
+            // outside this set is left alone (e.g. ignore-for-release).
+            const MANAGED = [
+              "enhancement",
+              "bug-fix",
+              "documentation",
+              "developer-experience",
+              "dependencies",
+              "breaking-change",
+            ];
+
+            // type -> label
+            const TYPE_LABEL = {
+              feat: "enhancement",
+              perf: "enhancement",
+              fix: "bug-fix",
+              docs: "documentation",
+              style: "developer-experience",
+              refactor: "developer-experience",
+              test: "developer-experience",
+              build: "developer-experience",
+              ci: "developer-experience",
+              chore: "developer-experience",
+            };
+
+            // <type>[optional (scope)][optional !]: <description>
+            const match = title.match(/^([a-zA-Z]+)(?:\(([^)]*)\))?(!)?:\s*\S/);
+
+            const desired = new Set();
+            if (match) {
+              const type = match[1].toLowerCase();
+              const scope = (match[2] || "").toLowerCase();
+              const bang = match[3] === "!";
+
+              const mapped = TYPE_LABEL[type];
+              if (mapped) desired.add(mapped);
+
+              // A "deps" scope (dependabot et al.) routes to Dependencies,
+              // regardless of the type (build(deps):, chore(deps):, ...).
+              if (/(^|[,\s/])deps([,\s/]|$)/.test(scope) || scope === "deps") {
+                desired.add("dependencies");
+              }
+
+              // "!" before the colon (or a BREAKING CHANGE footer) marks a
+              // breaking change. The footer lives in the body; the title's "!"
+              // is the part we can see here.
+              if (bang) desired.add("breaking-change");
+            } else {
+              core.info(`Title is not a Conventional Commit, no labels derived: "${title}"`);
+            }
+
+            core.info(`Desired managed labels: ${[...desired].join(", ") || "(none)"}`);
+
+            const current = new Set(
+              (context.payload.pull_request.labels || []).map((l) => l.name)
+            );
+
+            const toAdd = [...desired].filter((l) => !current.has(l));
+            const toRemove = MANAGED.filter((l) => !desired.has(l) && current.has(l));
+
+            const common = {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+            };
+
+            if (toAdd.length) {
+              core.info(`Adding: ${toAdd.join(", ")}`);
+              await github.rest.issues.addLabels({ ...common, labels: toAdd });
+            }
+
+            for (const name of toRemove) {
+              core.info(`Removing: ${name}`);
+              try {
+                await github.rest.issues.removeLabel({ ...common, name });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+            }
+
+            if (!toAdd.length && !toRemove.length) {
+              core.info("Labels already in sync, nothing to do.");
+            }
