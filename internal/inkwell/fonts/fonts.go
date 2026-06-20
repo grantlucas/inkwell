@@ -82,8 +82,9 @@ func Face(weight Weight, sizePt float64) (font.Face, error) {
 	// HintingVertical keeps baselines and stems aligned to whole pixels
 	// while permitting horizontal anti-aliasing along glyph edges. With
 	// every text path now sourcing PaperBlack (Y=0), the AA fringe spans
-	// 0..255 and the BW packer's Y<128 threshold cuts it down the middle
-	// — half of each fringe stays black, keeping glyph shapes intact.
+	// 0..255 and the BW packer's Y<=128 threshold inks every pixel that is
+	// at least half covered — so a stem's ~50%-covered centre stays black,
+	// keeping glyph shapes intact (see packBW / inkwell-5yh).
 	// HintingFull was briefly tried here to suppress AA entirely, but at
 	// 10–12 pt sizes it snapped thin features (notably the J's descender
 	// hook in Terminus) to zero pixels at some column offsets, so "JUN"
