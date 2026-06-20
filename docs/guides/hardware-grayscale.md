@@ -3,7 +3,9 @@
 Inkwell renders into a 12-level grayscale [`PaperPalette`][palette] at the
 compositor and then packs that down to whatever the target panel actually
 supports. The panel — not the palette — sets the hard ceiling on how many
-discrete tones can render without dithering.
+discrete tones can render. **There is no dithering**: the packer buckets
+each pixel straight to the nearest device level, so a palette gray either
+lands in a distinct native bucket or collapses to its nearest neighbour.
 
 This guide tells you what those ceilings are per Waveshare panel family so
 you can design for the cleanest possible output on your specific hardware.
@@ -15,7 +17,7 @@ you can design for the cleanest possible output on your specific hardware.
 <!-- markdownlint-disable MD013 -->
 | Your panel | Native ceiling | Best palette strategy |
 |---|---|---|
-| Waveshare 7.5" V2 (current default) | 1-bit (or 4-level via Init4Gray) | Use only `PaperWhite` + `PaperBlack` for flat tone; accept Bayer-4×4 stipple for intermediate grays |
+| Waveshare 7.5" V2 (current default, `gray4`) | 4-level via Init4Gray (also 1-bit via `color_mode: bw`) | Design to the 4 Gray4 buckets (see table below); on `bw` use only `PaperWhite` + `PaperBlack` for predictable tone |
 | Other direct-SPI Waveshare panels (4.2", 5.83", 7.5" B/G/H, etc.) | 1-bit (most) or 4-level (Init4Gray-capable variants) | Same as above |
 | IT8951-controller Waveshare panels (6" HD, 7.8", 9.7", 10.3", 13.3") | 16-level (4 bits per pixel) | Use the full ramp; tones map directly to native gray buckets |
 <!-- markdownlint-enable MD013 -->
@@ -37,63 +39,69 @@ controller:
   external IT8951 chip that maintains its own framebuffer and accepts up
   to 4bpp (16 levels) as the recommended refresh format.
 
-Inkwell's `packBW` applies Bayer-4×4 ordered dithering so soft palette
-grays survive as halftone stipple patterns on 1-bit panels — that's how
-the dashboard's today-highlight, hour-band, soft separators, and gray
-labels stay visible after packing. But dithering trades flat tone for
-stipple texture. If you want flat tones (no stipple), your palette has to
-stay within the panel's native level count.
+Inkwell has no dither stage. Both packers (`packBW` and `packGray4` in
+[`internal/inkwell/buffer.go`](../../internal/inkwell/buffer.go)) collapse
+the 12-level compositor frame straight to the device's bit depth by
+luminance. A palette gray that doesn't fall in its own native bucket snaps
+to the nearest one — it does not survive as a halftone texture. So to get a
+flat, intentional tone you must keep your palette choices inside the
+panel's native level count.
 
-## Strategy 1 — 1-bit panels (Waveshare 7.5" V2 and friends)
+## Strategy 1 — Waveshare 7.5" V2 (the default)
 
-The active default. Two clean options:
-
-**Option A: pure 1-bit, no dithering.** Use only `PaperWhite` and
-`PaperBlack` in widget code. Every shape will be hard-edged but
-absolutely flat. Recommended for: stark, high-contrast designs;
-preserving the maximum refresh rate.
-
-**Option B: 1-bit + Bayer dithering (current default).** Use any
-`PaperGrayNN` value. Flat tonal regions become stipple textures the eye
-reads as continuous gray at the panel's pixel pitch. Recommended for:
-hierarchy via tone (muted secondary text, soft highlight tints, gray bar
-charts). Trade-off: tiny regions (<12 px on a side) don't have enough
-pixels for the stipple to read.
-
-Either way, on the Waveshare 7.5" V2 you can also opt into the panel's
-native 4-level grayscale mode via the `color_mode: gray4` config knob.
-Set it at the top of `inkwell.yaml`:
+The 7.5" V2 supports two modes, both wired end-to-end and selected by
+`color_mode` at the top of `inkwell.yaml`:
 
 ```yaml
 display: waveshare_7in5_v2
-color_mode: gray4   # default is "bw"
+color_mode: gray4   # default; "bw" for 1-bit black/white
 ```
 
-`color_mode: gray4` pins `PackImage` and the compositor onto the
-`packGray4` 2-bit path. Four specific palette indices map to flat
-native grays without dithering:
+### `gray4` (default): 4 native levels
 
-| Native level | Closest `PaperPalette` index |
-|---|---|
-| White | `PaperWhite` |
-| Light gray | `PaperGray20` |
-| Dark gray | `PaperGray60` |
-| Black | `PaperBlack` |
+`color_mode: gray4` drives the panel's `Init4Gray` waveform and pins
+`PackImage` and the compositor onto the `packGray4` 2-bit path. The packer
+buckets each pixel's luminance `Y` into one of four native levels:
 
-Anything else in the palette will still dither (via the `packGray4`
-dither path) to fake the missing intermediates.
+<!-- markdownlint-disable MD013 -->
+| Native level | Luminance range | Canonical `PaperPalette` entry | Other entries that collapse here |
+|---|---|---|---|
+| White | `Y > 192` | `PaperWhite` | `PaperGray05`, `PaperGray10`, `PaperGray20` |
+| Light gray | `129 ≤ Y ≤ 192` | `PaperGray30` | `PaperGray40` |
+| Dark gray | `65 ≤ Y ≤ 128` | `PaperGray70` | `PaperGray50`, `PaperGray60` |
+| Black | `Y ≤ 64` | `PaperBlack` | `PaperGray80`, `PaperGray90` |
+<!-- markdownlint-enable MD013 -->
 
-The full Gray4 device wiring — `EPD.Display` plane-split, picking
-`Init4Gray` at startup, and the WebPreview Gray4 unpacker — is still
-in flight. Run `bd ready` to see what's left; `color_mode: gray4` is
-safe to enable today with the `preview` / `image` backends.
+For flat, predictable tone, design with the four canonical entries
+(`PaperWhite`, `PaperGray30`, `PaperGray70`, `PaperBlack`). Note `PaperGray20`
+reads as **white**, not light gray — it sits above the `Y > 192` cutoff.
+The precip-bar interiors are the canonical dark-gray case: they use
+`PaperGray70` so Gray4 renders a real dark gray.
+
+Trade-offs: `gray4` has a slower refresh, a larger framebuffer, no partial
+refresh, and no flicker-free waveform (every refresh flashes). It reads
+noticeably better on hardware than 1-bit, which is why it's the default.
+
+### `bw`: 1-bit black/white
+
+`color_mode: bw` uses `packBW`, a pure threshold: any pixel with `Y <= 128`
+("at least half covered") becomes black, everything lighter becomes white.
+There is no stipple, so soft grays do not survive — they snap all-or-nothing
+to black or white:
+
+- `PaperWhite` and the light ramp up to `PaperGray40` → **white**
+- `PaperGray50` (`Y = 128`) and darker → **black**
+
+Design for `bw` with `PaperWhite` and `PaperBlack` only, and carry hierarchy
+with font weight/size and solid strokes rather than gray fills. `bw` is
+faster, has a smaller framebuffer, and supports partial/fast refresh
+waveforms — pick it when refresh cadence matters more than tonal range.
 
 ## Strategy 2 — IT8951-controller panels (6" HD, 7.8", 9.7", 10.3", 13.3")
 
 You get **16 native grayscale levels at 4bpp**. With the right driver
 (not yet wired in Inkwell — see follow-ups), every `PaperGrayNN` palette
-entry can map directly onto a native gray bucket with no dithering at
-all.
+entry can map directly onto a native gray bucket.
 
 Bear in mind:
 
@@ -112,19 +120,19 @@ A useful mental model when designing widgets:
 PaperPalette (12 design-time levels)
         │
         ▼
-   ┌────────┐   1-bit BW panel (Waveshare 7.5" V2 default)
-   │packBW  │ → 1 device level, Bayer-4×4 stipple gives ~16 perceived steps
+   ┌────────┐   1-bit BW panel (Waveshare 7.5" V2, color_mode: bw)
+   │packBW  │ → 2 device levels via Y<=128 threshold; grays snap to B/W
    └────────┘
         │
         ▼
-   ┌────────┐   4-level Init4Gray panel (Waveshare 7.5" V2, color_mode: gray4)
-   │packGray4│→ 4 device levels, future Bayer dither extends to ~16 perceived
-   └────────┘
+   ┌─────────┐  4-level Init4Gray panel (Waveshare 7.5" V2, color_mode: gray4, default)
+   │packGray4│→ 4 device levels by luminance bucket; nearest-level snap
+   └─────────┘
         │
         ▼
    ┌────────┐   IT8951-controller panel (6" HD and up, future)
-   │ pack16  │ → 16 device levels, no dithering needed
-   │ (TBD)   │
+   │ pack16 │ → 16 device levels, direct palette mapping
+   │ (TBD)  │
    └────────┘
 ```
 
@@ -135,14 +143,14 @@ specific panel's native level count.
 
 ## Quick guidance
 
-- **Designing for the 7.5" V2 today?** Use the full ramp freely.
-  Bayer-4×4 makes everything readable on the device. Reach for
-  `PaperWhite` / `PaperBlack` only where you specifically want flat
-  high-contrast tone (large fill blocks, hard borders).
-- **Designing for a 7.5" V2 with `color_mode: gray4`?** Prefer
-  `PaperWhite`, `PaperGray20`, `PaperGray60`, and `PaperBlack` for
-  flat tones; use other palette entries only when you want a stipple
-  texture instead.
+- **Designing for the 7.5" V2 with `color_mode: gray4` (the default)?**
+  Prefer `PaperWhite`, `PaperGray30`, `PaperGray70`, and `PaperBlack` for
+  flat tones. Other palette entries collapse into one of those four
+  buckets — fine when you don't mind the snap, but don't expect a distinct
+  shade from them.
+- **Designing for the 7.5" V2 with `color_mode: bw`?** Use `PaperWhite`
+  and `PaperBlack` only. Anything `PaperGray50` or darker reads as black;
+  lighter grays read as white. Carry hierarchy with weight and size.
 - **Designing for an IT8951 panel (when supported)?** Use the full ramp
   freely; no need to think about device collapse.
 
