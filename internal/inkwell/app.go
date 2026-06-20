@@ -241,7 +241,6 @@ func (a *App) Run(ctx context.Context) error {
 	// the controller's old plane on a partial refresh.
 	appliedMode := mode
 	var lastBuffer []byte
-	fullWindow := Region{X: 0, Y: 0, W: a.profile.Width, H: a.profile.Height}
 
 	for {
 		var ws []widget.Widget
@@ -267,7 +266,7 @@ func (a *App) Run(ctx context.Context) error {
 			return fmt.Errorf("pack image: %w", err)
 		}
 
-		pushed, err := a.refresh(buf, lastBuffer, due, &appliedMode, fullWindow)
+		pushed, err := a.refresh(buf, lastBuffer, due, &appliedMode, ws)
 		if err != nil {
 			a.epd.Close()
 			return err
@@ -300,7 +299,12 @@ func (a *App) Run(ctx context.Context) error {
 // planner still issues its periodic full/grayscale refresh regardless of due
 // (burn-in protection), and an undue change is simply held until the next due
 // cycle rather than dropped.
-func (a *App) refresh(buf, lastBuffer []byte, due bool, appliedMode *InitMode, window Region) (bool, error) {
+//
+// On a BW partial refresh, the changed widget's bounding box is force-redrawn
+// (every pixel in the box driven) rather than just the per-pixel diff, so the
+// weak partial waveform doesn't leave changed content faint or half-driven.
+// ws is the current screen's widgets, used to map the change to a widget box.
+func (a *App) refresh(buf, lastBuffer []byte, due bool, appliedMode *InitMode, ws []widget.Widget) (bool, error) {
 	kind := a.planner.next(due && !bytes.Equal(buf, lastBuffer))
 	if kind == refreshSkip {
 		return false, nil
@@ -314,7 +318,11 @@ func (a *App) refresh(buf, lastBuffer []byte, due bool, appliedMode *InitMode, w
 	}
 
 	if kind == refreshPartial {
-		if err := a.epd.DisplayPartial(buf, lastBuffer, window); err != nil {
+		// The planner only returns refreshPartial when the frame changed, so
+		// changedWidgetRegion always finds a region here (ok is exercised by its
+		// own unit test).
+		region, _ := changedWidgetRegion(a.profile, ws, lastBuffer, buf)
+		if err := a.epd.DisplayPartialBox(buf, lastBuffer, region); err != nil {
 			return false, fmt.Errorf("display partial: %w", err)
 		}
 		return true, nil
@@ -324,6 +332,72 @@ func (a *App) refresh(buf, lastBuffer []byte, due bool, appliedMode *InitMode, w
 		return false, fmt.Errorf("display: %w", err)
 	}
 	return true, nil
+}
+
+// changedWidgetRegion maps a BW frame change to the region a partial refresh
+// should force-redraw. It returns the union bounds of every widget whose
+// byte-aligned area differs between oldBuf and newBuf, so each changed widget's
+// whole box is redrawn cleanly rather than only its differing pixels. When a
+// change lands outside every widget's bounds (or no widgets are configured) it
+// falls back to the bounding box of the differing bytes. ok is false only when
+// the frames are identical.
+func changedWidgetRegion(profile *DisplayProfile, ws []widget.Widget, oldBuf, newBuf []byte) (Region, bool) {
+	rowBytes := profile.Width / 8
+	var union image.Rectangle
+	for _, w := range ws {
+		if w == nil {
+			continue
+		}
+		if b := w.Bounds(); widgetChanged(b, oldBuf, newBuf, rowBytes) {
+			union = union.Union(b)
+		}
+	}
+	if !union.Empty() {
+		return Region{X: union.Min.X, Y: union.Min.Y, W: union.Dx(), H: union.Dy()}, true
+	}
+	return changedByteRegion(oldBuf, newBuf, rowBytes)
+}
+
+// widgetChanged reports whether the byte-aligned column span of b differs
+// between oldBuf and newBuf on any of b's rows.
+func widgetChanged(b image.Rectangle, oldBuf, newBuf []byte, rowBytes int) bool {
+	x0 := b.Min.X / 8       // byte index, aligned down
+	x1 := (b.Max.X + 7) / 8 // exclusive byte index, aligned up
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		base := y * rowBytes
+		if !bytes.Equal(oldBuf[base+x0:base+x1], newBuf[base+x0:base+x1]) {
+			return true
+		}
+	}
+	return false
+}
+
+// changedByteRegion returns the byte-aligned bounding box of every byte that
+// differs between oldBuf and newBuf. ok is false when the buffers are equal.
+func changedByteRegion(oldBuf, newBuf []byte, rowBytes int) (Region, bool) {
+	minRow, maxRow := -1, -1
+	minCol, maxCol := rowBytes, -1
+	for i := range newBuf {
+		if oldBuf[i] == newBuf[i] {
+			continue
+		}
+		row, col := i/rowBytes, i%rowBytes
+		if minRow == -1 {
+			minRow = row
+		}
+		maxRow = row // bytes scanned in order, so this is the last differing row
+		minCol = min(minCol, col)
+		maxCol = max(maxCol, col)
+	}
+	if maxRow == -1 {
+		return Region{}, false
+	}
+	return Region{
+		X: minCol * 8,
+		Y: minRow,
+		W: (maxCol - minCol + 1) * 8,
+		H: maxRow - minRow + 1,
+	}, true
 }
 
 // initModeForKind maps a planner decision to the init sequence whose waveform

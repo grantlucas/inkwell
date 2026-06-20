@@ -151,12 +151,86 @@ func (d *EPD) DisplayPartial(newBuf, oldBuf []byte, region Region) error {
 	return nil
 }
 
+// DisplayPartialBox refreshes the changed region as a clean full-box redraw
+// rather than a per-pixel diff. It keeps both planes full-screen — newBuf is
+// the whole new frame and the old plane is the whole previous frame — except
+// inside region, where the old plane is set to the inverse of newBuf so the
+// controller drives every pixel in the box (mirroring the full Display path's
+// oldData = ^buffer trick). sendPartialWindow still narrows the physical update
+// to region, so the rest of the panel stays untouched and flicker-free.
+//
+// Keeping the buffers full-screen (instead of slicing to the region) preserves
+// the controller's full-frame data contract, so the capture/preview backends
+// keep reconstructing the frame unchanged. This is BW-only: the differential
+// partial waveform under-drives isolated changed pixels, which is the artifact
+// this method fixes; Gray4 never takes the partial path.
+//
+// Returns an error if the profile doesn't support partial refresh, the color
+// depth isn't BW, or the buffer sizes don't match the profile.
+func (d *EPD) DisplayPartialBox(newBuf, prevBuf []byte, region Region) error {
+	if !d.profile.Capabilities.PartialRefresh {
+		return fmt.Errorf("display %s does not support partial refresh", d.profile.Name)
+	}
+	if d.profile.Color != BW {
+		return fmt.Errorf("DisplayPartialBox: unsupported color depth %v", d.profile.Color)
+	}
+	expected := d.profile.BufferSize()
+	if len(newBuf) != expected || len(prevBuf) != expected {
+		return fmt.Errorf("buffer sizes (%d, %d) do not match expected %d",
+			len(newBuf), len(prevBuf), expected)
+	}
+
+	// Build the old plane: previous frame everywhere, inverse of the new frame
+	// inside the (byte-aligned) box so every pixel in the box is driven.
+	oldPlane := make([]byte, expected)
+	copy(oldPlane, prevBuf)
+	alignedX, alignedW := alignRegionX(region)
+	rowBytes := d.profile.Width / 8
+	startByte := alignedX / 8
+	endByte := (alignedX + alignedW) / 8
+	for y := region.Y; y < region.Y+region.H; y++ {
+		base := y * rowBytes
+		for b := startByte; b < endByte; b++ {
+			oldPlane[base+b] = ^newBuf[base+b]
+		}
+	}
+
+	if err := d.sendPartialWindow(region); err != nil {
+		return err
+	}
+	if err := d.hw.SendCommand(d.profile.OldBufferCmd); err != nil {
+		return err
+	}
+	if err := d.hw.SendData(oldPlane); err != nil {
+		return err
+	}
+	if err := d.hw.SendCommand(d.profile.NewBufferCmd); err != nil {
+		return err
+	}
+	if err := d.hw.SendData(newBuf); err != nil {
+		return err
+	}
+	if err := d.hw.SendCommand(d.profile.RefreshCmd); err != nil {
+		return err
+	}
+	d.hw.ReadBusy()
+	return nil
+}
+
+// alignRegionX returns the region's X start aligned down to a byte boundary
+// (multiple of 8) and its width aligned up so the span covers whole bytes.
+// Used by both sendPartialWindow (window coordinates) and DisplayPartialBox
+// (forced byte range) so they cover identical columns.
+func alignRegionX(region Region) (alignedX, alignedW int) {
+	alignedX = (region.X / 8) * 8
+	alignedW = ((region.W + (region.X - alignedX) + 7) / 8) * 8
+	return alignedX, alignedW
+}
+
 // sendPartialWindow configures the display controller for a partial update:
 // sets VCOM interval, enters partial mode, and defines the update window.
 func (d *EPD) sendPartialWindow(region Region) error {
-	// Align x down and width up to byte boundaries (multiples of 8)
-	alignedX := (region.X / 8) * 8
-	alignedW := ((region.W + (region.X - alignedX) + 7) / 8) * 8
+	alignedX, alignedW := alignRegionX(region)
 
 	xEnd := alignedX + alignedW - 1
 	yEnd := region.Y + region.H - 1
