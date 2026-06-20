@@ -69,6 +69,7 @@ dashboard:
             latitude: 40.7128
             longitude: -74.0060
             temp_unit: C
+            weather_model: gem   # forecast model: gfs | ecmwf | gem (see widget README)
             show_weather: true
             show_weather_label: true
             max_events: 5
