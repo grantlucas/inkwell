@@ -31,12 +31,21 @@ type SelfUpdater struct {
 
 	// FetchAsset downloads, sha256-verifies, and extracts the
 	// inkwell binary from the release tarball, returning a temp
-	// file path. In production, wrap (*Downloader).FetchVerifyExtract.
-	FetchAsset func(assetURL, checksumsURL, assetName string) (string, error)
+	// file path plus the bundled inkwell.example.yaml bytes (nil if
+	// the tarball had none). In production, wrap
+	// (*Downloader).FetchVerifyExtract.
+	FetchAsset func(assetURL, checksumsURL, assetName string) (srcPath string, exampleBytes []byte, err error)
 
 	// ReplaceBinary atomically replaces the running binary with
 	// the bytes at srcPath. In production, wrap (*Replacer).Replace.
 	ReplaceBinary func(srcPath string) error
+
+	// WriteExampleConfig writes the bundled inkwell.example.yaml
+	// reference next to the installed binary. Optional and
+	// best-effort: errors are logged by Run and never fail the
+	// update (the binary swap is the primary contract). In
+	// production, wrap (*ExampleWriter).Write.
+	WriteExampleConfig func(exampleBytes []byte) error
 }
 
 // Run parses the self-update flags and drives the upgrade flow.
@@ -92,13 +101,22 @@ func (s *SelfUpdater) Run(args []string, stdout io.Writer) error {
 		return fmt.Errorf("locate checksums.txt in release: %w", err)
 	}
 
-	srcPath, err := s.FetchAsset(assetURL, checksumsURL, assetName)
+	srcPath, exampleBytes, err := s.FetchAsset(assetURL, checksumsURL, assetName)
 	if err != nil {
 		return fmt.Errorf("download release: %w", err)
 	}
 
 	if err := s.ReplaceBinary(srcPath); err != nil {
 		return fmt.Errorf("replace binary: %w", err)
+	}
+
+	// Drop a fresh inkwell.example.yaml next to the binary as a
+	// reference. Best-effort: a failure here is logged but doesn't
+	// fail the update, since the binary swap already succeeded.
+	if s.WriteExampleConfig != nil {
+		if err := s.WriteExampleConfig(exampleBytes); err != nil {
+			fmt.Fprintf(stdout, "warning: could not write %s reference: %v\n", exampleConfigName, err)
+		}
 	}
 
 	fmt.Fprintf(stdout, "updated to %s — run `sudo systemctl restart inkwell.service` to pick up the new binary\n", rel.Tag)
