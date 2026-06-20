@@ -4,6 +4,7 @@ import (
 	"context"
 	"image"
 	nethttp "net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -688,4 +689,90 @@ type stubHTTPClient struct{}
 
 func (s *stubHTTPClient) Do(_ *nethttp.Request) (*nethttp.Response, error) {
 	return nil, context.DeadlineExceeded
+}
+
+func TestParseConfig_WeatherModel(t *testing.T) {
+	tests := []struct {
+		label   string
+		value   any
+		set     bool
+		want    weather.Model
+		wantErr bool
+	}{
+		{label: "default is gem", set: false, want: weather.ModelGEM},
+		{label: "gfs", value: "gfs", set: true, want: weather.ModelGFS},
+		{label: "ecmwf", value: "ecmwf", set: true, want: weather.ModelECMWF},
+		{label: "gem", value: "gem", set: true, want: weather.ModelGEM},
+		{label: "invalid string", value: "bogus", set: true, wantErr: true},
+		{label: "wrong type", value: 123, set: true, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			cfg := minimalConfig()
+			if tt.set {
+				cfg["weather_model"] = tt.value
+			}
+			got, err := parseConfig(cfg)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("parseConfig weather_model=%v: want error", tt.value)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseConfig: unexpected error: %v", err)
+			}
+			if got.WeatherModel != tt.want {
+				t.Errorf("WeatherModel = %q, want %q", got.WeatherModel, tt.want)
+			}
+		})
+	}
+}
+
+// recordingHTTPClient captures the requested URL so a test can assert which
+// Open-Meteo model endpoint the widget-built weather source queries. It
+// returns an error after recording; the URL is set regardless.
+type recordingHTTPClient struct{ lastURL string }
+
+func (c *recordingHTTPClient) Do(req *nethttp.Request) (*nethttp.Response, error) {
+	c.lastURL = req.URL.String()
+	return nil, context.DeadlineExceeded
+}
+
+func TestFactory_BuildsWeatherSourceFromModel(t *testing.T) {
+	tests := []struct {
+		label    string
+		model    any
+		wantPath string
+	}{
+		{label: "default gem", model: nil, wantPath: "/v1/gem"},
+		{label: "ecmwf", model: "ecmwf", wantPath: "/v1/ecmwf"},
+		{label: "gfs", model: "gfs", wantPath: "/v1/forecast"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			rec := &recordingHTTPClient{}
+			deps := widget.Deps{
+				Now:         fixedClock(testTime),
+				DataSources: map[string]any{"http_client": rec},
+			}
+			cfg := minimalConfig()
+			cfg["show_weather"] = true
+			if tt.model != nil {
+				cfg["weather_model"] = tt.model
+			}
+			w, err := Factory(image.Rect(0, 0, 800, 480), cfg, deps)
+			if err != nil {
+				t.Fatalf("Factory: %v", err)
+			}
+			ww := w.(*Widget)
+			if ww.weather == nil {
+				t.Fatal("Factory did not build a weather source")
+			}
+			_, _ = ww.weather.Forecast(context.Background(), weather.Location{}, 7)
+			if !strings.Contains(rec.lastURL, tt.wantPath) {
+				t.Errorf("requested URL = %q, want path %q", rec.lastURL, tt.wantPath)
+			}
+		})
+	}
 }

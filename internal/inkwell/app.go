@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets"
 )
@@ -121,23 +120,9 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 	if _, ok := deps.DataSources["http_client"]; !ok {
 		deps.DataSources["http_client"] = http.DefaultClient
 	}
-	if _, ok := deps.DataSources["weather_source"]; !ok {
-		// Use the injected http_client so callers can override the
-		// transport (timeouts, instrumentation, test stubs) and have
-		// the default weather source actually honor it.
-		httpClient, ok := deps.DataSources["http_client"].(weather.HTTPClient)
-		if !ok {
-			httpClient = http.DefaultClient
-		}
-		ensemble := weather.NewEnsembleSource(
-			weather.NewOpenMeteoSource(weather.ModelGFS, httpClient),
-			weather.NewOpenMeteoSource(weather.ModelECMWF, httpClient),
-			weather.NewOpenMeteoSource(weather.ModelGEM, httpClient),
-		)
-		deps.DataSources["weather_source"] = weather.NewCachedSource(
-			ensemble, 3*time.Hour, deps.Now,
-		)
-	}
+	// The weather source is built per-widget from the configured weather_model
+	// (see widgets/weekly), so no global default is wired here. Callers may
+	// still inject a "weather_source" into deps.DataSources to override it.
 
 	dashboard, err := buildDashboard(cfg, profile, registry, deps)
 	if err != nil {

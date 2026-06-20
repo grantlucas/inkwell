@@ -25,9 +25,12 @@ divided by solid vertical rules.
   is the nested `config.refresh` value (see below). A fetch failure is logged
   and the dashboard renders with whatever events succeeded (or none) rather
   than blanking.
-- **Weather:** when `show_weather` is true, the app injects an ensemble
-  Open-Meteo source (GFS + ECMWF + GEM) for the configured latitude/longitude.
-  A weather failure is logged and the rest of each day cell still renders.
+- **Weather:** when `show_weather` is true, the widget fetches an Open-Meteo
+  forecast for the configured latitude/longitude from the single model named by
+  `weather_model` (default `gem`; see [Weather models](#weather-models)) and
+  caches it for three hours. A weather failure is logged and the rest of each
+  day cell still renders. A caller may inject a `weather_source` to override the
+  built-in source.
 
 ## Configuration
 
@@ -53,12 +56,33 @@ The widget-specific keys live under `config:`.
 | `latitude`           | number          | `0`       | Weather location latitude, in `[-90, 90]`. Only meaningful when `show_weather` is true.              |
 | `longitude`          | number          | `0`       | Weather location longitude, in `[-180, 180]`. Only meaningful when `show_weather` is true.           |
 | `temp_unit`          | string          | `"C"`     | Temperature unit for displayed temps: `"C"` or `"F"`.                                                |
+| `weather_model`      | string          | `"gem"`   | Open-Meteo forecast model: `"gfs"`, `"ecmwf"`, or `"gem"`. See [Weather models](#weather-models) for guidance. Only meaningful when `show_weather` is true. |
 | `week_start`         | string          | `"monday"`| `"monday"` or `"sunday"`. **Validated but not yet applied** — the view always starts on the current day (see [inkwell-7gn](#known-gaps)). |
 | `highlight_hour`     | integer         | `15`      | Hour `[0, 23]` to highlight in the hourly chart. **Validated but not yet applied** — the chart always highlights the current hour (see [inkwell-7gn](#known-gaps)). |
 <!-- markdownlint-enable MD013 -->
 
 Any value of the wrong type, an empty or missing `feeds`, or an out-of-range
 number is a configuration error that fails `LoadConfig`.
+
+## Weather models
+
+`weather_model` selects which Open-Meteo numerical model the forecast comes
+from. The models have complementary strengths, so the best choice depends on
+where you are and what you care about most. There is no blending — one model
+drives the temperatures, the hourly chart, and the condition icon, so they
+stay mutually consistent.
+
+<!-- markdownlint-disable MD013 -->
+| Model     | Source                       | Best for                                                                                     |
+|-----------|------------------------------|----------------------------------------------------------------------------------------------|
+| `gem`     | Environment Canada (GEM/HRDPS) | **Canada (default).** Best short-range precipitation; matches Canadian sources like The Weather Network. High-resolution over North America. |
+| `ecmwf`   | ECMWF (IFS)                  | **Temperature accuracy / outside North America.** The best global model overall, but tends to over-forecast near-term precipitation in spot-checks. |
+| `gfs`     | NOAA (GFS)                   | **United States / fallback.** US-centric; the noisiest of the three for precipitation.       |
+<!-- markdownlint-enable MD013 -->
+
+Rule of thumb: in Canada, keep the `gem` default — it tracks Environment
+Canada closely and avoids the inflated rain bars the other models produce. If
+you care most about temperature or live outside North America, try `ecmwf`.
 
 ## Known gaps
 
@@ -79,6 +103,7 @@ highlights `now.Hour()`. Tracked in `inkwell-7gn`.
     latitude: 43.6532
     longitude: -79.3832
     temp_unit: C
+    weather_model: gem  # gfs | ecmwf | gem
     show_weather: true
     show_weather_label: true
     show_location: true
