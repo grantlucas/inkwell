@@ -92,12 +92,14 @@ dashboard:
       widgets:
         - type: clock
           bounds: [300, 200, 500, 260]
+          refresh: "1m"
           config:
             format: "15:04"
     - name: detail
       widgets:
         - type: clock
           bounds: [0, 0, 200, 50]
+          refresh: "1m"
 `
 	cfg, err := LoadConfig(strings.NewReader(input))
 	if err != nil {
@@ -222,6 +224,80 @@ func TestDefaultConfig(t *testing.T) {
 	}
 	if !cfg.ClearOnShutdown {
 		t.Errorf("ClearOnShutdown = false, want true (default)")
+	}
+}
+
+func TestLoadConfig_WidgetRefresh(t *testing.T) {
+	base := func(widget string) string {
+		return "display: waveshare_7in5_v2\nbackend: preview\n" +
+			"dashboard:\n  screens:\n    - name: main\n      widgets:\n" + widget
+	}
+	cases := []struct {
+		label       string
+		widget      string
+		wantErr     string        // "" means expect success
+		wantCadence time.Duration // expected schedule cadence on success
+	}{
+		{
+			label:       "valid duration parses",
+			widget:      "        - type: clock\n          bounds: [0, 0, 100, 50]\n          refresh: \"5m\"\n",
+			wantCadence: 5 * time.Minute,
+		},
+		{
+			label:       "static never refreshes",
+			widget:      "        - type: separator\n          bounds: [0, 0, 100, 50]\n          refresh: \"static\"\n",
+			wantCadence: 0,
+		},
+		{
+			label:       "never is an alias for static",
+			widget:      "        - type: separator\n          bounds: [0, 0, 100, 50]\n          refresh: \"never\"\n",
+			wantCadence: 0,
+		},
+		{
+			label:   "missing refresh is rejected",
+			widget:  "        - type: clock\n          bounds: [0, 0, 100, 50]\n",
+			wantErr: "refresh is required",
+		},
+		{
+			label:   "sub-minute refresh is rejected",
+			widget:  "        - type: clock\n          bounds: [0, 0, 100, 50]\n          refresh: \"30s\"\n",
+			wantErr: "whole-minute duration",
+		},
+		{
+			label:   "non-whole-minute refresh is rejected",
+			widget:  "        - type: clock\n          bounds: [0, 0, 100, 50]\n          refresh: \"90s\"\n",
+			wantErr: "whole-minute duration",
+		},
+		{
+			label:   "garbage refresh is rejected",
+			widget:  "        - type: clock\n          bounds: [0, 0, 100, 50]\n          refresh: \"soon\"\n",
+			wantErr: "invalid refresh",
+		},
+		{
+			label:   "non-string refresh is rejected",
+			widget:  "        - type: clock\n          bounds: [0, 0, 100, 50]\n          refresh:\n            nested: true\n",
+			wantErr: "parse config",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			cfg, err := LoadConfig(strings.NewReader(base(tc.widget)))
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error mentioning %q, got nil", tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %q, want mention of %q", err.Error(), tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("LoadConfig: %v", err)
+			}
+			if got := cfg.Dashboard.Screens[0].Widgets[0].Refresh.cadence(); got != tc.wantCadence {
+				t.Errorf("widget refresh cadence = %v, want %v", got, tc.wantCadence)
+			}
+		})
 	}
 }
 

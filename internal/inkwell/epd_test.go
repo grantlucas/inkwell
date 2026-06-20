@@ -90,6 +90,7 @@ func partialTestProfile() *DisplayProfile {
 		Width:            800,
 		Height:           480,
 		Color:            BW,
+		OldBufferCmd:     0x10,
 		NewBufferCmd:     0x13,
 		RefreshCmd:       0x12,
 		PartialWindowCmd: 0x90,
@@ -546,13 +547,37 @@ func TestDisplayPartialCommandSequence(t *testing.T) {
 	epd := NewEPD(m, partialTestProfile())
 
 	buf := make([]byte, 32) // 16x16 region: 16/8 * 16
-	if err := epd.DisplayPartial(buf, Region{X: 0, Y: 0, W: 16, H: 16}); err != nil {
+	old := make([]byte, 32)
+	if err := epd.DisplayPartial(buf, old, Region{X: 0, Y: 0, W: 16, H: 16}); err != nil {
 		t.Fatal(err)
 	}
 
-	wantCmds := []byte{0x50, 0x91, 0x90, 0x13, 0x12}
+	wantCmds := []byte{0x50, 0x91, 0x90, 0x10, 0x13, 0x12}
 	if cmds := m.Commands(); !bytes.Equal(cmds, wantCmds) {
 		t.Errorf("commands = %#v, want %#v", cmds, wantCmds)
+	}
+}
+
+func TestDisplayPartialFeedsOldAndNewPlanes(t *testing.T) {
+	m := &MockHardware{}
+	epd := NewEPD(m, partialTestProfile())
+
+	newBuf := bytes.Repeat([]byte{0xAA}, 32)
+	oldBuf := bytes.Repeat([]byte{0x55}, 32)
+	if err := epd.DisplayPartial(newBuf, oldBuf, Region{X: 0, Y: 0, W: 16, H: 16}); err != nil {
+		t.Fatal(err)
+	}
+
+	// DataCalls order: VCOM, window, old plane, new plane.
+	data := m.DataCalls()
+	if len(data) != 4 {
+		t.Fatalf("data calls = %d, want 4", len(data))
+	}
+	if !bytes.Equal(data[2], oldBuf) {
+		t.Errorf("old plane = %#v, want %#v", data[2], oldBuf)
+	}
+	if !bytes.Equal(data[3], newBuf) {
+		t.Errorf("new plane = %#v, want %#v", data[3], newBuf)
 	}
 }
 
@@ -562,7 +587,7 @@ func TestDisplayPartialByteAlignment(t *testing.T) {
 
 	// x=13 aligns down to 8, w=20 + offset(5) = 25 aligns up to 32
 	buf := make([]byte, 4*16) // (32/8)*16 = 64
-	if err := epd.DisplayPartial(buf, Region{X: 13, Y: 0, W: 20, H: 16}); err != nil {
+	if err := epd.DisplayPartial(buf, buf, Region{X: 13, Y: 0, W: 20, H: 16}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -587,7 +612,7 @@ func TestDisplayPartialWindowEncoding(t *testing.T) {
 
 	// Region at x=256, y=100, w=32, h=50
 	buf := make([]byte, (32/8)*50) // 200 bytes
-	if err := epd.DisplayPartial(buf, Region{X: 256, Y: 100, W: 32, H: 50}); err != nil {
+	if err := epd.DisplayPartial(buf, buf, Region{X: 256, Y: 100, W: 32, H: 50}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -616,7 +641,7 @@ func TestDisplayPartialUnsupportedProfile(t *testing.T) {
 		Color:        BW,
 		Capabilities: Capabilities{PartialRefresh: false},
 	}
-	err := NewEPD(&MockHardware{}, p).DisplayPartial([]byte{0x00}, Region{X: 0, Y: 0, W: 8, H: 1})
+	err := NewEPD(&MockHardware{}, p).DisplayPartial([]byte{0x00}, []byte{0x00}, Region{X: 0, Y: 0, W: 8, H: 1})
 	if err == nil {
 		t.Fatal("expected error for unsupported partial refresh")
 	}
@@ -627,10 +652,10 @@ func TestDisplayPartialSendCommandErrors(t *testing.T) {
 	buf := make([]byte, 32)
 	region := Region{X: 0, Y: 0, W: 16, H: 16}
 
-	// 5 SendCommand calls: VCOM, enter, window, data, refresh
-	for _, n := range []int{1, 2, 3, 4, 5} {
+	// 6 SendCommand calls: VCOM, enter, window, old, new, refresh
+	for _, n := range []int{1, 2, 3, 4, 5, 6} {
 		eh := &errorHardware{failOnCall: n}
-		if err := NewEPD(eh, p).DisplayPartial(buf, region); err == nil {
+		if err := NewEPD(eh, p).DisplayPartial(buf, buf, region); err == nil {
 			t.Errorf("expected error on SendCommand #%d", n)
 		}
 	}
@@ -641,10 +666,10 @@ func TestDisplayPartialSendDataErrors(t *testing.T) {
 	buf := make([]byte, 32)
 	region := Region{X: 0, Y: 0, W: 16, H: 16}
 
-	// 3 SendData calls: VCOM data, window data, buffer data
-	for _, n := range []int{1, 2, 3} {
+	// 4 SendData calls: VCOM data, window data, old buffer, new buffer
+	for _, n := range []int{1, 2, 3, 4} {
 		ed := &errorDataNthHardware{failOnCall: n}
-		if err := NewEPD(ed, p).DisplayPartial(buf, region); err == nil {
+		if err := NewEPD(ed, p).DisplayPartial(buf, buf, region); err == nil {
 			t.Errorf("expected error on SendData #%d", n)
 		}
 	}

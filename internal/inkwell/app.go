@@ -1,6 +1,7 @@
 package inkwell
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -29,6 +30,8 @@ type App struct {
 	comp            *Compositor
 	profile         *DisplayProfile
 	dashboard       *Dashboard
+	planner         *refreshPlanner
+	now             func() time.Time
 	interval        time.Duration
 	listenAddr      string
 	listener        net.Listener
@@ -150,6 +153,8 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 		comp:            comp,
 		profile:         profile,
 		dashboard:       dashboard,
+		planner:         newRefreshPlanner(profile.Color, defaultFullEvery, defaultFastEvery),
+		now:             deps.Now,
 		interval:        o.interval,
 		listenAddr:      fmt.Sprintf(":%d", cfg.Preview.Port),
 		ready:           make(chan struct{}),
@@ -226,10 +231,21 @@ func (a *App) Run(ctx context.Context) error {
 	ticker := time.NewTicker(a.interval)
 	defer ticker.Stop()
 
+	// appliedMode tracks the init sequence (waveform LUT) currently loaded so
+	// we only re-init when the refresh mode actually changes — re-initing
+	// every cycle would add a needless reset. lastBuffer is the frame last
+	// pushed to the panel, used both to detect unchanged content and to feed
+	// the controller's old plane on a partial refresh.
+	appliedMode := mode
+	var lastBuffer []byte
+	fullWindow := Region{X: 0, Y: 0, W: a.profile.Width, H: a.profile.Height}
+
 	for {
 		var ws []widget.Widget
+		due := false
 		if screen := a.dashboard.CurrentScreen(); screen != nil {
 			ws = screen.Widgets()
+			due = screen.AnyDue(a.now())
 		}
 
 		frame, err := a.comp.Render(ws)
@@ -248,9 +264,13 @@ func (a *App) Run(ctx context.Context) error {
 			return fmt.Errorf("pack image: %w", err)
 		}
 
-		if err := a.epd.Display(buf); err != nil {
+		pushed, err := a.refresh(buf, lastBuffer, due, &appliedMode, fullWindow)
+		if err != nil {
 			a.epd.Close()
-			return fmt.Errorf("display: %w", err)
+			return err
+		}
+		if pushed {
+			lastBuffer = buf
 		}
 
 		select {
@@ -261,6 +281,60 @@ func (a *App) Run(ctx context.Context) error {
 			return fmt.Errorf("preview server: %w", err)
 		case <-ticker.C:
 		}
+	}
+}
+
+// refresh applies the planner's decision for one cycle: it picks a refresh
+// waveform based on whether buf differs from the frame on the panel, re-inits
+// the controller only when the waveform's LUT changes, and pushes the frame
+// (full or partial). appliedMode is updated in place. It reports whether a
+// frame was actually pushed (false on a skip), so the caller knows whether to
+// advance its last-pushed buffer.
+//
+// due is the refresh-queue gate: a content change is only allowed to drive a
+// refresh when at least one widget is due this minute, so widgets on
+// independent cadences coalesce instead of each flashing the panel. The
+// planner still issues its periodic full/grayscale refresh regardless of due
+// (burn-in protection), and an undue change is simply held until the next due
+// cycle rather than dropped.
+func (a *App) refresh(buf, lastBuffer []byte, due bool, appliedMode *InitMode, window Region) (bool, error) {
+	kind := a.planner.next(due && !bytes.Equal(buf, lastBuffer))
+	if kind == refreshSkip {
+		return false, nil
+	}
+
+	if target := initModeForKind(kind); target != *appliedMode {
+		if err := a.epd.Init(target); err != nil {
+			return false, fmt.Errorf("init display %q: %w", a.profile.Name, err)
+		}
+		*appliedMode = target
+	}
+
+	if kind == refreshPartial {
+		if err := a.epd.DisplayPartial(buf, lastBuffer, window); err != nil {
+			return false, fmt.Errorf("display partial: %w", err)
+		}
+		return true, nil
+	}
+
+	if err := a.epd.Display(buf); err != nil {
+		return false, fmt.Errorf("display: %w", err)
+	}
+	return true, nil
+}
+
+// initModeForKind maps a planner decision to the init sequence whose waveform
+// LUT the panel needs loaded before that refresh.
+func initModeForKind(kind refreshKind) InitMode {
+	switch kind {
+	case refreshFast:
+		return InitFast
+	case refreshPartial:
+		return InitPartial
+	case refreshGray:
+		return Init4Gray
+	default: // refreshFull
+		return InitFull
 	}
 }
 
@@ -298,6 +372,7 @@ func buildDashboard(cfg *Config, profile *DisplayProfile, registry *widget.Regis
 
 	for _, sc := range cfg.Dashboard.Screens {
 		var ws []widget.Widget
+		var cadences []time.Duration
 		for _, wc := range sc.Widgets {
 			bounds := image.Rect(wc.Bounds[0], wc.Bounds[1], wc.Bounds[2], wc.Bounds[3])
 			if bounds.Empty() {
@@ -313,8 +388,11 @@ func buildDashboard(cfg *Config, profile *DisplayProfile, registry *widget.Regis
 				return nil, fmt.Errorf("screen %q: widget %q: %w", sc.Name, wc.Type, err)
 			}
 			ws = append(ws, w)
+			cadences = append(cadences, wc.Refresh.cadence())
 		}
-		screens = append(screens, NewScreen(sc.Name, ws))
+		screen := NewScreen(sc.Name, ws)
+		screen.schedule = refreshSchedule{cadences: cadences}
+		screens = append(screens, screen)
 	}
 
 	return NewDashboard(screens, time.Duration(cfg.Dashboard.RotateInterval), deps.Now), nil

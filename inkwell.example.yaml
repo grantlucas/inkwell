@@ -11,26 +11,43 @@ color_mode: gray4  # 4-level grayscale (recommended). Set to "bw" for
 #                          # sleeping the controller. Set to false to
 #                          # keep the last frame visible — useful for
 #                          # post-mortem debugging of a render bug.
+#
+# How often the panel does its periodic full/ghosting-clearing flash is fixed
+# internally (it's a hardware property, not user config). What you DO control is
+# each widget's `refresh:` below — how often that widget may refresh the panel.
 preview:
   port: 8080
 
 dashboard:
+  # Every widget MUST set `refresh:` — a duration of at least 1m (e.g. "5m",
+  # "24h") saying how often it may refresh the panel, or "static" for a widget
+  # that never changes (e.g. a separator) and so never triggers a refresh.
+  # There is no default and no global setting: the value is explicit per widget
+  # so it's clear what each one does, and loading fails if any widget omits it.
+  # Cadences are wall-clock aligned, so widgets sharing a cadence coalesce onto
+  # the same mark (two "5m" widgets both refresh on :00/:05/:10) instead of each
+  # flashing independently. NOTE: a widget's `refresh:` (screen-refresh cadence)
+  # is distinct from weekly-calendar's `config.refresh` (data cache TTL) below.
   screens:
     - name: weekly
       widgets:
         - type: date
           bounds: [0, 0, 800, 50]
+          refresh: "24h"   # date only rolls at midnight
           config:
             format: "Monday, January 2"
         - type: clock
           bounds: [700, 0, 800, 50]
+          refresh: "1m"    # clock ticks every minute
           config:
             format: "15:04"
             align: right
         - type: separator
           bounds: [0, 50, 800, 52]
+          refresh: "static"   # never changes; never triggers a refresh
         - type: weekly-calendar
           bounds: [0, 52, 800, 480]
+          refresh: "15m"   # how often the calendar/weather may refresh the panel
           config:
             feeds:
               - "https://example.com/my-calendar.ics"

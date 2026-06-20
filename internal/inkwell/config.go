@@ -25,6 +25,46 @@ func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+// WidgetRefresh is a widget's required refresh setting: either a cadence
+// duration (how often the widget may refresh the panel, >= 1m) or the literal
+// "static" (equivalently "never"), marking a widget whose content never
+// changes so it should never trigger a refresh on its own.
+type WidgetRefresh struct {
+	set    bool          // whether the field was present in the config
+	static bool          // "static"/"never": never refresh
+	every  time.Duration // cadence when not static
+}
+
+// UnmarshalYAML parses a refresh value: the strings "static"/"never", or a
+// duration like "5m"/"24h".
+func (r *WidgetRefresh) UnmarshalYAML(value *yaml.Node) error {
+	var s string
+	if err := value.Decode(&s); err != nil {
+		return err
+	}
+	r.set = true
+	switch s {
+	case "static", "never":
+		r.static = true
+		return nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return fmt.Errorf("invalid refresh %q: %w", s, err)
+	}
+	r.every = d
+	return nil
+}
+
+// cadence returns the schedule cadence for this setting: 0 for a static widget
+// (never due), otherwise the configured duration.
+func (r WidgetRefresh) cadence() time.Duration {
+	if r.static {
+		return 0
+	}
+	return r.every
+}
+
 // DashboardConfig defines the screen collection and rotation behavior.
 type DashboardConfig struct {
 	RotateInterval Duration       `yaml:"rotate_interval"`
@@ -38,10 +78,21 @@ type ScreenConfig struct {
 }
 
 // WidgetConfig defines a single widget placement and configuration.
+//
+// Refresh is required: it sets how often this widget may trigger a panel
+// refresh (its render cadence), as a duration of at least one minute (e.g.
+// "5m", "24h"), or the literal "static" for a widget that never changes. It is
+// the only refresh setting in the config and is fed into the refresh queue,
+// which aligns cadences to wall-clock boundaries so widgets sharing a cadence
+// coalesce. It is distinct from any widget-specific data-refresh setting nested
+// under Config (e.g. the weekly-calendar's config.refresh, which is its data
+// cache TTL): Refresh controls when the screen is refreshed, not when the
+// widget refetches data.
 type WidgetConfig struct {
-	Type   string         `yaml:"type"`
-	Bounds [4]int         `yaml:"bounds"`
-	Config map[string]any `yaml:"config"`
+	Type    string         `yaml:"type"`
+	Bounds  [4]int         `yaml:"bounds"`
+	Refresh WidgetRefresh  `yaml:"refresh"`
+	Config  map[string]any `yaml:"config"`
 }
 
 // Config holds application configuration loaded from YAML.
@@ -112,6 +163,17 @@ func LoadConfig(r io.Reader) (*Config, error) {
 
 	if cfg.Dashboard.RotateInterval < 0 {
 		return nil, fmt.Errorf("dashboard.rotate_interval must be non-negative")
+	}
+
+	for _, sc := range cfg.Dashboard.Screens {
+		for _, wc := range sc.Widgets {
+			if !wc.Refresh.set {
+				return nil, fmt.Errorf("widget %q: refresh is required (e.g. refresh: \"5m\", or \"static\")", wc.Type)
+			}
+			if !wc.Refresh.static && (wc.Refresh.every < time.Minute || wc.Refresh.every%time.Minute != 0) {
+				return nil, fmt.Errorf("widget %q: refresh must be a whole-minute duration >= 1m or \"static\", got %v", wc.Type, wc.Refresh.every)
+			}
+		}
 	}
 
 	return cfg, nil

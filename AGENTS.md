@@ -84,6 +84,28 @@ to verify both paths; what looks fine on Gray4 can still fragment on
 BW (and vice versa for thin gray fills that survive only because of
 the Gray4 bucket).
 
+### Refresh mode (flashing)
+
+How often the panel flashes is a separate axis from how a frame is
+rendered. The render loop picks a refresh waveform per cycle
+(`refreshPlanner` in `refresh.go`): BW cycles full → fast → partial so
+routine ticks stay flicker-free, while Gray4 has no flicker-free waveform
+and only skips refreshing when the frame is unchanged. The flash is
+hardware-only — the web preview can't show it.
+
+*When* a change is allowed to push is a further axis. The burn-in/waveform
+cadence is fixed internally (`defaultFullEvery`/`defaultFastEvery` in
+`refresh.go`), not user config. What the config controls is each widget's
+**required** top-level `refresh:` — a duration (>= 1m) or `"static"` — parsed
+into `WidgetConfig.Refresh`; there is no widget-code cadence interface and no
+default (LoadConfig errors if a widget omits it). A per-screen `refreshSchedule`
+(`refresh_queue.go`) gates the planner — a frame change only pushes when a
+widget is *due* this minute (wall-clock aligned, so equal cadences coalesce;
+static widgets never open the gate). Don't confuse a widget's top-level
+`refresh` (render cadence) with `weekly-calendar`'s nested `config.refresh`
+(data cache TTL). See
+[`docs/tech-specs/08-refresh-strategy.md`](docs/tech-specs/08-refresh-strategy.md).
+
 ## Workflow
 
 - All feature and bug fix work **must** use the `/tdd` skill

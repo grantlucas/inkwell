@@ -39,6 +39,12 @@ jobs:
           minor_regexp_flags: "i"
           bump_each_commit: false
           search_commit_body: true
+          # Pre-1.0: we are not ready to cut a 1.0.0 release. While the major
+          # version is 0, this demotes every bump one level (breaking -> minor,
+          # feat -> patch), keeping the version under 1.0.0 per the 0.x semver
+          # convention. The major/minor patterns above are unchanged; this flag
+          # alone caps the major at 0. Remove it when ready to tag 1.0.0.
+          enable_prerelease_mode: true
 
       - name: "Create or Update Draft Release"
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
