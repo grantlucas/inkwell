@@ -453,37 +453,123 @@ color_mode: bw
 func TestApp_RefreshGateDefersUntilDue(t *testing.T) {
 	app, _ := newBWRefreshApp(t, 0)
 	size := app.profile.BufferSize()
-	window := Region{X: 0, Y: 0, W: app.profile.Width, H: app.profile.Height}
 	mode := InitFull
 	frameA := make([]byte, size)
 	frameB := bytes.Repeat([]byte{0xFF}, size)
 
 	// Cycle 1: forced full refresh (tick==1) regardless of due.
-	if pushed, err := app.refresh(frameA, nil, false, &mode, window); err != nil || !pushed {
+	if pushed, err := app.refresh(frameA, nil, false, &mode, nil); err != nil || !pushed {
 		t.Fatalf("cycle 1 forced full: pushed=%v err=%v, want pushed=true", pushed, err)
 	}
 	// Cycle 2: content changed but nothing is due — defer (skip).
-	if pushed, err := app.refresh(frameB, frameA, false, &mode, window); err != nil || pushed {
+	if pushed, err := app.refresh(frameB, frameA, false, &mode, nil); err != nil || pushed {
 		t.Fatalf("cycle 2 not-due: pushed=%v err=%v, want pushed=false", pushed, err)
 	}
 	// Cycle 3: the same deferred change is now due — push it.
-	if pushed, err := app.refresh(frameB, frameA, true, &mode, window); err != nil || !pushed {
+	if pushed, err := app.refresh(frameB, frameA, true, &mode, nil); err != nil || !pushed {
 		t.Fatalf("cycle 3 due: pushed=%v err=%v, want pushed=true", pushed, err)
+	}
+}
+
+// TestChangedWidgetRegion covers the change-to-region mapping that scopes a
+// partial refresh: a changed widget yields its bounds, multiple changed widgets
+// union, and a change matching no widget falls back to the differing-byte bbox.
+func TestChangedWidgetRegion(t *testing.T) {
+	p := partialTestProfile() // 800x480, rowBytes=100
+	rowBytes := p.Width / 8
+	size := p.BufferSize()
+
+	widgetA := &changingWidget{bounds: image.Rect(0, 0, 80, 40)}     // bytes 0-9, rows 0-39
+	widgetB := &changingWidget{bounds: image.Rect(400, 400, 480, 440)} // bytes 50-59, rows 400-439
+
+	// flip returns a fresh copy of base with one byte toggled.
+	flip := func(base []byte, row, byteCol int) []byte {
+		out := slices.Clone(base)
+		out[row*rowBytes+byteCol] ^= 0xFF
+		return out
+	}
+	base := make([]byte, size)
+
+	cases := []struct {
+		label      string
+		ws         []widget.Widget
+		newBuf     []byte
+		wantOK     bool
+		wantRegion Region
+	}{
+		{
+			label:  "no change",
+			ws:     []widget.Widget{widgetA, widgetB},
+			newBuf: slices.Clone(base),
+			wantOK: false,
+		},
+		{
+			label:      "only widget A changed → its bounds",
+			ws:         []widget.Widget{widgetA, widgetB},
+			newBuf:     flip(base, 5, 3),
+			wantOK:     true,
+			wantRegion: Region{X: 0, Y: 0, W: 80, H: 40},
+		},
+		{
+			label:      "only widget B changed → its bounds",
+			ws:         []widget.Widget{widgetA, widgetB},
+			newBuf:     flip(base, 410, 55),
+			wantOK:     true,
+			wantRegion: Region{X: 400, Y: 400, W: 80, H: 40},
+		},
+		{
+			label:      "both widgets changed → union",
+			ws:         []widget.Widget{widgetA, widgetB},
+			newBuf:     flip(flip(base, 5, 3), 410, 55),
+			wantOK:     true,
+			wantRegion: Region{X: 0, Y: 0, W: 480, H: 440},
+		},
+		{
+			label:      "nil widget skipped, others still detected",
+			ws:         []widget.Widget{nil, widgetA},
+			newBuf:     flip(base, 5, 3),
+			wantOK:     true,
+			wantRegion: Region{X: 0, Y: 0, W: 80, H: 40},
+		},
+		{
+			label:      "change outside all widgets → fallback byte bbox",
+			ws:         []widget.Widget{widgetA, widgetB},
+			newBuf:     flip(base, 200, 70), // col 560, outside both
+			wantOK:     true,
+			wantRegion: Region{X: 560, Y: 200, W: 8, H: 1},
+		},
+		{
+			label:      "nil widget list → fallback byte bbox",
+			ws:         nil,
+			newBuf:     flip(base, 200, 70),
+			wantOK:     true,
+			wantRegion: Region{X: 560, Y: 200, W: 8, H: 1},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			region, ok := changedWidgetRegion(p, tc.ws, base, tc.newBuf)
+			if ok != tc.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
+			}
+			if ok && region != tc.wantRegion {
+				t.Errorf("region = %+v, want %+v", region, tc.wantRegion)
+			}
+		})
 	}
 }
 
 func TestApp_RefreshBWRoutineCycleIsPartial(t *testing.T) {
 	app, mock := newBWRefreshApp(t, 0)
 	size := app.profile.BufferSize()
-	window := Region{X: 0, Y: 0, W: app.profile.Width, H: app.profile.Height}
 	mode := InitFull // the LUT a startup full init leaves loaded
 	frameA := make([]byte, size)
 	frameB := bytes.Repeat([]byte{0xFF}, size)
 
-	if pushed, err := app.refresh(frameA, nil, true, &mode, window); err != nil || !pushed {
+	if pushed, err := app.refresh(frameA, nil, true, &mode, nil); err != nil || !pushed {
 		t.Fatalf("cycle 1 (full): pushed=%v err=%v", pushed, err)
 	}
-	if pushed, err := app.refresh(frameB, frameA, true, &mode, window); err != nil || !pushed {
+	if pushed, err := app.refresh(frameB, frameA, true, &mode, nil); err != nil || !pushed {
 		t.Fatalf("cycle 2 (partial): pushed=%v err=%v", pushed, err)
 	}
 
@@ -942,15 +1028,14 @@ backend: preview
 func TestApp_RefreshBWFastCadence(t *testing.T) {
 	app, mock := newBWRefreshApp(t, 2) // fast on every 2nd cycle
 	size := app.profile.BufferSize()
-	window := Region{X: 0, Y: 0, W: app.profile.Width, H: app.profile.Height}
 	mode := InitFull
 	frameA := make([]byte, size)
 	frameB := bytes.Repeat([]byte{0xFF}, size)
 
-	if pushed, err := app.refresh(frameA, nil, true, &mode, window); err != nil || !pushed {
+	if pushed, err := app.refresh(frameA, nil, true, &mode, nil); err != nil || !pushed {
 		t.Fatalf("cycle 1 (full): pushed=%v err=%v", pushed, err)
 	}
-	if pushed, err := app.refresh(frameB, frameA, true, &mode, window); err != nil || !pushed {
+	if pushed, err := app.refresh(frameB, frameA, true, &mode, nil); err != nil || !pushed {
 		t.Fatalf("cycle 2 (fast): pushed=%v err=%v", pushed, err)
 	}
 
