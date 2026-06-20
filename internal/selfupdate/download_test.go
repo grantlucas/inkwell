@@ -195,6 +195,40 @@ func TestDownloadVerifyExtract_RejectsSymlinkTraversal(t *testing.T) {
 	}
 }
 
+// TestDownloadVerifyExtract_RejectsNonRegularMatch covers the
+// regular-file guard: a symlink named "inkwell" whose Linkname is
+// itself safe slips past the path/symlink-target checks, but reading
+// it would yield zero bytes and replace the binary with an empty file.
+// It must be rejected before the read.
+func TestDownloadVerifyExtract_RejectsNonRegularMatch(t *testing.T) {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	// Safe entry name AND safe (in-archive) Linkname, but it's a symlink.
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     "inkwell",
+		Linkname: "inkwell-real",
+		Mode:     0o755,
+		Typeflag: tar.TypeSymlink,
+	}); err != nil {
+		t.Fatalf("WriteHeader: %v", err)
+	}
+	_ = tw.Close()
+	_ = gz.Close()
+
+	assetURL, checksumsURL, srv := fixtureServer(t, "inkwell-linux-arm64.tar.gz", buf.Bytes(), false)
+	defer srv.Close()
+
+	d := NewDownloader(srv.Client())
+	_, _, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
+	if err == nil {
+		t.Fatal("expected rejection for non-regular matched entry")
+	}
+	if !strings.Contains(err.Error(), "regular file") {
+		t.Errorf("error = %q, want mention of regular file", err.Error())
+	}
+}
+
 func TestDownloadVerifyExtract_RejectsPathTraversal(t *testing.T) {
 	cases := []struct {
 		label   string

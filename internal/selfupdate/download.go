@@ -226,6 +226,15 @@ func extractTarEntry(gzBytes []byte, name string) ([]byte, error) {
 			return nil, fmt.Errorf("rejecting tarball with unsafe symlink target: %q", hdr.Linkname)
 		}
 		if hdr.Name == name {
+			// Only regular files carry bytes. A symlink or hardlink
+			// header with a safe Linkname slips past the checks above
+			// but yields zero bytes from io.ReadAll — which for the
+			// binary would mean replacing it with an empty file. Reject
+			// anything that isn't a regular file (TypeReg '0' or the
+			// legacy null indicator 0, i.e. TypeRegA).
+			if hdr.Typeflag != tar.TypeReg && hdr.Typeflag != 0 {
+				return nil, fmt.Errorf("rejecting tarball: %q is not a regular file (type %q)", name, hdr.Typeflag)
+			}
 			return io.ReadAll(tr)
 		}
 	}
