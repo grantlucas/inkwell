@@ -59,34 +59,38 @@ per render cycle from whether the packed frame changed and a cycle counter.
 The render loop (`App.refresh` in `app.go`) dispatches it and re-initializes
 the controller only when the waveform LUT actually changes.
 
-**BW mode** cycles full → fast → partial:
+**BW mode** does a full-screen fast refresh on each changed cycle:
 
 - First cycle and every `defaultFullEvery` cycles → **full** (clears ghosting,
   satisfies the 24 h rule even when content is static).
-- Every `defaultFastEvery` cycles → **fast** (single full-screen flicker, clears
-  more ghosting than a windowed update).
-- Otherwise, when content changed → **partial** (the fast waveform windowed to
-  the changed box — one localized flash in that box, the rest of the panel
-  untouched).
+- Otherwise, when content changed → **fast** (a single full-screen flicker via
+  the proven `Display` path).
 - When content is unchanged → **skip** (don't reflash an identical frame).
 
-> **Why the partial cycle uses the fast waveform, not the partial waveform.**
-> inkwell force-drives the changed box (it writes the inverse of the new frame to
-> the old plane inside the box — `old=^new`, via `DisplayPartialBox`) so the
-> whole box redraws cleanly instead of relying on the controller's per-pixel
-> diff, which under a partial LUT under-drives isolated changed pixels and leaves
-> them faint. The catch: `old=^new` only resolves toward the new image under the
-> **fast** (or full) waveform, which shows the inverted image first and then
-> settles on the new plane. Under the **partial** waveform the force-driven box
-> never resolves and settles *inverted* on real hardware — a force-driven date /
-> fuzzy-clock box came back solid black with the text knocked out (inkwell-6jq).
-> So the per-change update loads `InitFast` and scopes the physical update to the
-> box with `sendPartialWindow` (0x90 / 0x91). The cost is one localized flash
-> inside the changed box rather than a flicker-free update — the genuinely
-> flicker-free partial waveform is unusable here because the force-drive it needs
-> (to avoid under-driving) inverts under it. `refreshFast` and `refreshPartial`
-> share the `InitFast` LUT, so a fast cycle followed by partial cycles never
-> re-initializes the controller.
+> **Why per-change updates aren't windowed/flicker-free.** A windowed *partial*
+> refresh would let only the changed box update with no flash, which is ideal in
+> principle. Two attempts failed on real hardware:
+>
+> 1. A true partial (old plane = the real previous frame) leaves the controller
+>    to drive only the differing pixels. The 7.5" V2 partial waveform
+>    under-drives such isolated pixels, so changed content (e.g. the clock
+>    minute) rendered faint / half-updated.
+> 2. Force-driving the box (`old=^new` inside the changed box, so every pixel is
+>    driven) fixes the faintness — but `old=^new` only resolves toward the new
+>    image under the full/fast waveform, which shows the inverted image first and
+>    then settles. A windowed update enters partial mode (`0x91` + the partial
+>    VCOM), which reverts the controller to the partial waveform regardless of
+>    the `InitFast` LUT loaded, so the force-driven box never resolves and
+>    settles *inverted* — the date / fuzzy-clock box came back solid black with
+>    the text knocked out (inkwell-6jq).
+>
+> A windowed partial refresh and the force-drive it needs are therefore
+> incompatible on this panel. inkwell drops the windowed per-change path and does
+> one full-screen fast refresh per due change instead: correct (it reuses the
+> same `Display` sequence the periodic fast/full refreshes use), at the cost of
+> a single full-screen flash. The generic `EPD.DisplayPartial` primitive is kept
+> for the future region-diff optimization (inkwell-5ik) but is not on the render
+> path.
 
 **Gray4 mode** has no flicker-free waveform, so the only lever is *when* to
 refresh:
@@ -101,23 +105,19 @@ refresh:
 This burn-in / waveform cadence is **fixed internally**, not user-configurable
 — it's a property of the panel hardware (how often it needs a full clearing
 flash), not something a dashboard author tunes. The constants live next to the
-planner (`defaultFullEvery = 60`, `defaultFastEvery = 10` in `refresh.go`): a
-full / forced-grayscale refresh roughly hourly at the default interval, and a
-BW fast refresh every 10 cycles. The only refresh setting in the config is the
+planner (`defaultFullEvery = 60` in `refresh.go`): a full / forced-grayscale
+refresh roughly hourly at the default interval, with BW fast refreshes on every
+changed cycle in between. The only refresh setting in the config is the
 per-widget cadence below.
 
 ### Trade-offs
 
-- **Windowed updates accumulate ghosting** — that's why full/fast run on a
+- **Fast refreshes accumulate ghosting** — that's why a full refresh runs on a
   fixed cadence rather than never.
-- **One localized flash per change, not flicker-free** — the per-change update is
-  the fast waveform windowed to the changed box, so that box flashes once. The
-  flicker-free partial waveform isn't used: the force-drive needed to keep
-  changed pixels from under-driving inverts under it (see the note above).
-- **Region windowed, full-screen buffers** — the physical update is scoped to the
-  changed widget's bounding box, but the wire buffers stay full-screen so the
-  capture/preview backends keep reconstructing the frame. Slicing the buffers to
-  the region (a speed optimization) is tracked separately in inkwell-5ik.
+- **One full-screen flash per change, not flicker-free** — every due change does
+  a single full-screen fast flash. A windowed, flicker-free per-change update was
+  tried and abandoned: it either under-drives the changed pixels or settles the
+  box inverted (see the note above).
 - **gray4 can't be made flicker-free** — if flicker matters more than the
   grayscale legibility, run `color_mode: bw`.
 

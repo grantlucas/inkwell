@@ -6,11 +6,11 @@ type refreshKind int
 const (
 	// refreshSkip pushes no frame to the panel (content unchanged).
 	refreshSkip refreshKind = iota
-	// refreshPartial is the per-change windowed refresh (BW only): the fast
-	// waveform scoped to the changed box, so only that box flashes once while
-	// the rest of the panel is untouched.
-	refreshPartial
-	// refreshFast is a single-flicker fast full refresh (BW only).
+	// refreshFast is a single-flicker fast full refresh (BW only). It is the
+	// per-change BW waveform: a windowed partial refresh cannot be combined with
+	// the force-drive needed to redraw changed pixels cleanly (the controller
+	// reverts to the partial waveform on partial-in and settles the box
+	// inverted), so each due change does one full-screen fast flash instead.
 	refreshFast
 	// refreshFull is the multi-flash full refresh that clears ghosting.
 	refreshFull
@@ -19,32 +19,26 @@ const (
 )
 
 // refreshPlanner decides which refresh waveform to use on each render cycle.
-// The strategy is mode-aware: BW cycles through full→fast→partial so a routine
-// tick only flashes the changed box (partial = fast waveform windowed) while
-// ghosting is cleared full-screen on a cadence; Gray4 has no windowed waveform,
-// so it refreshes only when content changes (plus a periodic forced refresh to
-// guard against burn-in).
+// The strategy is mode-aware: BW does a fast full-screen refresh on each changed
+// tick (single flash) while ghosting is cleared with a multi-flash full refresh
+// on a cadence; Gray4 has no fast waveform, so it refreshes only when content
+// changes (plus a periodic forced refresh to guard against burn-in).
 type refreshPlanner struct {
 	color     ColorDepth
 	fullEvery int // cycles between full / forced grayscale refreshes
-	fastEvery int // cycles between fast refreshes (BW only); 0 disables
 	tick      int
 }
 
 // Burn-in / ghosting cadence is fixed internally rather than user-configurable:
 // it's a property of the panel hardware (how often it needs a full clearing
 // flash), not a per-widget concern. A full / forced-grayscale refresh runs
-// roughly hourly (every 60 cycles at the default interval) and, in BW, a fast
-// refresh every 10 cycles. These feed the planner; the per-widget cadence the
-// refresh queue gates on is separate.
-const (
-	defaultFullEvery = 60
-	defaultFastEvery = 10
-)
+// roughly hourly (every 60 cycles at the default interval). This feeds the
+// planner; the per-widget cadence the refresh queue gates on is separate.
+const defaultFullEvery = 60
 
 // newRefreshPlanner builds a planner for the given color depth and cadence.
-func newRefreshPlanner(color ColorDepth, fullEvery, fastEvery int) *refreshPlanner {
-	return &refreshPlanner{color: color, fullEvery: fullEvery, fastEvery: fastEvery}
+func newRefreshPlanner(color ColorDepth, fullEvery int) *refreshPlanner {
+	return &refreshPlanner{color: color, fullEvery: fullEvery}
 }
 
 // next advances the cycle counter and returns the refresh action to take.
@@ -71,11 +65,6 @@ func (p *refreshPlanner) next(changed bool) refreshKind {
 		return refreshGray
 	}
 
-	// A periodic fast refresh (single flicker) clears more ghosting than
-	// partial without the full multi-flash.
-	if p.fastEvery > 0 && p.tick%p.fastEvery == 0 {
-		return refreshFast
-	}
-
-	return refreshPartial
+	// BW: a single-flicker fast full refresh redraws the changed content cleanly.
+	return refreshFast
 }

@@ -156,7 +156,7 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 		comp:            comp,
 		profile:         profile,
 		dashboard:       dashboard,
-		planner:         newRefreshPlanner(profile.Color, defaultFullEvery, defaultFastEvery),
+		planner:         newRefreshPlanner(profile.Color, defaultFullEvery),
 		now:             deps.Now,
 		interval:        o.interval,
 		listenAddr:      fmt.Sprintf(":%d", cfg.Preview.Port),
@@ -266,7 +266,7 @@ func (a *App) Run(ctx context.Context) error {
 			return fmt.Errorf("pack image: %w", err)
 		}
 
-		pushed, err := a.refresh(buf, lastBuffer, due, &appliedMode, ws)
+		pushed, err := a.refresh(buf, lastBuffer, due, &appliedMode)
 		if err != nil {
 			a.epd.Close()
 			return err
@@ -288,10 +288,10 @@ func (a *App) Run(ctx context.Context) error {
 
 // refresh applies the planner's decision for one cycle: it picks a refresh
 // waveform based on whether buf differs from the frame on the panel, re-inits
-// the controller only when the waveform's LUT changes, and pushes the frame
-// (full or partial). appliedMode is updated in place. It reports whether a
-// frame was actually pushed (false on a skip), so the caller knows whether to
-// advance its last-pushed buffer.
+// the controller only when the waveform's LUT changes, and pushes the full
+// frame. appliedMode is updated in place. It reports whether a frame was
+// actually pushed (false on a skip), so the caller knows whether to advance its
+// last-pushed buffer.
 //
 // due is the refresh-queue gate: a content change is only allowed to drive a
 // refresh when at least one widget is due this minute, so widgets on
@@ -300,12 +300,13 @@ func (a *App) Run(ctx context.Context) error {
 // (burn-in protection), and an undue change is simply held until the next due
 // cycle rather than dropped.
 //
-// On a BW partial refresh, the changed widget's bounding box is force-redrawn
-// (every pixel in the box driven) using the fast waveform windowed to that box,
-// rather than the partial waveform — which under-drives isolated changed pixels
-// and, when force-driven, settles the box inverted on real hardware. ws is the
-// current screen's widgets, used to map the change to a widget box.
-func (a *App) refresh(buf, lastBuffer []byte, due bool, appliedMode *InitMode, ws []widget.Widget) (bool, error) {
+// In BW mode every due change drives a full-screen fast refresh (a single
+// flash). A windowed partial refresh was tried for flicker-free per-change
+// updates, but redrawing changed pixels cleanly needs the force-drive (old=^new)
+// trick, which the controller only resolves under the full/fast waveform — a
+// partial-windowed force-drive settles the box inverted on real hardware. The
+// full-screen fast path reuses the proven Display sequence instead.
+func (a *App) refresh(buf, lastBuffer []byte, due bool, appliedMode *InitMode) (bool, error) {
 	kind := a.planner.next(due && !bytes.Equal(buf, lastBuffer))
 	if kind == refreshSkip {
 		return false, nil
@@ -318,102 +319,17 @@ func (a *App) refresh(buf, lastBuffer []byte, due bool, appliedMode *InitMode, w
 		*appliedMode = target
 	}
 
-	if kind == refreshPartial {
-		// The planner only returns refreshPartial when the frame changed, so
-		// changedWidgetRegion always finds a region here (ok is exercised by its
-		// own unit test).
-		region, _ := changedWidgetRegion(a.profile, ws, lastBuffer, buf)
-		if err := a.epd.DisplayPartialBox(buf, lastBuffer, region); err != nil {
-			return false, fmt.Errorf("display partial: %w", err)
-		}
-		return true, nil
-	}
-
 	if err := a.epd.Display(buf); err != nil {
 		return false, fmt.Errorf("display: %w", err)
 	}
 	return true, nil
 }
 
-// changedWidgetRegion maps a BW frame change to the region a partial refresh
-// should force-redraw. It returns the union bounds of every widget whose
-// byte-aligned area differs between oldBuf and newBuf, so each changed widget's
-// whole box is redrawn cleanly rather than only its differing pixels. When a
-// change lands outside every widget's bounds (or no widgets are configured) it
-// falls back to the bounding box of the differing bytes. ok is false only when
-// the frames are identical.
-func changedWidgetRegion(profile *DisplayProfile, ws []widget.Widget, oldBuf, newBuf []byte) (Region, bool) {
-	rowBytes := profile.Width / 8
-	var union image.Rectangle
-	for _, w := range ws {
-		if w == nil {
-			continue
-		}
-		if b := w.Bounds(); widgetChanged(b, oldBuf, newBuf, rowBytes) {
-			union = union.Union(b)
-		}
-	}
-	if !union.Empty() {
-		return Region{X: union.Min.X, Y: union.Min.Y, W: union.Dx(), H: union.Dy()}, true
-	}
-	return changedByteRegion(oldBuf, newBuf, rowBytes)
-}
-
-// widgetChanged reports whether the byte-aligned column span of b differs
-// between oldBuf and newBuf on any of b's rows.
-func widgetChanged(b image.Rectangle, oldBuf, newBuf []byte, rowBytes int) bool {
-	x0 := b.Min.X / 8       // byte index, aligned down
-	x1 := (b.Max.X + 7) / 8 // exclusive byte index, aligned up
-	for y := b.Min.Y; y < b.Max.Y; y++ {
-		base := y * rowBytes
-		if !bytes.Equal(oldBuf[base+x0:base+x1], newBuf[base+x0:base+x1]) {
-			return true
-		}
-	}
-	return false
-}
-
-// changedByteRegion returns the byte-aligned bounding box of every byte that
-// differs between oldBuf and newBuf. ok is false when the buffers are equal.
-func changedByteRegion(oldBuf, newBuf []byte, rowBytes int) (Region, bool) {
-	minRow, maxRow := -1, -1
-	minCol, maxCol := rowBytes, -1
-	for i := range newBuf {
-		if oldBuf[i] == newBuf[i] {
-			continue
-		}
-		row, col := i/rowBytes, i%rowBytes
-		if minRow == -1 {
-			minRow = row
-		}
-		maxRow = row // bytes scanned in order, so this is the last differing row
-		minCol = min(minCol, col)
-		maxCol = max(maxCol, col)
-	}
-	if maxRow == -1 {
-		return Region{}, false
-	}
-	return Region{
-		X: minCol * 8,
-		Y: minRow,
-		W: (maxCol - minCol + 1) * 8,
-		H: maxRow - minRow + 1,
-	}, true
-}
-
 // initModeForKind maps a planner decision to the init sequence whose waveform
 // LUT the panel needs loaded before that refresh.
-//
-// refreshPartial loads the FAST LUT, not the partial one: the per-change update
-// force-drives the changed box (old=^new, see DisplayPartialBox) and only the
-// fast/full waveform settles cleanly on the new plane. The partial waveform
-// leaves a force-driven box inverted on real hardware (it never fully resolves
-// old=^new toward the new image), so refreshPartial windows the fast waveform to
-// the box instead — one localized flash, correct image. refreshFast shares the
-// same LUT for a full-screen flash, so the two coalesce without re-initializing.
 func initModeForKind(kind refreshKind) InitMode {
 	switch kind {
-	case refreshFast, refreshPartial:
+	case refreshFast:
 		return InitFast
 	case refreshGray:
 		return Init4Gray
