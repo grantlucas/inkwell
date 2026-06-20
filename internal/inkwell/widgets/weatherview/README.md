@@ -14,8 +14,9 @@ the condition glyph and IBM Plex Mono for text.
 
 A day cell, top to bottom:
 
-1. **Condition row** — a weather icon, an optional condition label
-   (`CLOUDY`, `DRIZZLE`, …), and the hi/lo temperatures.
+1. **Condition row** — a weather icon flush-left, with an optional condition
+   label (`CLOUDY`, `DRIZZLE`, …) and the hi/lo temperatures right-aligned to
+   the cell's right edge, so the icon and the text bookend the column.
 2. A horizontal divider (solid `PaperBlack`).
 3. **Hourly chart** — a temperature curve across the day, precipitation bars
    beneath it, and an hour axis (`6 9 12 3 8`). The current hour is

@@ -53,6 +53,107 @@ func TestRenderDayWeather_Basic(t *testing.T) {
 	}
 }
 
+// rightmostInkInCondRow returns the largest x with a black pixel in the
+// condition-row band (rows above the divider). The divider itself spans the
+// full width, so it is excluded by scanning y < condRowH.
+func rightmostInkInCondRow(frame *image.Paletted, w int) int {
+	iconSize := min(24, w/3)
+	condRowH := max(iconSize+4, 2*lineHeight+4)
+	rightmost := -1
+	for y := range condRowH {
+		for x := range w {
+			if frame.ColorIndexAt(x, y) == widget.PaperBlack && x > rightmost {
+				rightmost = x
+			}
+		}
+	}
+	return rightmost
+}
+
+// The condition label and temps must hug the cell's right edge so the icon
+// (left) and text (right) bookend the cell rather than clumping on the left.
+func TestRenderDayWeather_ConditionRowRightAligned(t *testing.T) {
+	const w, h = 114, 160
+	frame := newTestFrame(w, h)
+	day := sampleDay()
+	day.Condition = weather.Clear // short label leaves an obvious left-pack gap pre-change
+	opts := Options{
+		TempUnit:      "C",
+		ShowLabel:     true,
+		GlobalTempMin: 5,
+		GlobalTempMax: 24,
+	}
+	RenderDayWeather(frame, image.Rect(0, 0, w, h), day, opts)
+
+	const rightMargin = 4
+	rightEdge := w - rightMargin
+	rightmost := rightmostInkInCondRow(frame, w)
+	if rightmost < rightEdge-6 {
+		t.Errorf("condition row not right-aligned: rightmost ink x=%d, want within 6px of right edge %d", rightmost, rightEdge)
+	}
+	if rightmost > rightEdge {
+		t.Errorf("condition row overran right edge: rightmost ink x=%d > %d", rightmost, rightEdge)
+	}
+}
+
+// maxInteriorWhiteGapInCondRow returns the widest run of fully-white columns
+// strictly between the leftmost and rightmost inked columns of the condition
+// row band. Right-aligning the temps opens a wide gap between the left icon
+// and the right-hugging text; left-packing leaves only narrow inter-glyph
+// spacing.
+func maxInteriorWhiteGapInCondRow(frame *image.Paletted, w int) int {
+	iconSize := min(24, w/3)
+	condRowH := max(iconSize+4, 2*lineHeight+4)
+	inked := make([]bool, w)
+	first, last := -1, -1
+	for x := range w {
+		for y := range condRowH {
+			if frame.ColorIndexAt(x, y) == widget.PaperBlack {
+				inked[x] = true
+				if first < 0 {
+					first = x
+				}
+				last = x
+				break
+			}
+		}
+	}
+	if first < 0 {
+		return 0
+	}
+	maxGap, run := 0, 0
+	for x := first; x <= last; x++ {
+		if inked[x] {
+			run = 0
+			continue
+		}
+		run++
+		if run > maxGap {
+			maxGap = run
+		}
+	}
+	return maxGap
+}
+
+// The icon stays flush-left while the temps hug the right edge, so a clear gap
+// opens between them — they bookend the cell rather than clumping on the left.
+func TestRenderDayWeather_IconAndTempsBookend(t *testing.T) {
+	const w, h = 114, 160
+	frame := newTestFrame(w, h)
+	day := sampleDay()
+	opts := Options{
+		TempUnit:      "C",
+		ShowLabel:     false, // isolate the temp row
+		GlobalTempMin: 5,
+		GlobalTempMax: 24,
+	}
+	RenderDayWeather(frame, image.Rect(0, 0, w, h), day, opts)
+
+	if gap := maxInteriorWhiteGapInCondRow(frame, w); gap < 12 {
+		t.Errorf("no bookend gap between icon and temps: widest interior white gap=%dpx, want >= 12px", gap)
+	}
+}
+
 func TestRenderDayWeather_Fahrenheit(t *testing.T) {
 	frame := newTestFrame(114, 160)
 	day := sampleDay()
