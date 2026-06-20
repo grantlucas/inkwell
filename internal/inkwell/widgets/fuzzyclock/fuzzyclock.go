@@ -1,6 +1,6 @@
 // Package fuzzyclock implements a widget that renders the current time as
-// natural-language English ("half past eight", "about ten past five")
-// for e-ink displays.
+// natural-language English ("half past eight", "about half past five",
+// "just after half past two") for e-ink displays.
 //
 // Unlike the precise clock widget, a fuzzy clock only changes meaningfully
 // every ~5 minutes, which makes it the prototypical "low-flash" widget: pair
@@ -176,10 +176,11 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 // deterministic core of the widget: the same (t, opts) always yields the same
 // string.
 //
-// Minutes are rounded to the nearest five-minute mark; when the real minute
-// sits off that mark an "about" qualifier is prepended, while landing exactly
-// on the mark yields the plain phrase. The result is deterministic, so the
-// string never changes mid-mark.
+// Minutes are rounded to the nearest five-minute mark and the mark alone
+// determines the phrase, so the string never changes mid-mark. The two marks
+// flanking the half hour read relative to it — :25 → "about half past", :35 →
+// "just after half past" — sidestepping the clumsy "twenty-five past/to". Every
+// other mark is precise (including the top of the hour: "five to"/"five past").
 func fuzzyTime(t time.Time, opts options) string {
 	hour := t.Hour()
 	m := t.Minute()
@@ -187,7 +188,6 @@ func fuzzyTime(t time.Time, opts options) string {
 	// Round to the nearest five-minute mark. r lands in {0,5,...,55,60};
 	// 60 rolls into the next hour at the top.
 	r := ((m + 2) / 5) * 5
-	offset := m - r // signed distance from the mark, in -2..+2
 	if r == 60 {
 		r = 0
 		hour++
@@ -199,47 +199,36 @@ func fuzzyTime(t time.Time, opts options) string {
 	}
 	hourWord := hourPhrase(hour, opts)
 
-	var core string
 	switch {
 	case minutes != "":
-		core = minutes + " " + hourWord
+		return applyStyle(minutes+" "+hourWord, opts.style)
 	case hourWord == "noon" || hourWord == "midnight":
 		// "noon"/"midnight" are complete hour references; "noon o'clock"
 		// would read wrong, so the o'clock suffix is dropped.
-		core = hourWord
+		return applyStyle(hourWord, opts.style)
 	default:
-		core = hourWord + " o'clock"
+		return applyStyle(hourWord+" o'clock", opts.style)
 	}
-
-	phrase := core
-	if qualifier := pickQualifier(offset); qualifier != "" {
-		phrase = qualifier + " " + core
-	}
-	return applyStyle(phrase, opts.style)
-}
-
-// pickQualifier returns "about" when the real minute sits off the five-minute
-// mark, and "" when it lands exactly on it (a plain phrase, no qualifier).
-func pickQualifier(offset int) string {
-	if offset == 0 {
-		return ""
-	}
-	return "about"
 }
 
 // minutesPhrase returns the minutes portion of the phrase for a rounded mark r
 // (a multiple of 5 in 0..55) and whether the hour reference is the next hour.
-// An empty string signals the top of the hour ("o'clock").
+// An empty string signals the top of the hour ("o'clock"). The :25 and :35
+// marks read relative to the half hour and stay anchored to the current hour.
 func minutesPhrase(r int) (phrase string, nextHour bool) {
 	switch {
 	case r == 0:
 		return "", false
 	case r == 15:
 		return "quarter past", false
+	case r == 25:
+		return "about half past", false
 	case r < 30:
 		return numberToWords(r) + " past", false
 	case r == 30:
 		return "half past", false
+	case r == 35:
+		return "just after half past", false
 	case r == 45:
 		return "quarter to", true
 	default:
