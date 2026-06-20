@@ -287,15 +287,21 @@ dashboard:
           refresh: "1m"
           config:
             format: "15:04"
-        - type: weather
-          bounds: [0, 50, 550, 480]
-          refresh: "30m"
-          config:
-            location: "Toronto, CA"
-        - type: calendar
-          bounds: [550, 50, 800, 480]
+        - type: weekly-calendar
+          bounds: [0, 50, 800, 480]
           refresh: "15m"
+          config:
+            feeds:
+              - "https://example.com/calendar.ics"
+            show_weather: true
 ```
+
+> The built-in widget types are `clock`, `date`, `fuzzy_clock`,
+> `separator`, and `weekly-calendar` (calendar agenda + weather in one
+> widget). The `label` widget above is the one you build in
+> [Creating a Widget](#creating-a-widget); register it before using it.
+> "weather" and "calendar" as standalone types are illustrative only —
+> they are not registered out of the box.
 
 ### Layout tips
 
@@ -314,8 +320,11 @@ The frame is a Go `image.Paletted` backed by the 12-step
 works — and the remaining indices are a ramp of intermediate grays
 named `PaperGray05` through `PaperGray90`. The compositor always
 produces this palette regardless of the target panel; the packer
-collapses it down to what the device supports (Bayer-4×4 dithered
-1-bit on the Waveshare 7.5" V2 by default).
+collapses it down to what the device supports. There is **no
+dithering** — `packGray4` (the default `gray4` mode on the Waveshare
+7.5" V2) buckets each pixel into 4 native levels by luminance, and
+`packBW` thresholds at `Y <= 128`. Soft grays don't survive as
+stipple; they snap to the nearest device level all-or-nothing.
 
 You can use any standard Go image operations.
 
@@ -324,8 +333,8 @@ You can use any standard Go image operations.
 > **Designing for the cleanest output?** Different Waveshare panels
 > have different native grayscale ceilings. See the
 > [Hardware Grayscale Ceilings guide](./hardware-grayscale.md) for
-> which palette entries render as flat tones vs. dithered stipple on
-> your panel.
+> which palette entries land in a distinct device tone vs. collapse to
+> their nearest neighbour on your panel.
 
 ### Filled rectangles
 

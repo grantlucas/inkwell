@@ -106,8 +106,16 @@ The most important fields to review:
 ```yaml
 display: waveshare_7in5_v2     # Profile name — leave as-is for the V2
 backend: preview               # Start with 'preview'; flip to 'spi' for the panel
+color_mode: gray4              # 4-level grayscale (default); "bw" for 1-bit
 preview:
   port: 8080                   # HTTP preview port
+
+# Dashboard-wide weather defaults, shared by every weather widget. Set your
+# location once here; widgets may override individual fields in their config.
+weather:
+  latitude: 40.7128
+  longitude: -74.0060
+  temp_unit: C                 # C or F
 
 dashboard:
   screens:
@@ -115,12 +123,10 @@ dashboard:
       widgets:
         - type: weekly-calendar
           bounds: [0, 52, 800, 480]
+          refresh: "15m"       # required: how often this widget may refresh the panel
           config:
             feeds:
               - "https://your-calendar-host.example/calendar.ics"
-            latitude: 40.7128
-            longitude: -74.0060
-            temp_unit: C
 ```
 
 Replace the feed URL with a real iCal endpoint and set `latitude` /
@@ -142,9 +148,11 @@ dashboard:
       widgets:
         - type: date
           bounds: [0, 0, 800, 50]
+          refresh: "24h"       # date only rolls at midnight
           config: { format: "Monday, January 2" }
         - type: clock
           bounds: [700, 0, 800, 50]
+          refresh: "1m"        # clock ticks every minute
           config: { format: "15:04", align: right }
 ```
 
@@ -163,8 +171,9 @@ http://<pi-host>:8080/
 ```
 
 You should see the rendered dashboard, with a radio toggle for
-switching between the device view (post-dither, what the panel would
-show) and the source view (pre-dither grayscale design). Every render
+switching between the device view (post-pack, what the panel would
+show after the BW threshold or Gray4 quantization) and the source view
+(the pre-pack grayscale design intent). Every render
 tick (default: 60 seconds) the SSE stream pushes a refresh and the
 browser updates automatically.
 
