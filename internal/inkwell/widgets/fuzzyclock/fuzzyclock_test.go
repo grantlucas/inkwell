@@ -202,12 +202,17 @@ func TestFactory(t *testing.T) {
 		{label: "noon/midnight off", config: map[string]any{"use_words_for_noon_and_midnight": false}, want: "Half past eight"},
 		{label: "24 hour", config: map[string]any{"use_24_hour": true}, want: "Half past eight"},
 		{label: "language en", config: map[string]any{"language": "en"}, want: "Half past eight"},
+		{label: "align center", config: map[string]any{"align": "center"}, want: "Half past eight"},
+		{label: "align left", config: map[string]any{"align": "left"}, want: "Half past eight"},
+		{label: "align right", config: map[string]any{"align": "right"}, want: "Half past eight"},
 		{label: "invalid style value", config: map[string]any{"style": "shouting"}, wantErr: true},
 		{label: "style wrong type", config: map[string]any{"style": 123}, wantErr: true},
 		{label: "noon/midnight wrong type", config: map[string]any{"use_words_for_noon_and_midnight": "yes"}, wantErr: true},
 		{label: "24 hour wrong type", config: map[string]any{"use_24_hour": "yes"}, wantErr: true},
 		{label: "language wrong type", config: map[string]any{"language": 5}, wantErr: true},
 		{label: "language unsupported", config: map[string]any{"language": "fr"}, wantErr: true},
+		{label: "align invalid value", config: map[string]any{"align": "middle"}, wantErr: true},
+		{label: "align wrong type", config: map[string]any{"align": 42}, wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
@@ -227,6 +232,66 @@ func TestFactory(t *testing.T) {
 			}
 			if got := fuzzyTime(fw.now(), fw.opts); got != tc.want {
 				t.Errorf("rendered %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestFactory_Align renders the same phrase under left/right alignment and
+// asserts the inked pixels cluster in the matching half of the bounds. The
+// bounds are wide (800px) relative to the phrase so a left-aligned phrase lands
+// entirely in the left half and a right-aligned one entirely in the right half.
+func TestFactory_Align(t *testing.T) {
+	deps := widget.Deps{Now: fixedClock(at(8, 30))}
+	bounds := image.Rect(0, 0, 800, 50)
+	mid := bounds.Dx() / 2
+
+	countHalves := func(frame *image.Paletted) (left, right int) {
+		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+			for x := bounds.Min.X; x < bounds.Max.X; x++ {
+				if frame.ColorIndexAt(x, y) == 1 {
+					if x < mid {
+						left++
+					} else {
+						right++
+					}
+				}
+			}
+		}
+		return left, right
+	}
+
+	cases := []struct {
+		label     string
+		align     string
+		wantLeft  bool // expect inked pixels in the left half
+		wantRight bool // expect inked pixels in the right half
+	}{
+		{label: "left", align: "left", wantLeft: true, wantRight: false},
+		{label: "right", align: "right", wantLeft: false, wantRight: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			w, err := Factory(bounds, map[string]any{"align": tc.align}, deps)
+			if err != nil {
+				t.Fatalf("Factory: %v", err)
+			}
+			frame := image.NewPaletted(bounds, widget.PaperPalette)
+			if err := w.Render(frame); err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			left, right := countHalves(frame)
+			if tc.wantLeft && left == 0 {
+				t.Errorf("%s-aligned: no inked pixels in left half", tc.align)
+			}
+			if !tc.wantLeft && left != 0 {
+				t.Errorf("%s-aligned: %d inked pixels in left half, want 0", tc.align, left)
+			}
+			if tc.wantRight && right == 0 {
+				t.Errorf("%s-aligned: no inked pixels in right half", tc.align)
+			}
+			if !tc.wantRight && right != 0 {
+				t.Errorf("%s-aligned: %d inked pixels in right half, want 0", tc.align, right)
 			}
 		})
 	}

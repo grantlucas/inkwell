@@ -57,11 +57,22 @@ const (
 	styleLower                 // "about half past eight"
 )
 
-// options bundles the rendering knobs for fuzzyTime.
+// Align controls horizontal alignment of the phrase within the widget bounds.
+type Align int
+
+const (
+	AlignCenter Align = iota
+	AlignLeft
+	AlignRight
+)
+
+// options bundles the rendering knobs for fuzzyTime and placement. The zero
+// value aligns center, which preserves the widget's original behavior.
 type options struct {
 	style        style
-	noonMidnight bool // substitute "noon"/"midnight" for "twelve" (12-hour only)
-	use24Hour    bool // spell the hour as 0..23 instead of 1..12
+	noonMidnight bool  // substitute "noon"/"midnight" for "twelve" (12-hour only)
+	use24Hour    bool  // spell the hour as 0..23 instead of 1..12
+	align        Align // horizontal alignment within bounds
 }
 
 // Widget renders the current time as a natural-language English phrase.
@@ -84,9 +95,11 @@ func New(bounds image.Rectangle, now func() time.Time, opts options) *Widget {
 // Bounds returns the rectangle this widget occupies on the display.
 func (w *Widget) Bounds() image.Rectangle { return w.bounds }
 
-// Render draws the fuzzy time centered in the bounds using black text on a
-// white background. Text sources PaperBlack so the anti-aliased glyph fringe
-// straddles the BW threshold cleanly (see fonts.Face / project rendering rules).
+// Render draws the fuzzy time within the bounds using black text on a white
+// background, aligned per opts.align (center by default). Text sources
+// PaperBlack so the anti-aliased glyph fringe straddles the BW threshold
+// cleanly (see fonts.Face / project rendering rules). Left/right alignment
+// insets the text 4px from the matching edge, matching the clock widget.
 func (w *Widget) Render(frame *image.Paletted) error {
 	draw.Draw(frame, w.bounds, image.NewUniform(color.White), image.Point{}, draw.Src)
 
@@ -95,7 +108,15 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	metrics := fuzzyFace.Metrics()
 	textH := (metrics.Ascent + metrics.Descent).Ceil()
 
-	x := w.bounds.Min.X + (w.bounds.Dx()-textW)/2
+	var x int
+	switch w.opts.align {
+	case AlignLeft:
+		x = w.bounds.Min.X + 4
+	case AlignRight:
+		x = w.bounds.Max.X - textW - 4
+	default:
+		x = w.bounds.Min.X + (w.bounds.Dx()-textW)/2
+	}
 	y := w.bounds.Min.Y + (w.bounds.Dy()-textH)/2 + metrics.Ascent.Ceil()
 
 	d := &font.Drawer{
@@ -119,6 +140,9 @@ func (w *Widget) Render(frame *image.Paletted) error {
 //     24-hour mode.
 //   - language (string): only "en" is supported (default). The key is a
 //     forward-looking hook for localization; any other value is rejected.
+//   - align (string): "center" (default), "left", or "right". Pins the phrase
+//     to an edge so a corner placement keeps a fixed anchor as the phrase
+//     length changes. Left/right inset 4px.
 func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
 	opts := options{style: styleSentence, noonMidnight: true}
 
@@ -162,6 +186,23 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 		}
 		if s != "en" {
 			return nil, fmt.Errorf("fuzzy_clock: unsupported language %q (only \"en\" is supported)", s)
+		}
+	}
+
+	if v, ok := config["align"]; ok {
+		s, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("fuzzy_clock: align must be a string, got %T", v)
+		}
+		switch s {
+		case "center":
+			opts.align = AlignCenter
+		case "left":
+			opts.align = AlignLeft
+		case "right":
+			opts.align = AlignRight
+		default:
+			return nil, fmt.Errorf("fuzzy_clock: invalid align %q (must be center, left, or right)", s)
 		}
 	}
 

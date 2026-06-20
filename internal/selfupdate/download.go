@@ -65,35 +65,47 @@ func NewDownloader(hc *http.Client) *Downloader {
 //     match.
 //  4. Untar the gzipped buffer, find the "inkwell" entry, reject any
 //     path-traversal entries (parent-dir refs, absolute paths).
-//  5. Write the extracted bytes to a temp file with mode 0755 and
-//     return its path. Caller is responsible for removing the file
-//     (or os.Rename'ing it into place via the atomic-replace step).
+//  5. Write the extracted bytes to a temp file with mode 0755.
+//  6. Best-effort extract the bundled inkwell.example.yaml from the
+//     same verified tarball and return its bytes (nil if the tarball
+//     predates the bundled example or can't yield it — never fatal,
+//     since the binary update is the primary contract).
 //
-// On any error the temp file (if created) is removed before
-// returning, so callers don't have to clean up on the failure path.
-func (d *Downloader) FetchVerifyExtract(assetURL, checksumsURL, assetName string) (string, error) {
+// Returns the temp file path (caller removes it or os.Rename's it into
+// place via the atomic-replace step) and the example bytes. On any
+// error the temp file (if created) is removed before returning, so
+// callers don't have to clean up on the failure path.
+func (d *Downloader) FetchVerifyExtract(assetURL, checksumsURL, assetName string) (string, []byte, error) {
 	expectedHash, err := d.fetchExpectedHash(checksumsURL, assetName)
 	if err != nil {
-		return "", fmt.Errorf("fetch checksums: %w", err)
+		return "", nil, fmt.Errorf("fetch checksums: %w", err)
 	}
 
 	tarBytes, gotHash, err := d.fetchAndHash(assetURL)
 	if err != nil {
-		return "", fmt.Errorf("fetch asset: %w", err)
+		return "", nil, fmt.Errorf("fetch asset: %w", err)
 	}
 	if gotHash != expectedHash {
-		return "", fmt.Errorf("checksum mismatch for %s: expected %s, got %s",
+		return "", nil, fmt.Errorf("checksum mismatch for %s: expected %s, got %s",
 			assetName, expectedHash, gotHash)
 	}
 
-	binBytes, err := extractInkwellBinary(tarBytes)
+	binBytes, err := extractTarEntry(tarBytes, binaryName)
 	if err != nil {
-		return "", err
+		return "", nil, err
+	}
+
+	// The bundled example is a reference convenience, not the contract.
+	// Any extraction failure (missing in older tarballs, or an unsafe
+	// entry the binary walk didn't reach) degrades to "no example".
+	exampleBytes, err := extractTarEntry(tarBytes, exampleConfigName)
+	if err != nil {
+		exampleBytes = nil
 	}
 
 	tmp, err := os.CreateTemp("", "inkwell-update-*")
 	if err != nil {
-		return "", fmt.Errorf("create temp file: %w", err)
+		return "", nil, fmt.Errorf("create temp file: %w", err)
 	}
 	path := tmp.Name()
 	_ = tmp.Close()
@@ -105,9 +117,9 @@ func (d *Downloader) FetchVerifyExtract(assetURL, checksumsURL, assetName string
 
 	if err := d.writeFile(path, binBytes, 0o755); err != nil {
 		_ = os.Remove(path)
-		return "", fmt.Errorf("write temp binary: %w", err)
+		return "", nil, fmt.Errorf("write temp binary: %w", err)
 	}
-	return path, nil
+	return path, exampleBytes, nil
 }
 
 // fetchExpectedHash downloads checksums.txt and returns the sha256
@@ -178,19 +190,20 @@ func (d *Downloader) fetch(url string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-// extractInkwellBinary walks the gzipped tarball and returns the
-// bytes of the entry named binaryName at the archive root. Rejects
-// any entry whose name or symlink target resolves outside the
-// archive root (absolute paths, ".." components) — the tarball
-// itself is then untrustworthy and we abort rather than try to
-// salvage a "safe" entry from it.
+// extractTarEntry walks the gzipped tarball and returns the bytes of
+// the entry named name at the archive root. Rejects any entry whose
+// name or symlink target resolves outside the archive root (absolute
+// paths, ".." components) — the tarball itself is then untrustworthy
+// and we abort rather than try to salvage a "safe" entry from it.
+// Returns an error if the walk completes without a match; the example
+// caller treats any such failure as soft (no reference written).
 //
-// Tarball + binary are buffered in memory (~12MB combined at current
+// Tarball + entry are buffered in memory (~12MB combined at current
 // release sizes; well under the Pi Zero 2 W's 512MB budget). If the
 // release ever ships substantially larger artifacts, switch to
 // streaming through a TeeReader+sha256 into a temp file before
 // untarring.
-func extractInkwellBinary(gzBytes []byte) ([]byte, error) {
+func extractTarEntry(gzBytes []byte, name string) ([]byte, error) {
 	gz, err := gzip.NewReader(bytes.NewReader(gzBytes))
 	if err != nil {
 		return nil, fmt.Errorf("decompress tarball: %w", err)
@@ -212,11 +225,20 @@ func extractInkwellBinary(gzBytes []byte) ([]byte, error) {
 		if hdr.Linkname != "" && !safeArchivePath(hdr.Linkname) {
 			return nil, fmt.Errorf("rejecting tarball with unsafe symlink target: %q", hdr.Linkname)
 		}
-		if hdr.Name == binaryName {
+		if hdr.Name == name {
+			// Only regular files carry bytes. A symlink or hardlink
+			// header with a safe Linkname slips past the checks above
+			// but yields zero bytes from io.ReadAll — which for the
+			// binary would mean replacing it with an empty file. Reject
+			// anything that isn't a regular file (TypeReg '0' or the
+			// legacy null indicator 0, i.e. TypeRegA).
+			if hdr.Typeflag != tar.TypeReg && hdr.Typeflag != 0 {
+				return nil, fmt.Errorf("rejecting tarball: %q is not a regular file (type %q)", name, hdr.Typeflag)
+			}
 			return io.ReadAll(tr)
 		}
 	}
-	return nil, fmt.Errorf("tarball does not contain an %q entry at its root", binaryName)
+	return nil, fmt.Errorf("tarball does not contain a %q entry at its root", name)
 }
 
 // safeArchivePath returns false for any tar entry that would land
