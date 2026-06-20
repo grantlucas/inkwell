@@ -61,6 +61,9 @@ func (p *Provider) Forecast(ctx context.Context, loc Location, model Model, days
 // creating it on first use. Each key gets its own cache so different locations
 // or models never evict one another.
 func (p *Provider) cacheFor(model Model, loc Location, days int) *CachedSource {
+	// cacheKey rounds the location, so each wrapped CachedSource only ever sees
+	// this one rounded location — its own location-change detection is
+	// intentionally redundant here; the map key is what separates locations.
 	key := string(model) + "|" + cacheKey(loc, days)
 	p.mu.Lock()
 	defer p.mu.Unlock()
