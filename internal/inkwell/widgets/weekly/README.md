@@ -33,6 +33,44 @@ divided by solid vertical rules.
   them (see the config table). A weather failure is logged and the rest of each
   day cell still renders.
 
+## Calendar feeds
+
+Each entry in `feeds` must be a URL that returns a raw **iCalendar (ICS)**
+stream — a `text/calendar` body that begins with `BEGIN:VCALENDAR`. It is *not*
+a link to a calendar's web page. A common mistake is pasting a
+`https://calendar.google.com/calendar/u/0?cid=…` "add to my calendar" link:
+that URL returns the Google Calendar **web app (HTML)**, which the parser can't
+read — it fails with a confusing `bufio.Scanner: token too long` (the HTML has
+lines longer than the parser's buffer). Use the ICS feed URL instead.
+
+### Google Calendar
+
+1. Open **Google Calendar → Settings** (gear icon → *Settings*).
+2. Under **Settings for my calendars**, click the calendar you want in the left
+   sidebar.
+3. Scroll to **Integrate calendar**. Copy one of the two iCal addresses (each
+   ends in `/basic.ics`):
+   - **Secret address in iCal format** — works for a **private** calendar
+     without sharing it publicly. This is the right choice for most personal
+     calendars. Treat it like a password: anyone with the URL can read the
+     calendar, so keep it out of screenshots, commits, and shared configs.
+   - **Public address in iCal format** — only works if the calendar is set to
+     "Make available to public". Requesting the public ICS of a private
+     calendar returns `404`.
+4. Paste that `…/basic.ics` URL into `feeds`.
+
+> **Rotating a leaked secret address.** If a secret iCal URL is exposed, open
+> the same **Integrate calendar** section and use **Reset** next to the secret
+> address. The old URL stops working immediately; update `feeds` with the new
+> one.
+
+### Other providers
+
+Apple iCloud (shared-calendar "Public Calendar" link, `webcal://…` — change the
+scheme to `https://`), Outlook/Office 365 ("Publish a calendar" → ICS link), and
+most other calendar apps expose an equivalent ICS/iCal URL. As long as the URL
+returns a `BEGIN:VCALENDAR` body over HTTP(S), it works here.
+
 ## Configuration
 
 Top-level keys (`type`, `bounds`, `refresh`) are required by every widget.
@@ -130,6 +168,7 @@ dashboard:
           refresh: "15m"        # render cadence (top-level)
           config:
             feeds:
+              # Use the ICS feed URL, not a "?cid=" web link — see "Calendar feeds".
               - "https://example.com/my-calendar.ics"
             refresh: "15m"      # calendar data cache TTL (nested)
             show_weather: true
