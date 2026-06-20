@@ -55,14 +55,18 @@ func TestPaperPalette_MonotonicGrayRamp(t *testing.T) {
 	}
 }
 
-// On the 1-bit panel, the BW packer threshold-snaps each pixel at Y<128.
-// That means PaperGray05..PaperGray50 (Y=0x80..0xF2) all collapse to pure
-// white and PaperGray60..PaperGray90 (Y=0x1A..0x66) all collapse to pure
-// black — they only stay visually distinct on the Gray4 path and in the
-// source-design preview. Pin the bucket boundary so a palette shuffle
-// that quietly drops a "subtle" shade across the Y=128 line shows up in
-// CI rather than only on hardware. Anything a widget needs to be visible
-// on the BW threshold path has to land at PaperGray60 or darker.
+// On the 1-bit panel, the BW packer threshold-snaps each pixel at Y<=128
+// (ink anything at least half covered — see packBW / inkwell-5yh). That
+// means PaperGray05..PaperGray40 (Y=0x99..0xF2) all collapse to pure white
+// and PaperGray50..PaperGray90 (Y=0x1A..0x80) all collapse to pure black —
+// they only stay visually distinct on the Gray4 path and in the
+// source-design preview. PaperGray50 (Y=0x80) sits exactly on the 50%
+// midpoint and now lands black, which is what lets ~50%-covered glyph
+// stems survive instead of fading out. Pin the bucket boundary so a
+// palette shuffle that quietly drops a "subtle" shade across the Y=128
+// line shows up in CI rather than only on hardware. Anything a widget
+// needs to be visible on the BW threshold path has to land at PaperGray50
+// or darker.
 func TestPaperPalette_BWBucket(t *testing.T) {
 	cases := []struct {
 		idx       uint8
@@ -74,7 +78,7 @@ func TestPaperPalette_BWBucket(t *testing.T) {
 		{PaperGray20, false},
 		{PaperGray30, false},
 		{PaperGray40, false},
-		{PaperGray50, false}, // Y=0x80 is exactly the threshold; treated as white
+		{PaperGray50, true}, // Y=0x80 is the 50% midpoint; inked black
 		{PaperGray60, true},
 		{PaperGray70, true},
 		{PaperGray80, true},
@@ -83,7 +87,7 @@ func TestPaperPalette_BWBucket(t *testing.T) {
 	}
 	for _, c := range cases {
 		g := PaperPalette[c.idx].(color.Gray)
-		gotBlack := g.Y < 128
+		gotBlack := g.Y <= 128
 		if gotBlack != c.wantBlack {
 			t.Errorf("palette[%d] Y=0x%02X gotBlack=%v wantBlack=%v",
 				c.idx, g.Y, gotBlack, c.wantBlack)
