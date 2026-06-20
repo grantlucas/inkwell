@@ -6,7 +6,233 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar/ical"
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
+
+// inkBands counts the number of vertically separated horizontal bands that
+// contain black ink at or right of column xMin. Each drawn text line forms one
+// band, so it is a structural proxy for "how many text rows were rendered"
+// without coupling to exact pixel positions. xMin is set past the left rule so
+// the per-event rule stroke is not counted.
+func inkBands(frame *image.Paletted, xMin int) int {
+	b := frame.Bounds()
+	bands := 0
+	prev := false
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		row := false
+		for x := xMin; x < b.Max.X; x++ {
+			if frame.ColorIndexAt(x, y) == widget.PaperBlack {
+				row = true
+				break
+			}
+		}
+		if row && !prev {
+			bands++
+		}
+		prev = row
+	}
+	return bands
+}
+
+func TestWrapText(t *testing.T) {
+	cases := []struct {
+		label    string
+		text     string
+		maxChars int
+		maxLines int
+		want     []string
+	}{
+		{"word boundary", "Sprint Planning Meeting", 10, 3, []string{"Sprint", "Planning", "Meeting"}},
+		{"fits on one line", "Lunch", 13, 3, []string{"Lunch"}},
+		{"packs words up to width", "a bb ccc", 6, 3, []string{"a bb", "ccc"}},
+		{"hard-breaks an over-long word", "Supercalifragilistic", 8, 3, []string{"Supercal", "ifragili", "stic"}},
+		{"hard-break then wrap remaining words", "Wordsmithery rules", 6, 3, []string{"Wordsm", "ithery", "rules"}},
+		{"truncates past maxLines with ellipsis when room", "alpha beta gamma delta", 8, 2, []string{"alpha", "beta..."}},
+		{"truncates without ellipsis when last line is full", "aaaaa bbbbb ccccc", 5, 2, []string{"aaaaa", "bbbbb"}},
+		{"zero maxChars yields nil", "anything", 0, 3, nil},
+		{"zero maxLines yields nil", "anything", 8, 0, nil},
+		{"empty text yields nil", "   ", 8, 3, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			got := wrapText(tc.text, tc.maxChars, tc.maxLines)
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %d lines %q, want %d %q", len(got), got, len(tc.want), tc.want)
+			}
+			for i := range tc.want {
+				if got[i] != tc.want[i] {
+					t.Errorf("line %d = %q, want %q", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestLineCapacity(t *testing.T) {
+	cases := []struct {
+		label string
+		w, h  int
+		want  int
+	}{
+		{"tall column", 114, 200, 9},
+		{"one slot", 114, 50, 1},
+		{"two slots", 114, 70, 2},
+		{"title clipped height", 114, 38, 1},
+		{"no slots", 114, 10, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			if got := lineCapacity(image.Rect(0, 0, tc.w, tc.h)); got != tc.want {
+				t.Errorf("lineCapacity(%dx%d) = %d, want %d", tc.w, tc.h, got, tc.want)
+			}
+		})
+	}
+}
+
+func ev(summary string) ical.Event {
+	return ical.Event{Summary: summary, Start: time.Date(2026, 4, 28, 9, 0, 0, 0, time.UTC)}
+}
+
+func evLoc(summary, loc string) ical.Event {
+	e := ev(summary)
+	e.Location = loc
+	return e
+}
+
+func TestPlanEvents(t *testing.T) {
+	const long = "A Very Long Event Title That Overflows"
+	cases := []struct {
+		label        string
+		events       []ical.Event
+		maxEvents    int
+		capacity     int
+		maxChars     int
+		showLocation bool
+		wantBudgets  []int  // titleBudget per planned event
+		wantTitles   []bool // drawTitle per planned event
+		wantLocs     []bool // drawLocation per planned event
+	}{
+		{
+			label:       "full column keeps every title at one line",
+			events:      []ical.Event{ev("Standup"), ev("Lunch"), ev("Sync"), ev("Review"), ev("Demo")},
+			maxEvents:   5,
+			capacity:    10,
+			maxChars:    13,
+			wantBudgets: []int{1, 1, 1, 1, 1},
+			wantTitles:  []bool{true, true, true, true, true},
+			wantLocs:    []bool{false, false, false, false, false},
+		},
+		{
+			label:       "sparse overflowing title gets extra lines",
+			events:      []ical.Event{ev(long)},
+			maxEvents:   5,
+			capacity:    10,
+			maxChars:    13,
+			wantBudgets: []int{3},
+			wantTitles:  []bool{true},
+			wantLocs:    []bool{false},
+		},
+		{
+			label:       "sparse title that fits stays at one line",
+			events:      []ical.Event{ev("Lunch")},
+			maxEvents:   5,
+			capacity:    10,
+			maxChars:    13,
+			wantBudgets: []int{1},
+			wantTitles:  []bool{true},
+			wantLocs:    []bool{false},
+		},
+		{
+			label:       "leftover split across two overflowing titles",
+			events:      []ical.Event{ev(long), ev(long)},
+			maxEvents:   5,
+			capacity:    10,
+			maxChars:    13,
+			wantBudgets: []int{3, 3},
+			wantTitles:  []bool{true, true},
+			wantLocs:    []bool{false, false},
+		},
+		{
+			label:       "scarce leftover favors the earlier overflowing title",
+			events:      []ical.Event{ev(long), ev(long)},
+			maxEvents:   5,
+			capacity:    5, // 2 events cost 4 lines, leaving just 1 to hand out
+			maxChars:    13,
+			wantBudgets: []int{2, 1},
+			wantTitles:  []bool{true, true},
+			wantLocs:    []bool{false, false},
+		},
+		{
+			label:       "maxEvents caps the selection",
+			events:      []ical.Event{ev("a"), ev("b"), ev("c"), ev("d")},
+			maxEvents:   2,
+			capacity:    20,
+			maxChars:    13,
+			wantBudgets: []int{1, 1},
+			wantTitles:  []bool{true, true},
+			wantLocs:    []bool{false, false},
+		},
+		{
+			label:       "capacity leaves a time-only event at the bottom",
+			events:      []ical.Event{ev("First"), ev("Second")},
+			maxEvents:   5,
+			capacity:    3,
+			maxChars:    13,
+			wantBudgets: []int{1, 1},
+			wantTitles:  []bool{true, false},
+			wantLocs:    []bool{false, false},
+		},
+		{
+			label:        "location consumes a slot when shown",
+			events:       []ical.Event{evLoc("Meeting", "Room 42")},
+			maxEvents:    5,
+			capacity:     10,
+			maxChars:     13,
+			showLocation: true,
+			wantBudgets:  []int{1},
+			wantTitles:   []bool{true},
+			wantLocs:     []bool{true},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			plan := planEvents(tc.events, tc.maxEvents, tc.capacity, tc.maxChars, tc.showLocation)
+			if len(plan) != len(tc.wantBudgets) {
+				t.Fatalf("plan has %d events, want %d", len(plan), len(tc.wantBudgets))
+			}
+			for i := range plan {
+				if plan[i].titleBudget != tc.wantBudgets[i] {
+					t.Errorf("event %d titleBudget = %d, want %d", i, plan[i].titleBudget, tc.wantBudgets[i])
+				}
+				if plan[i].drawTitle != tc.wantTitles[i] {
+					t.Errorf("event %d drawTitle = %v, want %v", i, plan[i].drawTitle, tc.wantTitles[i])
+				}
+				if plan[i].drawLocation != tc.wantLocs[i] {
+					t.Errorf("event %d drawLocation = %v, want %v", i, plan[i].drawLocation, tc.wantLocs[i])
+				}
+			}
+		})
+	}
+}
+
+func TestRenderEvents_SparseTitleWraps(t *testing.T) {
+	render := func(summary string) *image.Paletted {
+		f := newTestFrame(114, 200)
+		renderEvents(f, image.Rect(0, 0, 114, 200), []ical.Event{ev(summary)}, 5, false)
+		return f
+	}
+	// textX past the 2px rule + gaps: eventPadX(4)+eventRuleW(2)+eventGap(2).
+	const textX = 8
+	long := inkBands(render("A Very Long Event Title That Overflows"), textX)
+	short := inkBands(render("Hi"), textX)
+
+	if long <= short {
+		t.Errorf("long title produced %d ink bands, short title %d — long should wrap to more", long, short)
+	}
+	if long < 3 {
+		t.Errorf("expected >=3 ink bands (time + multi-line title), got %d", long)
+	}
+}
 
 func TestRenderEvents_WithEvents(t *testing.T) {
 	frame := newTestFrame(114, 200)
