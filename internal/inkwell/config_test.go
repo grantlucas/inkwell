@@ -386,3 +386,82 @@ func TestLoadConfig_ColorMode(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadConfig_WeatherDefaults(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Weather.Model != "gem" {
+		t.Errorf("Weather.Model = %q, want gem", cfg.Weather.Model)
+	}
+	if cfg.Weather.TempUnit != "C" {
+		t.Errorf("Weather.TempUnit = %q, want C", cfg.Weather.TempUnit)
+	}
+}
+
+func TestLoadConfig_WeatherBlock(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+weather:
+  latitude: 43.244
+  longitude: -79.837
+  model: ecmwf
+  temp_unit: F
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Weather.Latitude != 43.244 || cfg.Weather.Longitude != -79.837 {
+		t.Errorf("Weather location = %v,%v want 43.244,-79.837", cfg.Weather.Latitude, cfg.Weather.Longitude)
+	}
+	if cfg.Weather.Model != "ecmwf" {
+		t.Errorf("Weather.Model = %q, want ecmwf", cfg.Weather.Model)
+	}
+	if cfg.Weather.TempUnit != "F" {
+		t.Errorf("Weather.TempUnit = %q, want F", cfg.Weather.TempUnit)
+	}
+}
+
+func TestLoadConfig_WeatherInvalid(t *testing.T) {
+	tests := []struct {
+		label string
+		block string
+	}{
+		{label: "bad model", block: "  model: bogus"},
+		{label: "bad temp_unit", block: "  temp_unit: K"},
+		{label: "lat out of range", block: "  latitude: 100"},
+		{label: "lon out of range", block: "  longitude: 200"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			_, err := LoadConfig(strings.NewReader("display: waveshare_7in5_v2\nbackend: preview\nweather:\n" + tt.block + "\n"))
+			if err == nil {
+				t.Fatalf("LoadConfig(%s): want error", tt.label)
+			}
+		})
+	}
+}
+
+func TestLoadConfig_WeatherEmptyFieldsDefault(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+weather:
+  model: ""
+  temp_unit: ""
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if cfg.Weather.Model != "gem" {
+		t.Errorf("Weather.Model = %q, want gem (empty defaults)", cfg.Weather.Model)
+	}
+	if cfg.Weather.TempUnit != "C" {
+		t.Errorf("Weather.TempUnit = %q, want C (empty defaults)", cfg.Weather.TempUnit)
+	}
+}
