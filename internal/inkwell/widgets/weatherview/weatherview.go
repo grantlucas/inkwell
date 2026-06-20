@@ -56,11 +56,13 @@ type Options struct {
 }
 
 // RenderDayWeather draws a weather summary (icon + label + temps) and
-// hourly chart into the given bounds. The layout is:
+// hourly chart into the given bounds. The condition row puts the icon
+// flush-left and right-aligns the label and temps to the cell's right edge so
+// the two groups bookend the available width:
 //
 //	┌─────────────────┐
-//	│ [icon] LABEL     │  condition row
-//	│        17°C  9°C │  hi/lo temps
+//	│ [icon]    LABEL  │  condition row
+//	│         17°C  9° │  hi/lo temps
 //	├─────────────────┤
 //	│ ~~temp curve~~   │  hourly chart
 //	│ ▐ ▐▐▐▐▐▐ ▐      │  precip bars
@@ -89,7 +91,12 @@ func RenderDayWeather(frame *image.Paletted, bounds image.Rectangle, day weather
 		log.Printf("weatherview: draw icon for condition %d: %v", day.Condition, err)
 	}
 
+	// textX is the left bound the right-aligned condition text may not cross
+	// (it keeps clear of the icon). rightEdge mirrors the icon's 4px left
+	// margin so the label/temps hug the cell's right edge and bookend the
+	// icon instead of clumping against it.
 	textX := iconX + iconSize + 3
+	rightEdge := bounds.Max.X - 4
 	hi := day.High
 	lo := day.Low
 	unit := "C"
@@ -101,23 +108,29 @@ func RenderDayWeather(frame *image.Paletted, bounds image.Rectangle, day weather
 
 	if opts.ShowLabel {
 		labelY := bounds.Min.Y + labelFace.Metrics().Ascent.Ceil() + 4
-		label := day.Condition.Label()
-		maxLabelW := w - textX + bounds.Min.X
+		// Truncate to the gap between the icon and the right edge, then
+		// right-align the (possibly truncated) label to that edge.
+		label := truncateText(day.Condition.Label(), (rightEdge-textX)/charWidth)
 		// Condition label renders in solid PaperBlack; the BW threshold
 		// chops AA fringe off any gray source color, so a "muted" label
 		// in PaperGray70 ends up fragmented. Hierarchy comes from font
 		// weight (semi-bold label vs. regular temps) and position.
-		drawTextWithFace(frame, textX, labelY, truncateText(label, maxLabelW/charWidth), labelFace)
+		labelX := max(textX, rightEdge-textWidth(labelFace, label))
+		drawTextWithFace(frame, labelX, labelY, label, labelFace)
 	}
 
 	tempStr := fmt.Sprintf("%d°%s", int(math.Round(hi)), unit)
 	loStr := fmt.Sprintf("%d°", int(math.Round(lo)))
 	tempY := bounds.Min.Y + condRowH - 4
-	drawTextWithFace(frame, textX, tempY, tempStr, tempHiFace)
 	hiW := textWidth(tempHiFace, tempStr)
+	loW := textWidth(tempLoFace, loStr)
+	// Right-align the hi/lo pair as one group, clamped so it never overruns
+	// the icon on a very narrow cell.
+	groupX := max(textX, rightEdge-(hiW+3+loW))
+	drawTextWithFace(frame, groupX, tempY, tempStr, tempHiFace)
 	// Low temp also in PaperBlack — see the label note above. Hierarchy
 	// between hi/lo is carried by font weight (bold hi vs. regular lo).
-	drawTextWithFace(frame, textX+hiW+3, tempY, loStr, tempLoFace)
+	drawTextWithFace(frame, groupX+hiW+3, tempY, loStr, tempLoFace)
 
 	// Condition-row divider: PaperBlack so it survives the BW threshold
 	// and the Gray4 quantization. The old PaperGray30 (Y=0xB3) only read
