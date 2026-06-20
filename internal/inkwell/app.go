@@ -345,13 +345,24 @@ func initModeForKind(kind refreshKind) InitMode {
 // display error paths skip the clear so a partial/broken frame isn't
 // "corrected" on top of an already-failing state.
 //
-// A Clear failure is reported but Close still runs — we want the panel
-// in deep sleep even if the refresh couldn't complete, otherwise we'd
+// The clear first re-initializes the panel to its full-refresh waveform.
+// The render loop only re-inits when the planned waveform changes, so in BW
+// mode it settles into partial-window mode (the flicker-free steady state);
+// a clear issued in that state won't drive a full-screen refresh and the
+// panel would retain its last frame. Re-init (hardware reset + InitFull /
+// Init4Gray) restores a full-frame waveform before pushing the white frame.
+//
+// A re-init or Clear failure is reported but Close still runs — we want the
+// panel in deep sleep even if the refresh couldn't complete, otherwise we'd
 // leave it drawing power.
 func (a *App) shutdown() error {
 	var clearErr error
 	if a.clearOnShutdown {
-		clearErr = a.epd.Clear()
+		if err := a.epd.Init(initModeFor(a.profile.Color)); err != nil {
+			clearErr = fmt.Errorf("clear re-init: %w", err)
+		} else {
+			clearErr = a.epd.Clear()
+		}
 	}
 	closeErr := a.epd.Close()
 	return errors.Join(clearErr, closeErr)

@@ -1359,6 +1359,73 @@ func TestRun_GracefulShutdownClearsBeforeSleep(t *testing.T) {
 	}
 }
 
+// TestShutdown_ClearReinitsToFullWaveform covers the BW shutdown bug:
+// the render loop's steady state in BW is a partial refresh, which leaves
+// the controller in partial-window mode. A clear issued in that state
+// won't drive a full-screen refresh, so the panel keeps its last frame.
+// shutdown() must re-establish the full-refresh waveform (hardware reset +
+// InitFull) before pushing the white clear frame.
+func TestShutdown_ClearReinitsToFullWaveform(t *testing.T) {
+	app, mock := newBWRefreshApp(t, 0)
+	app.clearOnShutdown = true
+
+	if err := app.shutdown(); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+
+	// The clear's refresh (0x12) must be preceded by a hardware reset and
+	// the InitFull signature command 0x06 (booster soft-start). Without the
+	// re-init, shutdown emits only [0x10, 0x13, 0x12] with no reset.
+	firstRefresh := -1
+	for i, c := range mock.Calls {
+		if c.Type == "command" && c.Data[0] == 0x12 {
+			firstRefresh = i
+			break
+		}
+	}
+	if firstRefresh < 0 {
+		t.Fatal("no clear refresh (0x12) found")
+	}
+
+	sawReset, sawFullInit := false, false
+	for _, c := range mock.Calls[:firstRefresh] {
+		if c.Type == "reset" {
+			sawReset = true
+		}
+		if c.Type == "command" && c.Data[0] == 0x06 {
+			sawFullInit = true
+		}
+	}
+	if !sawReset {
+		t.Error("clear refresh not preceded by a hardware reset; controller left in stale waveform")
+	}
+	if !sawFullInit {
+		t.Error("clear refresh not preceded by InitFull (0x06 booster soft-start)")
+	}
+}
+
+// TestShutdown_ReinitFailureStillCloses confirms the re-init error branch:
+// if the full-waveform re-init fails, the clear is skipped but Close (deep
+// sleep) still runs so the panel isn't left drawing power.
+func TestShutdown_ReinitFailureStillCloses(t *testing.T) {
+	app, _ := newBWRefreshApp(t, 0)
+	app.clearOnShutdown = true
+	// Swap in a hardware that fails every Reset so the shutdown re-init fails.
+	fail := &resetFailHardware{}
+	app.epd = NewEPD(fail, app.profile)
+	app.hw = fail
+
+	err := app.shutdown()
+	if err == nil || !strings.Contains(err.Error(), "clear re-init") {
+		t.Fatalf("shutdown error = %v, want mention of clear re-init", err)
+	}
+
+	last := fail.Calls[len(fail.Calls)-1]
+	if last.Type != "close" {
+		t.Errorf("last call = %q, want close (deep sleep must still run)", last.Type)
+	}
+}
+
 // TestRun_ClearOnShutdownDisabled confirms the opt-out: when
 // clear_on_shutdown is false, the cleanup path skips Clear entirely
 // and only the render's single refresh shows up.
