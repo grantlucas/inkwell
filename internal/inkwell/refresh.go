@@ -6,7 +6,9 @@ type refreshKind int
 const (
 	// refreshSkip pushes no frame to the panel (content unchanged).
 	refreshSkip refreshKind = iota
-	// refreshPartial is a flicker-free partial-window refresh (BW only).
+	// refreshPartial is the per-change windowed refresh (BW only): the fast
+	// waveform scoped to the changed box, so only that box flashes once while
+	// the rest of the panel is untouched.
 	refreshPartial
 	// refreshFast is a single-flicker fast full refresh (BW only).
 	refreshFast
@@ -17,10 +19,11 @@ const (
 )
 
 // refreshPlanner decides which refresh waveform to use on each render cycle.
-// The strategy is mode-aware: BW cycles through full→fast→partial so routine
-// ticks stay flicker-free while ghosting is cleared on a cadence; Gray4 has no
-// flicker-free waveform, so it refreshes only when content changes (plus a
-// periodic forced refresh to guard against burn-in).
+// The strategy is mode-aware: BW cycles through full→fast→partial so a routine
+// tick only flashes the changed box (partial = fast waveform windowed) while
+// ghosting is cleared full-screen on a cadence; Gray4 has no windowed waveform,
+// so it refreshes only when content changes (plus a periodic forced refresh to
+// guard against burn-in).
 type refreshPlanner struct {
 	color     ColorDepth
 	fullEvery int // cycles between full / forced grayscale refreshes

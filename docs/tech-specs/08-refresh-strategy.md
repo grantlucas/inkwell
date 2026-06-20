@@ -63,10 +63,30 @@ the controller only when the waveform LUT actually changes.
 
 - First cycle and every `defaultFullEvery` cycles → **full** (clears ghosting,
   satisfies the 24 h rule even when content is static).
-- Every `defaultFastEvery` cycles → **fast** (single flicker, clears more
-  ghosting than partial).
-- Otherwise, when content changed → **partial** (flicker-free).
+- Every `defaultFastEvery` cycles → **fast** (single full-screen flicker, clears
+  more ghosting than a windowed update).
+- Otherwise, when content changed → **partial** (the fast waveform windowed to
+  the changed box — one localized flash in that box, the rest of the panel
+  untouched).
 - When content is unchanged → **skip** (don't reflash an identical frame).
+
+> **Why the partial cycle uses the fast waveform, not the partial waveform.**
+> inkwell force-drives the changed box (it writes the inverse of the new frame to
+> the old plane inside the box — `old=^new`, via `DisplayPartialBox`) so the
+> whole box redraws cleanly instead of relying on the controller's per-pixel
+> diff, which under a partial LUT under-drives isolated changed pixels and leaves
+> them faint. The catch: `old=^new` only resolves toward the new image under the
+> **fast** (or full) waveform, which shows the inverted image first and then
+> settles on the new plane. Under the **partial** waveform the force-driven box
+> never resolves and settles *inverted* on real hardware — a force-driven date /
+> fuzzy-clock box came back solid black with the text knocked out (inkwell-6jq).
+> So the per-change update loads `InitFast` and scopes the physical update to the
+> box with `sendPartialWindow` (0x90 / 0x91). The cost is one localized flash
+> inside the changed box rather than a flicker-free update — the genuinely
+> flicker-free partial waveform is unusable here because the force-drive it needs
+> (to avoid under-driving) inverts under it. `refreshFast` and `refreshPartial`
+> share the `InitFast` LUT, so a fast cycle followed by partial cycles never
+> re-initializes the controller.
 
 **Gray4 mode** has no flicker-free waveform, so the only lever is *when* to
 refresh:
@@ -88,12 +108,16 @@ per-widget cadence below.
 
 ### Trade-offs
 
-- **Partial refreshes accumulate ghosting** — that's why full/fast run on a
+- **Windowed updates accumulate ghosting** — that's why full/fast run on a
   fixed cadence rather than never.
-- **Full-window partial, not region-diff** — inkwell partial-refreshes the
-  whole panel rather than computing the changed bounding box. This already
-  removes the flicker for routine ticks; per-region partial updates (only
-  redrawing the clock's few pixels) are a possible future optimization.
+- **One localized flash per change, not flicker-free** — the per-change update is
+  the fast waveform windowed to the changed box, so that box flashes once. The
+  flicker-free partial waveform isn't used: the force-drive needed to keep
+  changed pixels from under-driving inverts under it (see the note above).
+- **Region windowed, full-screen buffers** — the physical update is scoped to the
+  changed widget's bounding box, but the wire buffers stay full-screen so the
+  capture/preview backends keep reconstructing the frame. Slicing the buffers to
+  the region (a speed optimization) is tracked separately in inkwell-5ik.
 - **gray4 can't be made flicker-free** — if flicker matters more than the
   grayscale legibility, run `color_mode: bw`.
 

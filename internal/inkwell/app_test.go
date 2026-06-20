@@ -443,9 +443,6 @@ color_mode: bw
 	return app, mock
 }
 
-// TestApp_RefreshBWRoutineCycleIsPartial confirms that in BW mode, once an
-// initial full refresh has run, changing content drives a flicker-free
-// partial refresh — identifiable by the partial-window command (0x90).
 // TestApp_RefreshGateDefersUntilDue confirms the refresh queue gate: a content
 // change is only pushed when a widget is due this minute. An off-cadence change
 // is held (not dropped) and ships on the next due cycle — and the forced full
@@ -559,7 +556,15 @@ func TestChangedWidgetRegion(t *testing.T) {
 	}
 }
 
-func TestApp_RefreshBWRoutineCycleIsPartial(t *testing.T) {
+// TestApp_RefreshBWRoutineCycleWindowsFastWaveform confirms that in BW mode,
+// once an initial full refresh has run, a routine content change drives the
+// per-change windowed refresh: the FAST waveform (InitFast, identified by its
+// unique 0xE5 -> 0x5A force-temperature load) scoped to the changed box by the
+// partial-window command (0x90). The fast waveform settles cleanly on the new
+// plane (it shows the inverted image first, then the new), so the box's
+// force-driven old=^new plane lands correctly — unlike the partial waveform
+// (0xE5 -> 0x6E), which left the force-driven box inverted on real hardware.
+func TestApp_RefreshBWRoutineCycleWindowsFastWaveform(t *testing.T) {
 	app, mock := newBWRefreshApp(t, 0)
 	size := app.profile.BufferSize()
 	mode := InitFull // the LUT a startup full init leaves loaded
@@ -570,11 +575,22 @@ func TestApp_RefreshBWRoutineCycleIsPartial(t *testing.T) {
 		t.Fatalf("cycle 1 (full): pushed=%v err=%v", pushed, err)
 	}
 	if pushed, err := app.refresh(frameB, frameA, true, &mode, nil); err != nil || !pushed {
-		t.Fatalf("cycle 2 (partial): pushed=%v err=%v", pushed, err)
+		t.Fatalf("cycle 2 (windowed fast): pushed=%v err=%v", pushed, err)
 	}
 
 	if !slices.Contains(mock.Commands(), 0x90) {
 		t.Error("expected a partial-window command (0x90) for routine BW cycles, got none")
+	}
+	var sawFastTemp bool
+	for i, c := range mock.Calls {
+		if c.Type == "command" && c.Data[0] == 0xE5 && i+1 < len(mock.Calls) &&
+			mock.Calls[i+1].Type == "data" && len(mock.Calls[i+1].Data) == 1 && mock.Calls[i+1].Data[0] == 0x5A {
+			sawFastTemp = true
+			break
+		}
+	}
+	if !sawFastTemp {
+		t.Error("expected the fast waveform (InitFast, 0xE5 -> 0x5A) on a routine windowed BW cycle, got none")
 	}
 }
 
