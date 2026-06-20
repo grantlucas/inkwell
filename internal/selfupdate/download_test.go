@@ -88,7 +88,7 @@ func TestDownloadVerifyExtract_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchVerifyExtract: %v", err)
 	}
-	t.Cleanup(func() { os.Remove(path) })
+	t.Cleanup(func() { _ = os.Remove(path) })
 
 	got, err := os.ReadFile(path)
 	if err != nil {
@@ -124,7 +124,7 @@ func TestDownloadVerifyExtract_NoExampleIsSoft(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchVerifyExtract: %v", err)
 	}
-	t.Cleanup(func() { os.Remove(path) })
+	t.Cleanup(func() { _ = os.Remove(path) })
 
 	if gotExample != nil {
 		t.Errorf("example bytes = %q, want nil for a tarball without an example", gotExample)
