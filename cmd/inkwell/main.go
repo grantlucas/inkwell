@@ -68,15 +68,17 @@ func selfUpdate(args []string) error {
 	gh := selfupdate.NewGitHubClient(repoSlug)
 	dl := selfupdate.NewDownloader(http.DefaultClient)
 	rp := selfupdate.NewReplacer()
+	ew := selfupdate.NewExampleWriter()
 
 	u := &selfupdate.SelfUpdater{
-		CurrentVer:    info.Version,
-		GOOS:          runtime.GOOS,
-		GOARCH:        runtime.GOARCH,
-		GOARM:         info.GOARM,
-		FetchLatest:   gh.LatestRelease,
-		FetchAsset:    dl.FetchVerifyExtract,
-		ReplaceBinary: rp.Replace,
+		CurrentVer:         info.Version,
+		GOOS:               runtime.GOOS,
+		GOARCH:             runtime.GOARCH,
+		GOARM:              info.GOARM,
+		FetchLatest:        gh.LatestRelease,
+		FetchAsset:         dl.FetchVerifyExtract,
+		ReplaceBinary:      rp.Replace,
+		WriteExampleConfig: ew.Write,
 	}
 	return u.Run(args, os.Stdout)
 }

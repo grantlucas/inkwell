@@ -18,12 +18,13 @@ import (
 // fake "inkwell" binary; success means after Run, the on-disk
 // target binary has been replaced byte-for-byte with that fixture.
 type e2eFixture struct {
-	srv         *httptest.Server
-	repo        string
-	target      string
-	fixtureBin  []byte
-	tampered    bool
-	missingArch string // if set, omit this asset name from the release JSON
+	srv            *httptest.Server
+	repo           string
+	target         string
+	fixtureBin     []byte
+	fixtureExample []byte
+	tampered       bool
+	missingArch    string // if set, omit this asset name from the release JSON
 }
 
 func newE2EFixture(t *testing.T) *e2eFixture {
@@ -34,9 +35,10 @@ func newE2EFixture(t *testing.T) *e2eFixture {
 		t.Fatalf("seed target: %v", err)
 	}
 	return &e2eFixture{
-		repo:       "owner/repo",
-		target:     target,
-		fixtureBin: []byte("NEW-BINARY-FROM-RELEASE\n"),
+		repo:           "owner/repo",
+		target:         target,
+		fixtureBin:     []byte("NEW-BINARY-FROM-RELEASE\n"),
+		fixtureExample: []byte("# inkwell.example.yaml from release\n"),
 	}
 }
 
@@ -48,7 +50,10 @@ func (f *e2eFixture) start(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	f.srv = srv
 
-	tarBytes := makeTarGz(t, map[string][]byte{"inkwell": f.fixtureBin}, 0o755)
+	tarBytes := makeTarGz(t, map[string][]byte{
+		"inkwell":              f.fixtureBin,
+		"inkwell.example.yaml": f.fixtureExample,
+	}, 0o755)
 
 	// Build the checksums.txt content (real sha or tampered).
 	hash := sha256Hex(tarBytes)
@@ -91,14 +96,19 @@ func (f *e2eFixture) updater(t *testing.T) *SelfUpdater {
 	)
 	dl := NewDownloader(f.srv.Client())
 	rp := NewReplacer()
+	// Real ExampleWriter, but resolve "the running binary" to the
+	// fixture target so the example reference lands in the temp dir.
+	ew := NewExampleWriter()
+	ew.executable = func() (string, error) { return f.target, nil }
 
 	return &SelfUpdater{
-		CurrentVer:    "v0.0.1",
-		GOOS:          "linux",
-		GOARCH:        "arm64",
-		FetchLatest:   gh.LatestRelease,
-		FetchAsset:    dl.FetchVerifyExtract,
-		ReplaceBinary: func(srcPath string) error { return rp.ReplaceAt(f.target, srcPath) },
+		CurrentVer:         "v0.0.1",
+		GOOS:               "linux",
+		GOARCH:             "arm64",
+		FetchLatest:        gh.LatestRelease,
+		FetchAsset:         dl.FetchVerifyExtract,
+		ReplaceBinary:      func(srcPath string) error { return rp.ReplaceAt(f.target, srcPath) },
+		WriteExampleConfig: ew.Write,
 	}
 }
 
@@ -125,6 +135,17 @@ func TestSelfUpdater_E2E_Success(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "systemctl restart") {
 		t.Errorf("expected restart hint in output:\n%s", out.String())
+	}
+
+	// The bundled example must land next to the binary as a reference,
+	// byte-for-byte from the verified tarball.
+	examplePath := filepath.Join(filepath.Dir(f.target), "inkwell.example.yaml")
+	gotExample, err := os.ReadFile(examplePath)
+	if err != nil {
+		t.Fatalf("read example reference: %v", err)
+	}
+	if !bytes.Equal(gotExample, f.fixtureExample) {
+		t.Errorf("example bytes (%q) != fixture (%q)", gotExample, f.fixtureExample)
 	}
 }
 

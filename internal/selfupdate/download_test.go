@@ -74,12 +74,17 @@ func fixtureServer(t *testing.T, assetName string, tarBytes []byte, tamper bool)
 
 func TestDownloadVerifyExtract_Success(t *testing.T) {
 	binary := []byte("#!/fake binary content")
-	tarBytes := makeTarGz(t, map[string][]byte{"inkwell": binary, "README.md": []byte("readme")}, 0o755)
+	example := []byte("# inkwell.example.yaml from release\n")
+	tarBytes := makeTarGz(t, map[string][]byte{
+		"inkwell":              binary,
+		"README.md":            []byte("readme"),
+		"inkwell.example.yaml": example,
+	}, 0o755)
 	assetURL, checksumsURL, srv := fixtureServer(t, "inkwell-linux-arm64.tar.gz", tarBytes, false)
 	defer srv.Close()
 
 	d := NewDownloader(srv.Client())
-	path, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
+	path, gotExample, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
 	if err != nil {
 		t.Fatalf("FetchVerifyExtract: %v", err)
 	}
@@ -92,6 +97,9 @@ func TestDownloadVerifyExtract_Success(t *testing.T) {
 	if !bytes.Equal(got, binary) {
 		t.Errorf("extracted bytes differ from fixture binary")
 	}
+	if !bytes.Equal(gotExample, example) {
+		t.Errorf("example bytes = %q, want %q", gotExample, example)
+	}
 	st, err := os.Stat(path)
 	if err != nil {
 		t.Fatalf("stat: %v", err)
@@ -101,13 +109,35 @@ func TestDownloadVerifyExtract_Success(t *testing.T) {
 	}
 }
 
+// TestDownloadVerifyExtract_NoExampleIsSoft confirms a tarball that
+// bundles no inkwell.example.yaml (e.g. a release predating the
+// reference-copy feature) still succeeds and returns nil example bytes
+// — the example is a convenience, not part of the binary contract.
+func TestDownloadVerifyExtract_NoExampleIsSoft(t *testing.T) {
+	binary := []byte("#!/fake binary content")
+	tarBytes := makeTarGz(t, map[string][]byte{"inkwell": binary}, 0o755)
+	assetURL, checksumsURL, srv := fixtureServer(t, "inkwell-linux-arm64.tar.gz", tarBytes, false)
+	defer srv.Close()
+
+	d := NewDownloader(srv.Client())
+	path, gotExample, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
+	if err != nil {
+		t.Fatalf("FetchVerifyExtract: %v", err)
+	}
+	t.Cleanup(func() { os.Remove(path) })
+
+	if gotExample != nil {
+		t.Errorf("example bytes = %q, want nil for a tarball without an example", gotExample)
+	}
+}
+
 func TestDownloadVerifyExtract_ChecksumMismatchAborts(t *testing.T) {
 	tarBytes := makeTarGz(t, map[string][]byte{"inkwell": []byte("real")}, 0o755)
 	assetURL, checksumsURL, srv := fixtureServer(t, "inkwell-linux-arm64.tar.gz", tarBytes, true)
 	defer srv.Close()
 
 	d := NewDownloader(srv.Client())
-	_, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
+	_, _, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
 	if err == nil {
 		t.Fatal("expected checksum mismatch error")
 	}
@@ -123,7 +153,7 @@ func TestDownloadVerifyExtract_MissingBinary(t *testing.T) {
 	defer srv.Close()
 
 	d := NewDownloader(srv.Client())
-	_, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
+	_, _, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
 	if err == nil {
 		t.Fatal("expected error for missing binary")
 	}
@@ -156,7 +186,7 @@ func TestDownloadVerifyExtract_RejectsSymlinkTraversal(t *testing.T) {
 	defer srv.Close()
 
 	d := NewDownloader(srv.Client())
-	_, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
+	_, _, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
 	if err == nil {
 		t.Fatal("expected rejection for symlink with traversing target")
 	}
@@ -190,7 +220,7 @@ func TestDownloadVerifyExtract_RejectsPathTraversal(t *testing.T) {
 			defer srv.Close()
 
 			d := NewDownloader(srv.Client())
-			_, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
+			_, _, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
 			if err == nil {
 				t.Fatal("expected rejection for path-traversal entry")
 			}
@@ -214,7 +244,7 @@ func TestDownloadVerifyExtract_ChecksumsMissingAsset(t *testing.T) {
 	defer srv.Close()
 
 	d := NewDownloader(srv.Client())
-	_, err := d.FetchVerifyExtract(srv.URL+"/tarball", srv.URL+"/checksums", "inkwell-linux-arm64.tar.gz")
+	_, _, err := d.FetchVerifyExtract(srv.URL+"/tarball", srv.URL+"/checksums", "inkwell-linux-arm64.tar.gz")
 	if err == nil {
 		t.Fatal("expected error when asset not listed in checksums")
 	}
@@ -236,7 +266,7 @@ func TestDownloadVerifyExtract_AssetFetchFailure(t *testing.T) {
 	defer srv.Close()
 
 	d := NewDownloader(srv.Client())
-	_, err := d.FetchVerifyExtract(srv.URL+"/tarball", srv.URL+"/checksums", "inkwell-linux-arm64.tar.gz")
+	_, _, err := d.FetchVerifyExtract(srv.URL+"/tarball", srv.URL+"/checksums", "inkwell-linux-arm64.tar.gz")
 	if err == nil {
 		t.Fatal("expected error on asset 500")
 	}
@@ -249,7 +279,7 @@ func TestDownloadVerifyExtract_ChecksumsFetchFailure(t *testing.T) {
 	defer srv.Close()
 
 	d := NewDownloader(srv.Client())
-	_, err := d.FetchVerifyExtract(srv.URL+"/tarball", srv.URL+"/checksums", "inkwell-linux-arm64.tar.gz")
+	_, _, err := d.FetchVerifyExtract(srv.URL+"/tarball", srv.URL+"/checksums", "inkwell-linux-arm64.tar.gz")
 	if err == nil {
 		t.Fatal("expected error on checksums fetch failure")
 	}
@@ -264,7 +294,7 @@ func TestDownloadVerifyExtract_MalformedTarball(t *testing.T) {
 	defer srv.Close()
 
 	d := NewDownloader(srv.Client())
-	_, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
+	_, _, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
 	if err == nil {
 		t.Fatal("expected gzip parse error")
 	}
@@ -355,7 +385,7 @@ func TestDownloadVerifyExtract_CreateTempFails(t *testing.T) {
 	t.Setenv("TMPDIR", "/this/path/does/not/exist/anywhere")
 
 	d := NewDownloader(srv.Client())
-	_, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
+	_, _, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
 	if err == nil {
 		t.Fatal("expected create-temp error")
 	}
@@ -381,7 +411,7 @@ func TestDownloadVerifyExtract_WriteFileFails(t *testing.T) {
 		return fmt.Errorf("simulated write failure")
 	}
 
-	_, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
+	_, _, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
 	if err == nil {
 		t.Fatal("expected write-file error")
 	}
@@ -401,8 +431,8 @@ func TestDownloadVerifyExtract_WriteFileFails(t *testing.T) {
 // tested by ChecksumsFetchFailure / AssetFetchFailure).
 func TestDownloadVerifyExtract_NetworkFailure(t *testing.T) {
 	d := NewDownloader(&http.Client{})
-	_, err := d.FetchVerifyExtract(
-		"http://127.0.0.1:1/nope",     // closed port
+	_, _, err := d.FetchVerifyExtract(
+		"http://127.0.0.1:1/nope",      // closed port
 		"http://127.0.0.1:1/checksums", // closed port
 		"inkwell-linux-arm64.tar.gz",
 	)
@@ -416,7 +446,7 @@ func TestDownloadVerifyExtract_NetworkFailure(t *testing.T) {
 // before any network call.
 func TestDownloadVerifyExtract_InvalidURL(t *testing.T) {
 	d := NewDownloader(&http.Client{})
-	_, err := d.FetchVerifyExtract(
+	_, _, err := d.FetchVerifyExtract(
 		"http://invalid\x00host/asset",
 		"http://invalid\x00host/checksums",
 		"inkwell-linux-arm64.tar.gz",
@@ -441,7 +471,7 @@ func TestDownloadVerifyExtract_CorruptTarBody(t *testing.T) {
 	defer srv.Close()
 
 	d := NewDownloader(srv.Client())
-	_, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
+	_, _, err := d.FetchVerifyExtract(assetURL, checksumsURL, "inkwell-linux-arm64.tar.gz")
 	if err == nil {
 		t.Fatal("expected tar parse error")
 	}
@@ -464,7 +494,7 @@ func TestDownloadVerifyExtract_MalformedChecksumsLine(t *testing.T) {
 	defer srv.Close()
 
 	d := NewDownloader(srv.Client())
-	_, err := d.FetchVerifyExtract(srv.URL+"/tarball", srv.URL+"/checksums", "inkwell-linux-arm64.tar.gz")
+	_, _, err := d.FetchVerifyExtract(srv.URL+"/tarball", srv.URL+"/checksums", "inkwell-linux-arm64.tar.gz")
 	if err == nil {
 		t.Fatal("expected error for malformed checksums")
 	}

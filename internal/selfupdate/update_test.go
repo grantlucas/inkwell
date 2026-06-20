@@ -29,8 +29,8 @@ func newFixtureUpdater() *SelfUpdater {
 		FetchLatest: func() (*Release, error) {
 			return fakeRelease("v1.0.1"), nil
 		},
-		FetchAsset: func(assetURL, checksumsURL, name string) (string, error) {
-			return "/tmp/fake-new-binary", nil
+		FetchAsset: func(assetURL, checksumsURL, name string) (string, []byte, error) {
+			return "/tmp/fake-new-binary", nil, nil
 		},
 		ReplaceBinary: func(srcPath string) error {
 			return nil
@@ -73,7 +73,7 @@ func TestSelfUpdater_DefaultSkipsWhenAtLatest(t *testing.T) {
 	u := newFixtureUpdater()
 	u.CurrentVer = "v1.0.1"
 	calledFetch, calledReplace := false, false
-	u.FetchAsset = func(string, string, string) (string, error) { calledFetch = true; return "/tmp/x", nil }
+	u.FetchAsset = func(string, string, string) (string, []byte, error) { calledFetch = true; return "/tmp/x", nil, nil }
 	u.ReplaceBinary = func(string) error { calledReplace = true; return nil }
 
 	if err := u.Run(nil, &out); err != nil {
@@ -93,9 +93,9 @@ func TestSelfUpdater_DefaultUpdatesWhenBehind(t *testing.T) {
 	var out bytes.Buffer
 	u := newFixtureUpdater()
 	var gotAsset string
-	u.FetchAsset = func(_, _, name string) (string, error) {
+	u.FetchAsset = func(_, _, name string) (string, []byte, error) {
 		gotAsset = name
-		return "/tmp/fake-new-binary", nil
+		return "/tmp/fake-new-binary", nil, nil
 	}
 	var gotReplaceSrc string
 	u.ReplaceBinary = func(src string) error {
@@ -117,12 +117,66 @@ func TestSelfUpdater_DefaultUpdatesWhenBehind(t *testing.T) {
 	}
 }
 
+// TestSelfUpdater_WritesExampleAfterReplace confirms the bundled
+// example bytes are forwarded to WriteExampleConfig, and only after the
+// binary is in place (the example is a reference, not the contract).
+func TestSelfUpdater_WritesExampleAfterReplace(t *testing.T) {
+	var out bytes.Buffer
+	u := newFixtureUpdater()
+	wantExample := []byte("# example\n")
+	u.FetchAsset = func(_, _, _ string) (string, []byte, error) {
+		return "/tmp/fake-new-binary", wantExample, nil
+	}
+	var order []string
+	u.ReplaceBinary = func(string) error {
+		order = append(order, "replace")
+		return nil
+	}
+	var gotExample []byte
+	u.WriteExampleConfig = func(b []byte) error {
+		order = append(order, "example")
+		gotExample = b
+		return nil
+	}
+
+	if err := u.Run(nil, &out); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !bytes.Equal(gotExample, wantExample) {
+		t.Errorf("WriteExampleConfig got %q, want %q", gotExample, wantExample)
+	}
+	if len(order) != 2 || order[0] != "replace" || order[1] != "example" {
+		t.Errorf("call order = %v, want [replace example]", order)
+	}
+}
+
+// TestSelfUpdater_ExampleWriteFailureIsNonFatal confirms a failed
+// example write is logged but does not fail the update — the binary
+// swap already succeeded.
+func TestSelfUpdater_ExampleWriteFailureIsNonFatal(t *testing.T) {
+	var out bytes.Buffer
+	u := newFixtureUpdater()
+	u.WriteExampleConfig = func([]byte) error {
+		return errors.New("disk full")
+	}
+
+	if err := u.Run(nil, &out); err != nil {
+		t.Fatalf("Run must succeed despite example write failure: %v", err)
+	}
+	if !strings.Contains(out.String(), "warning") || !strings.Contains(out.String(), "inkwell.example.yaml") {
+		t.Errorf("output should warn about the example write failure:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "systemctl restart inkwell") {
+		t.Errorf("output should still print the restart hint:\n%s", out.String())
+	}
+}
+
 func TestSelfUpdater_ForceOverridesVersionCheck(t *testing.T) {
 	var out bytes.Buffer
 	u := newFixtureUpdater()
 	u.CurrentVer = "v1.0.1" // == latest, default would skip
 	calledFetch := false
-	u.FetchAsset = func(string, string, string) (string, error) { calledFetch = true; return "/tmp/x", nil }
+	u.FetchAsset = func(string, string, string) (string, []byte, error) { calledFetch = true; return "/tmp/x", nil, nil }
 	u.ReplaceBinary = func(string) error { return nil }
 
 	if err := u.Run([]string{"--force"}, &out); err != nil {
@@ -200,8 +254,8 @@ func TestSelfUpdater_ChecksumsURLMissing(t *testing.T) {
 func TestSelfUpdater_FetchAssetError(t *testing.T) {
 	var out bytes.Buffer
 	u := newFixtureUpdater()
-	u.FetchAsset = func(string, string, string) (string, error) {
-		return "", errors.New("download failed")
+	u.FetchAsset = func(string, string, string) (string, []byte, error) {
+		return "", nil, errors.New("download failed")
 	}
 
 	err := u.Run(nil, &out)
@@ -263,9 +317,9 @@ func TestSelfUpdater_RejectsPositionalArgs(t *testing.T) {
 	var out bytes.Buffer
 	u := newFixtureUpdater()
 	calledFetch := false
-	u.FetchAsset = func(string, string, string) (string, error) {
+	u.FetchAsset = func(string, string, string) (string, []byte, error) {
 		calledFetch = true
-		return "/tmp/x", nil
+		return "/tmp/x", nil, nil
 	}
 	err := u.Run([]string{"unexpected"}, &out)
 	if err == nil {
