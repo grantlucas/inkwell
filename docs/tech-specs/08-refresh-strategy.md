@@ -67,6 +67,21 @@ the controller only when the waveform LUT actually changes.
   the proven `Display` path).
 - When content is unchanged → **skip** (don't reflash an identical frame).
 
+> **Why `InitFull` is tuned to match `InitFast`'s drive strength.** Because BW
+> force-drives every pixel (`old=^new`) on both paths, the only thing that
+> distinguishes full from fast is the init sequence. The stock Waveshare
+> `init()` clamps the power setting (`0x01`) to a lower VDH/VDL and uses a
+> weaker booster (`0x06`) than `init_fast()` — which never sends `0x01` and so
+> inherits the higher post-reset default. Left as-is, the periodic full refresh
+> drove *softer* than the surrounding fast refreshes and settled muted/blotchy,
+> and the next fast refresh visibly restored contrast. `InitFull` therefore
+> adopts the fast booster and drops the `0x01` clamp, so full and fast drive
+> identically. It stays a proper multi-flash full refresh (not a fast refresh):
+> the full/GC waveform is selected by *not* forcing temperature (`0xE5`), which
+> only `InitFast` does.
+
+<!-- -->
+
 > **Why per-change updates aren't windowed/flicker-free.** A windowed *partial*
 > refresh would let only the changed box update with no flash, which is ideal in
 > principle. Two attempts failed on real hardware:

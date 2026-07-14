@@ -63,15 +63,25 @@ var Waveshare7in5V2 = DisplayProfile{
 		PartialRefresh: true,
 		Grayscale:      true,
 	},
+	// InitFull deliberately matches InitFast's drive strength so the periodic
+	// full refresh settles at full contrast instead of muted. The stock
+	// Waveshare init() clamps the power setting (0x01) to a lower VDH/VDL and
+	// uses a weaker booster than init_fast(); because inkwell force-drives every
+	// BW pixel (old=^new) on both paths, that asymmetry made the hourly full
+	// refresh drive softer than the surrounding fast refreshes and come back
+	// blotchy. So we adopt the fast booster and drop the 0x01 clamp, letting
+	// VDH/VDL inherit the post-reset default the (crisp) fast path already
+	// relies on. This does NOT turn it into a fast refresh: the full/GC
+	// multi-flash waveform is still selected because InitFull never forces
+	// temperature (0xE5) the way InitFast does.
 	InitFull: []Command{
-		{0x06, []byte{0x17, 0x17, 0x28, 0x17}}, // Booster soft start
-		{0x01, []byte{0x07, 0x07, 0x28, 0x17}},  // Power setting
-		{0x04, nil},                               // Power on (+ busy wait)
-		{0x00, []byte{0x1F}},                      // Panel setting
-		{0x61, []byte{0x03, 0x20, 0x01, 0xE0}},   // Resolution 800x480
-		{0x15, []byte{0x00}},                      // Dual SPI off
-		{0x50, []byte{0x10, 0x07}},                // VCOM interval
-		{0x60, []byte{0x22}},                      // TCON setting
+		{0x06, []byte{0x27, 0x27, 0x18, 0x17}}, // Booster soft start (matches InitFast)
+		{0x04, nil},                             // Power on (+ busy wait) — power setting inherits reset default
+		{0x00, []byte{0x1F}},                    // Panel setting
+		{0x61, []byte{0x03, 0x20, 0x01, 0xE0}}, // Resolution 800x480
+		{0x15, []byte{0x00}},                    // Dual SPI off
+		{0x50, []byte{0x10, 0x07}},              // VCOM interval
+		{0x60, []byte{0x22}},                    // TCON setting
 	},
 	InitFast: []Command{
 		{0x00, []byte{0x1F}},                    // Panel setting
