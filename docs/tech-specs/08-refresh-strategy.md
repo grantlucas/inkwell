@@ -115,6 +115,23 @@ refresh:
 - Otherwise, when content changed → **grayscale refresh**.
 - When content is unchanged → **skip**.
 
+> **The periodic tick must force a real hardware re-init, not just another
+> Display() push.** `App.refresh` only re-runs `EPD.Init` (hardware reset +
+> the mode's power-on/booster sequence) when the resulting waveform label
+> differs from what's already applied — that's a cheap way to avoid
+> needless resets on BW, where a routine `refreshFast` and the periodic
+> `refreshFull` are different labels and naturally trigger it. Gray4 has
+> only one waveform: both the periodic tick and a routine changed tick
+> resolve to `Init4Gray`, so the label never changes after the very first
+> cycle. Gating re-init on the label alone silently reduced the entire
+> burn-in cadence to a single `Init4Gray` at process start, followed by
+> nothing but `Display()` calls for the process's whole lifetime — the
+> periodic "clearing flash" never actually re-asserted power/booster state,
+> and the panel's contrast drifted (visible as fading and patchy fills)
+> over long-running operation. `refreshPlanner.next` therefore returns a
+> `periodic` bool alongside the `refreshKind`, and `App.refresh` forces
+> `EPD.Init` whenever `periodic` is true, independent of the label check.
+
 ### Configuration
 
 This burn-in / waveform cadence is **fixed internally**, not user-configurable
