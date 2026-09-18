@@ -307,12 +307,21 @@ func (a *App) Run(ctx context.Context) error {
 // partial-windowed force-drive settles the box inverted on real hardware. The
 // full-screen fast path reuses the proven Display sequence instead.
 func (a *App) refresh(buf, lastBuffer []byte, due bool, appliedMode *InitMode) (bool, error) {
-	kind := a.planner.next(due && !bytes.Equal(buf, lastBuffer))
+	kind, periodic := a.planner.next(due && !bytes.Equal(buf, lastBuffer))
 	if kind == refreshSkip {
 		return false, nil
 	}
 
-	if target := initModeForKind(kind); target != *appliedMode {
+	// The periodic burn-in cycle must force a genuine hardware re-init
+	// (reset + power-on/booster) even when the resulting waveform label is
+	// unchanged from *appliedMode. Gray4 has only one waveform, so its
+	// periodic tick and a routine tick both resolve to Init4Gray — the
+	// label-change check alone would never re-fire after the very first
+	// cycle, silently disabling the periodic clearing flash that's supposed
+	// to prevent the panel's electrical state (and thus contrast) from
+	// drifting over long-running operation.
+	target := initModeForKind(kind)
+	if periodic || target != *appliedMode {
 		if err := a.epd.Init(target); err != nil {
 			return false, fmt.Errorf("init display %q: %w", a.profile.Name, err)
 		}
