@@ -41,9 +41,21 @@ func newRefreshPlanner(color ColorDepth, fullEvery int) *refreshPlanner {
 	return &refreshPlanner{color: color, fullEvery: fullEvery}
 }
 
-// next advances the cycle counter and returns the refresh action to take.
-// changed reports whether the packed frame differs from what's on the panel.
-func (p *refreshPlanner) next(changed bool) refreshKind {
+// next advances the cycle counter and returns the refresh action to take,
+// plus whether this decision falls on the burn-in cadence. changed reports
+// whether the packed frame differs from what's on the panel.
+//
+// periodic distinguishes the cadence tick from a routine one even when they
+// select the same refreshKind. In BW mode the periodic tick's refreshFull
+// differs from a routine refreshFast, so the caller naturally re-inits on
+// the label change alone. Gray4 has only one waveform, so its periodic tick
+// and a routine tick both return refreshGray — the label never changes — and
+// periodic is the only signal the caller has that this tick must still force
+// a genuine hardware re-init (reset + power-on/booster) rather than reusing
+// whatever electrical state the panel has drifted into. Without it, the
+// "periodic burn-in refresh" degrades into an ordinary Display() push and
+// never actually re-clears the panel.
+func (p *refreshPlanner) next(changed bool) (kind refreshKind, periodic bool) {
 	p.tick++
 
 	// A full refresh on the first cycle and on the full cadence clears
@@ -51,20 +63,20 @@ func (p *refreshPlanner) next(changed bool) refreshKind {
 	// rule even when content is static.
 	if p.tick == 1 || (p.fullEvery > 0 && p.tick%p.fullEvery == 0) {
 		if p.color == Gray4 {
-			return refreshGray
+			return refreshGray, true
 		}
-		return refreshFull
+		return refreshFull, true
 	}
 
 	// Nothing changed since the last frame on the panel — don't reflash.
 	if !changed {
-		return refreshSkip
+		return refreshSkip, false
 	}
 
 	if p.color == Gray4 {
-		return refreshGray
+		return refreshGray, false
 	}
 
 	// BW: a single-flicker fast full refresh redraws the changed content cleanly.
-	return refreshFast
+	return refreshFast, false
 }
