@@ -39,6 +39,31 @@ Two facts drive the whole design:
    noise. `EPD.DisplayPartial` therefore takes both the new frame and the
    frame currently on the panel.
 
+## Busy-pin synchronization (waitIdle)
+
+Every waveform above is executed **autonomously by the panel controller**
+once triggered (`RefreshCmd`, 0x12, or a no-data init command like Power
+On) — it does not need further SPI traffic to progress, and it pulls the
+BUSY pin LOW for the whole duration (up to the ~5s full-refresh worst case
+above), raising it HIGH only once the pass is fully done. Sending it
+another command — a subsequent init/display call, or worst of all a
+hardware `Reset()` — while it's still LOW aborts or corrupts whatever part
+of the pass hadn't finished yet. That reads as a reproducible,
+position-dependent fade or ghost (e.g. rows the controller hadn't reached
+yet before being interrupted), not a uniform failure — a different
+signature than the periodic-reinit bug above, but with the same practical
+result.
+
+`Hardware.ReadBusy()` is documented as a single, instantaneous read of the
+pin — it does not block. `EPD.waitIdle()` is what turns that into an actual
+wait: it polls `ReadBusy()` (10ms interval, matching the Waveshare
+reference driver's own cadence) until it reports idle, or up to a 10s
+timeout, at which point it returns an error instead of hanging the render
+loop forever on a stuck or miswired pin. Every call site that triggers a
+waveform — `Display()`, `DisplayPartial()`, and `execSequence()`'s no-data
+commands (e.g. Power On) — goes through `waitIdle()` before returning,
+rather than calling `ReadBusy()` once and discarding the result.
+
 ## Reference implementations
 
 - **Waveshare `epd7in5_V2.py`** exposes `init()`, `init_fast()`,
