@@ -71,9 +71,9 @@ func Parse(r io.Reader) ([]Event, error) {
 			case "UID":
 				cur.UID = value
 			case "SUMMARY":
-				cur.Summary = value
+				cur.Summary = unescapeText(value)
 			case "LOCATION":
-				cur.Location = value
+				cur.Location = unescapeText(value)
 			case "STATUS":
 				// RFC 5545 3.8.1.11: a CANCELLED VEVENT has been
 				// called off, so it must never reach the screen —
@@ -142,6 +142,42 @@ func Parse(r io.Reader) ([]Event, error) {
 	})
 
 	return events, nil
+}
+
+// unescapeText reverses the TEXT escaping of RFC 5545 3.3.11: a
+// backslash escapes another backslash, a semicolon, a comma, or (as \n
+// or \N) a newline. Feeds lean on this heavily — a league team feed
+// packs a whole event heading into one SUMMARY separated by escaped
+// newlines — and
+// leaving the escapes in place puts literal backslash-n on the panel
+// and defeats word wrapping, which splits on real whitespace.
+//
+// An undefined escape (say \q) keeps both bytes: the sequence has no
+// RFC meaning, so dropping the backslash would silently corrupt a
+// summary rather than pass it through untouched.
+func unescapeText(s string) string {
+	if !strings.Contains(s, `\`) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\\' || i+1 == len(s) {
+			b.WriteByte(s[i])
+			continue
+		}
+		i++
+		switch s[i] {
+		case 'n', 'N':
+			b.WriteByte('\n')
+		case '\\', ';', ',':
+			b.WriteByte(s[i])
+		default:
+			b.WriteByte('\\')
+			b.WriteByte(s[i])
+		}
+	}
+	return b.String()
 }
 
 // splitProperty splits "NAME;params:value" into (NAME, value).

@@ -611,3 +611,68 @@ func TestParse_CancelledEventDoesNotSuppressFollowingEvent(t *testing.T) {
 		t.Errorf("UID = %q, want the non-cancelled event", events[0].UID)
 	}
 }
+
+// feedWithSummary builds a single-VEVENT feed whose SUMMARY carries the
+// given raw (still-escaped) property value.
+func feedWithSummary(summary string) string {
+	return "BEGIN:VCALENDAR\r\n" +
+		"BEGIN:VEVENT\r\n" +
+		"UID:evt@example.com\r\n" +
+		"SUMMARY:" + summary + "\r\n" +
+		"DTSTART:20260919T130000Z\r\n" +
+		"DTEND:20260919T140000Z\r\n" +
+		"END:VEVENT\r\n" +
+		"END:VCALENDAR\r\n"
+}
+
+func TestParse_UnescapesTextValues(t *testing.T) {
+	cases := []struct {
+		label string
+		raw   string
+		want  string
+	}{
+		{label: "escaped newline", raw: `Jane Doe\nRavens`, want: "Jane Doe\nRavens"},
+		{label: "uppercase escaped newline", raw: `Line\NBreak`, want: "Line\nBreak"},
+		{label: "escaped comma", raw: `Hamilton\, ON`, want: "Hamilton, ON"},
+		{label: "escaped semicolon", raw: `Practice\; Game`, want: "Practice; Game"},
+		{label: "escaped backslash", raw: `Back\\slash`, want: `Back\slash`},
+		{label: "escaped backslash before n is not a newline", raw: `Back\\nope`, want: `Back\nope`},
+		{label: "unknown escape is preserved", raw: `Odd\qEscape`, want: `Odd\qEscape`},
+		{label: "trailing backslash is preserved", raw: `Trailing\`, want: `Trailing\`},
+		{label: "plain text is unchanged", raw: `Team Standup`, want: `Team Standup`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			events, err := Parse(strings.NewReader(feedWithSummary(tc.raw)))
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if len(events) != 1 {
+				t.Fatalf("got %d events, want 1", len(events))
+			}
+			if events[0].Summary != tc.want {
+				t.Errorf("Summary = %q, want %q", events[0].Summary, tc.want)
+			}
+		})
+	}
+}
+
+func TestParse_UnescapesLocation(t *testing.T) {
+	feed := "BEGIN:VCALENDAR\r\n" +
+		"BEGIN:VEVENT\r\n" +
+		"UID:evt@example.com\r\n" +
+		"SUMMARY:Practice\r\n" +
+		`LOCATION:70 HEMPSTEAD DR\, HAMILTON` + "\r\n" +
+		"DTSTART:20260919T130000Z\r\n" +
+		"END:VEVENT\r\n" +
+		"END:VCALENDAR\r\n"
+
+	events, err := Parse(strings.NewReader(feed))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got, want := events[0].Location, "70 HEMPSTEAD DR, HAMILTON"; got != want {
+		t.Errorf("Location = %q, want %q", got, want)
+	}
+}
