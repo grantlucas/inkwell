@@ -24,6 +24,7 @@ func Parse(r io.Reader) ([]Event, error) {
 	var cur *Event
 	var curDuration time.Duration
 	var hasDuration bool
+	var cancelled bool
 	inEvent := false
 
 	for _, line := range lines {
@@ -33,8 +34,9 @@ func Parse(r io.Reader) ([]Event, error) {
 			cur = &Event{}
 			curDuration = 0
 			hasDuration = false
+			cancelled = false
 		case line == "END:VEVENT":
-			if inEvent && cur != nil && !cur.Start.IsZero() {
+			if inEvent && cur != nil && !cur.Start.IsZero() && !cancelled {
 				// EXDATE without RRULE would otherwise leave a
 				// Recurrence with Freq=0; Occurrences would route the
 				// event through expand(), the switch on Freq would
@@ -62,6 +64,7 @@ func Parse(r io.Reader) ([]Event, error) {
 			cur = nil
 			curDuration = 0
 			hasDuration = false
+			cancelled = false
 		case inEvent && cur != nil:
 			name, value := splitProperty(line)
 			switch name {
@@ -71,6 +74,14 @@ func Parse(r io.Reader) ([]Event, error) {
 				cur.Summary = value
 			case "LOCATION":
 				cur.Location = value
+			case "STATUS":
+				// RFC 5545 3.8.1.11: a CANCELLED VEVENT has been
+				// called off, so it must never reach the screen —
+				// league team feeds routinely keep cancelled practices
+				// in the feed alongside live ones. TENTATIVE and
+				// CONFIRMED are both still happening, so only
+				// CANCELLED is dropped.
+				cancelled = strings.EqualFold(value, "CANCELLED")
 			case "DTSTART":
 				t, allDay, err := parseDateTime(line)
 				if err != nil {

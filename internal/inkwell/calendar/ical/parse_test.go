@@ -538,3 +538,76 @@ END:VCALENDAR
 		t.Fatalf("got %d events, want 1", len(events))
 	}
 }
+
+// eventWithStatus builds a single-VEVENT feed carrying the given STATUS
+// line (empty status omits the property entirely).
+func eventWithStatus(status string) string {
+	statusLine := ""
+	if status != "" {
+		statusLine = "STATUS:" + status + "\r\n"
+	}
+	return "BEGIN:VCALENDAR\r\n" +
+		"BEGIN:VEVENT\r\n" +
+		"UID:evt@example.com\r\n" +
+		"SUMMARY:Practice\r\n" +
+		"DTSTART:20260919T130000Z\r\n" +
+		"DTEND:20260919T140000Z\r\n" +
+		statusLine +
+		"END:VEVENT\r\n" +
+		"END:VCALENDAR\r\n"
+}
+
+func TestParse_StatusFiltering(t *testing.T) {
+	cases := []struct {
+		label  string
+		status string
+		want   int
+	}{
+		{label: "cancelled event is dropped", status: "CANCELLED", want: 0},
+		{label: "lowercase cancelled is dropped", status: "cancelled", want: 0},
+		{label: "confirmed event is kept", status: "CONFIRMED", want: 1},
+		{label: "tentative event is kept", status: "TENTATIVE", want: 1},
+		{label: "missing status is kept", status: "", want: 1},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			events, err := Parse(strings.NewReader(eventWithStatus(tc.status)))
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if len(events) != tc.want {
+				t.Fatalf("got %d events, want %d", len(events), tc.want)
+			}
+		})
+	}
+}
+
+func TestParse_CancelledEventDoesNotSuppressFollowingEvent(t *testing.T) {
+	const feed = "BEGIN:VCALENDAR\r\n" +
+		"BEGIN:VEVENT\r\n" +
+		"UID:cancelled@example.com\r\n" +
+		"SUMMARY:Cancelled Practice\r\n" +
+		"DTSTART:20260919T130000Z\r\n" +
+		"DTEND:20260919T140000Z\r\n" +
+		"STATUS:CANCELLED\r\n" +
+		"END:VEVENT\r\n" +
+		"BEGIN:VEVENT\r\n" +
+		"UID:live@example.com\r\n" +
+		"SUMMARY:Game\r\n" +
+		"DTSTART:20260919T150000Z\r\n" +
+		"DTEND:20260919T160000Z\r\n" +
+		"END:VEVENT\r\n" +
+		"END:VCALENDAR\r\n"
+
+	events, err := Parse(strings.NewReader(feed))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	if events[0].UID != "live@example.com" {
+		t.Errorf("UID = %q, want the non-cancelled event", events[0].UID)
+	}
+}
