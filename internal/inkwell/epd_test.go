@@ -3,6 +3,7 @@ package inkwell
 import (
 	"bytes"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 )
@@ -777,5 +778,41 @@ func TestDisplayPartialSendDataErrors(t *testing.T) {
 		if err := NewEPD(ed, p).DisplayPartial(buf, buf, region); err == nil {
 			t.Errorf("expected error on SendData #%d", n)
 		}
+	}
+}
+
+// TestWaitIdleSettleDelays pins the vendor busy handshake around every
+// waveform trigger. The Waveshare reference driver never reads BUSY on the
+// instruction after the trigger command: it waits 100 ms first (the C source
+// notes the delay is "necessary, 200uS at least" — BUSY_N only *becomes* low
+// after the command, so an immediate read can see the pin still idle and
+// skip the wait entirely), polls at 10 ms, and settles 20 ms after BUSY
+// releases before the next command. With BusyCount=2 the recorded sleeps
+// must therefore be [trigger settle, poll, poll, idle settle].
+func TestWaitIdleSettleDelays(t *testing.T) {
+	want := []time.Duration{
+		defaultTriggerSettle, defaultBusyPollInterval, defaultBusyPollInterval, defaultIdleSettle,
+	}
+	tests := []struct {
+		label string
+		run   func(*EPD) error
+	}{
+		{"Display", func(e *EPD) error { return e.Display(make([]byte, e.profile.BufferSize())) }},
+		{"execSequence power on", func(e *EPD) error { return e.execSequence([]Command{{0x04, nil}}) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			m := &MockHardware{BusyCount: 2}
+			epd := NewEPD(m, smallTestProfile())
+			var got []time.Duration
+			epd.sleep = func(d time.Duration) { got = append(got, d) }
+
+			if err := tt.run(epd); err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(got, want) {
+				t.Errorf("sleeps = %v, want %v", got, want)
+			}
+		})
 	}
 }
