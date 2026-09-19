@@ -848,58 +848,6 @@ func TestFactory_ResolvesWeatherFromProvider(t *testing.T) {
 	})
 }
 
-// TestNew_NilLocationDefaultsToLocal keeps a directly-built Config (one that
-// skipped parseConfig, as programmatic callers and tests do) from carrying a
-// nil zone into the render path, where Format would panic.
-func TestNew_NilLocationDefaultsToLocal(t *testing.T) {
-	w := New(image.Rect(0, 0, 100, 100), nil, nil, time.Now, Config{})
-	if w.config.Location != time.Local {
-		t.Errorf("Location = %v, want %v", w.config.Location, time.Local)
-	}
-}
-
-func TestParseConfig_Timezone(t *testing.T) {
-	cases := []struct {
-		label   string
-		value   any
-		unset   bool
-		want    string // IANA name the parsed Location must report
-		wantErr bool
-	}{
-		{label: "unset falls back to the host zone", unset: true, want: time.Local.String()},
-		{label: "IANA name is loaded", value: "America/Toronto", want: "America/Toronto"},
-		{label: "positive-offset zone is loaded", value: "Europe/Berlin", want: "Europe/Berlin"},
-		{label: "UTC is loaded", value: "UTC", want: "UTC"},
-		{label: "unknown zone is rejected", value: "Mars/Olympus_Mons", wantErr: true},
-		{label: "non-string is rejected", value: 42, wantErr: true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.label, func(t *testing.T) {
-			cfg := minimalConfig()
-			if !tc.unset {
-				cfg["timezone"] = tc.value
-			}
-
-			c, err := parseConfig(cfg)
-			if tc.wantErr {
-				if err == nil {
-					t.Fatalf("parseConfig(%v) = nil error, want an error", tc.value)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("parseConfig: %v", err)
-			}
-			if c.Location == nil {
-				t.Fatal("Location is nil")
-			}
-			if got := c.Location.String(); got != tc.want {
-				t.Errorf("Location = %q, want %q", got, tc.want)
-			}
-		})
-	}
-}
-
 // TestWidget_RenderAnchorsWeekToDisplayZone pins that the 7-day window is
 // built in the configured zone rather than the clock's own. The instant used
 // here is late evening in Toronto but already the next calendar day in UTC, so
@@ -911,12 +859,11 @@ func TestWidget_RenderAnchorsWeekToDisplayZone(t *testing.T) {
 	}
 
 	// 2026-09-20T02:00Z is 2026-09-19 22:00 EDT — still Saturday locally.
-	now := time.Date(2026, 9, 20, 2, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 9, 20, 2, 0, 0, 0, time.UTC).In(toronto)
 	cal := &stubCalSource{}
 	w := New(image.Rect(0, 0, 800, 480), cal, nil, fixedClock(now), Config{
 		MaxEvents:   5,
 		ShowWeather: false,
-		Location:    toronto,
 	})
 	if err := w.Render(image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)); err != nil {
 		t.Fatalf("Render: %v", err)
@@ -950,11 +897,10 @@ func TestWidget_HighlightHourUsesDisplayZone(t *testing.T) {
 		t.Helper()
 		bounds := image.Rect(0, 0, 800, 480)
 		w := New(bounds, &stubCalSource{}, &stubWeatherSource{forecast: sampleForecast()},
-			fixedClock(now), Config{
+			fixedClock(now.In(loc)), Config{
 				MaxEvents:   5,
 				ShowWeather: true,
 				TempUnit:    "C",
-				Location:    loc,
 			})
 		frame := image.NewPaletted(bounds, widget.PaperPalette)
 		if err := w.Render(frame); err != nil {

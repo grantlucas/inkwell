@@ -465,3 +465,58 @@ weather:
 		t.Errorf("Weather.TempUnit = %q, want C (empty defaults)", cfg.Weather.TempUnit)
 	}
 }
+
+func TestLoadConfig_Timezone(t *testing.T) {
+	cases := []struct {
+		label   string
+		yaml    string
+		want    string // IANA name Location() must report
+		wantErr string
+	}{
+		{
+			label: "omitted falls back to the host zone",
+			yaml:  "display: waveshare_7in5_v2",
+			want:  time.Local.String(),
+		},
+		{
+			label: "IANA name is loaded",
+			yaml:  "display: waveshare_7in5_v2\ntimezone: America/Toronto",
+			want:  "America/Toronto",
+		},
+		{
+			label: "positive-offset zone is loaded",
+			yaml:  "display: waveshare_7in5_v2\ntimezone: Europe/Berlin",
+			want:  "Europe/Berlin",
+		},
+		{
+			label:   "rejects an unknown zone",
+			yaml:    "display: waveshare_7in5_v2\ntimezone: Mars/Olympus_Mons",
+			wantErr: "timezone",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			cfg, err := LoadConfig(strings.NewReader(tc.yaml))
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error mentioning %q, got nil", tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %q, want mention of %q", err.Error(), tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("LoadConfig: %v", err)
+			}
+			loc, err := cfg.Location()
+			if err != nil {
+				t.Fatalf("Location: %v", err)
+			}
+			if got := loc.String(); got != tc.want {
+				t.Errorf("Location = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
