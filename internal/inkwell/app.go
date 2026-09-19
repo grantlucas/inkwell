@@ -194,12 +194,6 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	defer signalReady()
 
-	mode := initModeFor(a.profile.Color)
-	if err := a.epd.Init(mode); err != nil {
-		a.epd.Close()
-		return fmt.Errorf("init display %q: %w", a.profile.Name, err)
-	}
-
 	// Start HTTP server if the backend supports it.
 	var serverErr <-chan error
 	if hs, ok := a.hw.(HTTPServer); ok {
@@ -234,12 +228,9 @@ func (a *App) Run(ctx context.Context) error {
 	ticker := time.NewTicker(a.interval)
 	defer ticker.Stop()
 
-	// appliedMode tracks the init sequence (waveform LUT) currently loaded so
-	// we only re-init when the refresh mode actually changes — re-initing
-	// every cycle would add a needless reset. lastBuffer is the frame last
-	// pushed to the panel, used both to detect unchanged content and to feed
-	// the controller's old plane on a partial refresh.
-	appliedMode := mode
+	// lastBuffer is the frame last pushed to the panel, used to detect
+	// unchanged content. The panel itself is initialised per push (see
+	// refresh), so there is nothing to set up before the first cycle.
 	var lastBuffer []byte
 
 	for {
@@ -266,7 +257,7 @@ func (a *App) Run(ctx context.Context) error {
 			return fmt.Errorf("pack image: %w", err)
 		}
 
-		pushed, err := a.refresh(buf, lastBuffer, due, &appliedMode)
+		pushed, err := a.refresh(buf, lastBuffer, due)
 		if err != nil {
 			a.epd.Close()
 			return err
@@ -287,11 +278,20 @@ func (a *App) Run(ctx context.Context) error {
 }
 
 // refresh applies the planner's decision for one cycle: it picks a refresh
-// waveform based on whether buf differs from the frame on the panel, re-inits
-// the controller when the waveform's LUT changes or the planner demands it
-// (forceInit), and pushes the full frame. appliedMode is updated in place.
-// It reports whether a frame was actually pushed (false on a skip), so the
-// caller knows whether to advance its last-pushed buffer.
+// waveform based on whether buf differs from the frame on the panel and, unless
+// the decision is to skip, runs the full vendor lifecycle around the push —
+// hardware reset plus the waveform's init sequence, the frame, then the sleep
+// sequence (VCOM setting, power off, deep sleep). It reports whether a frame
+// was actually pushed (false on a skip), so the caller knows whether to advance
+// its last-pushed buffer.
+//
+// Re-initialising before every push and sleeping after it is what the
+// Waveshare reference flow does and what the vendor wiki requires for a
+// long-running panel: left powered between refreshes the panel sits in its
+// high-voltage state, which the wiki says damages it irreparably, and an
+// energised panel is also what lets light on the TFT backplane disturb a
+// settled image. The reset-plus-init costs well under a second and every push
+// is already gated behind a widget cadence with a one-minute floor.
 //
 // due is the refresh-queue gate: a content change is only allowed to drive a
 // refresh when at least one widget is due this minute, so widgets on
@@ -306,30 +306,20 @@ func (a *App) Run(ctx context.Context) error {
 // trick, which the controller only resolves under the full/fast waveform — a
 // partial-windowed force-drive settles the box inverted on real hardware. The
 // full-screen fast path reuses the proven Display sequence instead.
-func (a *App) refresh(buf, lastBuffer []byte, due bool, appliedMode *InitMode) (bool, error) {
-	kind, forceInit := a.planner.next(due && !bytes.Equal(buf, lastBuffer))
+func (a *App) refresh(buf, lastBuffer []byte, due bool) (bool, error) {
+	kind := a.planner.next(due && !bytes.Equal(buf, lastBuffer))
 	if kind == refreshSkip {
 		return false, nil
 	}
 
-	// forceInit means the planner needs a genuine hardware re-init (reset +
-	// power-on/booster) even when the resulting waveform label is unchanged
-	// from *appliedMode — see refreshPlanner.next's doc comment. This is the
-	// BW burn-in cadence tick, and unconditionally every Gray4 push (Gray4's
-	// single waveform means the label-change check alone would never re-fire
-	// after the first cycle, and real-hardware testing showed the panel's
-	// electrical state drifts even between consecutive Gray4 pushes, not
-	// just over the long burn-in window).
-	target := initModeForKind(kind)
-	if forceInit || target != *appliedMode {
-		if err := a.epd.Init(target); err != nil {
-			return false, fmt.Errorf("init display %q: %w", a.profile.Name, err)
-		}
-		*appliedMode = target
+	if err := a.epd.Init(initModeForKind(kind)); err != nil {
+		return false, fmt.Errorf("init display %q: %w", a.profile.Name, err)
 	}
-
 	if err := a.epd.Display(buf); err != nil {
 		return false, fmt.Errorf("display: %w", err)
+	}
+	if err := a.epd.Sleep(); err != nil {
+		return false, fmt.Errorf("sleep display %q: %w", a.profile.Name, err)
 	}
 	return true, nil
 }
@@ -354,12 +344,10 @@ func initModeForKind(kind refreshKind) InitMode {
 // display error paths skip the clear so a partial/broken frame isn't
 // "corrected" on top of an already-failing state.
 //
-// The clear first re-initializes the panel to its full-refresh waveform.
-// The render loop only re-inits when the planned waveform changes, so in BW
-// mode it settles into the windowed fast-waveform steady state; a clear issued
-// in that state won't drive a full-screen refresh and the panel would retain
-// its last frame. Re-init (hardware reset + InitFull / Init4Gray) restores a
-// full-frame waveform before pushing the white frame.
+// The clear first re-initializes the panel: the render loop leaves it in deep
+// sleep after every push, and a sleeping controller ignores frame data until
+// it has been reset and initialised again. Init (hardware reset + InitFull /
+// Init4Gray) wakes it with a full-frame waveform before pushing the white frame.
 //
 // A re-init or Clear failure is reported but Close still runs — we want the
 // panel in deep sleep even if the refresh couldn't complete, otherwise we'd

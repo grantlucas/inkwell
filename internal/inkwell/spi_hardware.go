@@ -40,6 +40,14 @@ const (
 	// spidev.bufsiz can be raised at boot, but the Python reference
 	// driver chunks at the spidev layer anyway — match that behavior.
 	spiTxChunkSize = 4096
+
+	// pwrOffSettle is how long Close waits between the last command the EPD
+	// sent (the deep-sleep command from the sleep sequence) and cutting the
+	// panel's supply on PWR. The Waveshare reference does
+	// DEV_Delay_ms(2000) there and marks it "important, at least 2s" — the
+	// controller needs that long to finish entering deep sleep before its
+	// rail disappears.
+	pwrOffSettle = 2 * time.Second
 )
 
 // Injection seams for the periph.io entry points. Tests on non-Pi
@@ -67,6 +75,10 @@ type spiHardware struct {
 	dcPin   gpio.PinIO
 	busyPin gpio.PinIO
 	pwrPin  gpio.PinIO
+
+	// sleep backs the pwrOffSettle delay in Close; defaults to time.Sleep,
+	// tests replace it to avoid the real wait.
+	sleep func(time.Duration)
 }
 
 // SPIOption configures an spiHardware instance.
@@ -92,7 +104,7 @@ func WithGPIOPins(rst, dc, busy, pwr gpio.PinIO) SPIOption {
 // NewSPIHardware creates a hardware backend. Without functional options it
 // initialises periph.io and opens the real SPI bus and GPIO pins.
 func NewSPIHardware(opts ...SPIOption) (*spiHardware, error) {
-	h := &spiHardware{}
+	h := &spiHardware{sleep: time.Sleep}
 	for _, o := range opts {
 		o(h)
 	}
@@ -237,6 +249,8 @@ func (h *spiHardware) Reset() error {
 func (h *spiHardware) Close() error {
 	var errs []error
 
+	// Give the controller time to enter deep sleep before its rail goes away.
+	h.sleep(pwrOffSettle)
 	if err := h.pwrPin.Out(gpio.Low); err != nil {
 		errs = append(errs, fmt.Errorf("pwr pin low: %w", err))
 	}

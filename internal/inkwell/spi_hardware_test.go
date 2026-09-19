@@ -7,6 +7,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"periph.io/x/conn/v3"
 	"periph.io/x/conn/v3/gpio"
@@ -343,6 +344,7 @@ func TestSPIHardware_Reset_PulseSequence(t *testing.T) {
 
 func TestSPIHardware_Close_PowersDown(t *testing.T) {
 	hw, _, _, _, _, pwrPin := newTestSPIHardware(t)
+	hw.sleep = func(time.Duration) {}
 
 	if err := hw.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -376,6 +378,7 @@ func TestSPIHardware_Close_CollectsErrors(t *testing.T) {
 		t.Fatalf("NewSPIHardware: %v", err)
 	}
 
+	hw.sleep = func(time.Duration) {}
 	closeErr := hw.Close()
 	if closeErr == nil {
 		t.Fatal("expected error from Close")
@@ -772,6 +775,7 @@ func TestSPIHardware_Close_PortCloseError(t *testing.T) {
 	}
 	hw.port = port
 
+	hw.sleep = func(time.Duration) {}
 	closeErr := hw.Close()
 	if !errors.Is(closeErr, portErr) {
 		t.Errorf("Close error = %v, want %v", closeErr, portErr)

@@ -450,69 +450,38 @@ color_mode: bw
 func TestApp_RefreshGateDefersUntilDue(t *testing.T) {
 	app, _ := newBWRefreshApp(t)
 	size := app.profile.BufferSize()
-	mode := InitFull
 	frameA := make([]byte, size)
 	frameB := bytes.Repeat([]byte{0xFF}, size)
 
 	// Cycle 1: forced full refresh (tick==1) regardless of due.
-	if pushed, err := app.refresh(frameA, nil, false, &mode); err != nil || !pushed {
+	if pushed, err := app.refresh(frameA, nil, false); err != nil || !pushed {
 		t.Fatalf("cycle 1 forced full: pushed=%v err=%v, want pushed=true", pushed, err)
 	}
 	// Cycle 2: content changed but nothing is due — defer (skip).
-	if pushed, err := app.refresh(frameB, frameA, false, &mode); err != nil || pushed {
+	if pushed, err := app.refresh(frameB, frameA, false); err != nil || pushed {
 		t.Fatalf("cycle 2 not-due: pushed=%v err=%v, want pushed=false", pushed, err)
 	}
 	// Cycle 3: the same deferred change is now due — push it.
-	if pushed, err := app.refresh(frameB, frameA, true, &mode); err != nil || !pushed {
+	if pushed, err := app.refresh(frameB, frameA, true); err != nil || !pushed {
 		t.Fatalf("cycle 3 due: pushed=%v err=%v, want pushed=true", pushed, err)
 	}
 }
 
-// TestApp_RefreshBWRoutineCycleIsFullScreenFast confirms that in BW mode, once
-// an initial full refresh has run, a routine content change drives a full-screen
-// FAST refresh: the InitFast waveform (identified by its unique 0xE5 -> 0x5A
-// force-temperature load) with NO partial-window command (0x90). A windowed
-// partial refresh was abandoned because the force-drive it needs settles the box
-// inverted on real hardware (see inkwell-6jq); each change now does one
-// full-screen flash via the proven Display path instead.
-func TestApp_RefreshBWRoutineCycleIsFullScreenFast(t *testing.T) {
-	app, mock := newBWRefreshApp(t)
-	size := app.profile.BufferSize()
-	mode := InitFull // the LUT a startup full init leaves loaded
-	frameA := make([]byte, size)
-	frameB := bytes.Repeat([]byte{0xFF}, size)
-
-	if pushed, err := app.refresh(frameA, nil, true, &mode); err != nil || !pushed {
-		t.Fatalf("cycle 1 (full): pushed=%v err=%v", pushed, err)
+// cmdRegs returns the command registers of an init sequence, in order.
+func cmdRegs(seq []Command) []byte {
+	regs := make([]byte, 0, len(seq))
+	for _, c := range seq {
+		regs = append(regs, c.Reg)
 	}
-	if pushed, err := app.refresh(frameB, frameA, true, &mode); err != nil || !pushed {
-		t.Fatalf("cycle 2 (full-screen fast): pushed=%v err=%v", pushed, err)
-	}
-
-	if slices.Contains(mock.Commands(), 0x90) {
-		t.Error("routine BW cycle must NOT issue a partial-window command (0x90); it is a full-screen refresh")
-	}
-	var sawFastTemp bool
-	for i, c := range mock.Calls {
-		if c.Type == "command" && c.Data[0] == 0xE5 && i+1 < len(mock.Calls) &&
-			mock.Calls[i+1].Type == "data" && len(mock.Calls[i+1].Data) == 1 && mock.Calls[i+1].Data[0] == 0x5A {
-			sawFastTemp = true
-			break
-		}
-	}
-	if !sawFastTemp {
-		t.Error("expected the fast waveform (InitFast, 0xE5 -> 0x5A) on a routine BW cycle, got none")
-	}
+	return regs
 }
 
-// newGray4RefreshApp mirrors newBWRefreshApp for Gray4-mode dispatch tests.
-func newGray4RefreshApp(t *testing.T, fullEvery int) (*App, *MockHardware) {
+// newRefreshApp builds an App in the given color mode for driving App.refresh
+// directly, with a far-off full cadence so cycle 1 is the forced full/gray
+// refresh and every changed cycle after it is the routine waveform.
+func newRefreshApp(t *testing.T, colorMode string) (*App, *MockHardware) {
 	t.Helper()
-	cfg, err := LoadConfig(strings.NewReader(`
-display: waveshare_7in5_v2
-backend: preview
-color_mode: gray4
-`))
+	cfg, err := LoadConfig(strings.NewReader("display: waveshare_7in5_v2\nbackend: preview\ncolor_mode: " + colorMode + "\n"))
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
@@ -521,8 +490,71 @@ color_mode: gray4
 	if err != nil {
 		t.Fatalf("NewApp: %v", err)
 	}
-	app.planner = newRefreshPlanner(Gray4, fullEvery)
+	app.planner = newRefreshPlanner(app.profile.Color, 1000)
 	return app, mock
+}
+
+// TestApp_RefreshPushLifecycle pins the vendor lifecycle for every frame
+// pushed to the panel: a hardware reset and the mode's init sequence, the two
+// planes and the refresh trigger, then the sleep sequence (VCOM, power off,
+// deep sleep). The Waveshare wiki is explicit that the panel must not be left
+// in its high-voltage state between refreshes ("will damage the e-Paper and
+// cannot be repaired"), and leaving it energised is also what lets light on
+// the TFT backplane disturb a settled image. So every push, routine or
+// periodic, in either color mode, runs init → display → sleep, and a skipped
+// cycle touches the hardware not at all. No windowed partial command (0x90)
+// appears on the BW path (see ADR 0008).
+func TestApp_RefreshPushLifecycle(t *testing.T) {
+	frame := func(size int, b byte) []byte { return bytes.Repeat([]byte{b}, size) }
+	tests := []struct {
+		label       string
+		colorMode   string
+		firstInit   []Command // waveform loaded on the forced first cycle
+		routineInit []Command // waveform loaded on a routine changed cycle
+	}{
+		{"bw: full then fast", "bw", Waveshare7in5V2.InitFull, Waveshare7in5V2.InitFast},
+		{"gray4: gray every push", "gray4", Waveshare7in5V2.Init4Gray, Waveshare7in5V2.Init4Gray},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			app, mock := newRefreshApp(t, tt.colorMode)
+			size := app.profile.BufferSize()
+			push := []byte{0x10, 0x13, 0x12}
+			sleep := cmdRegs(Waveshare7in5V2.SleepSequence)
+
+			cycles := []struct {
+				name       string
+				buf, last  []byte
+				due        bool
+				wantPushed bool
+				wantInit   []Command
+			}{
+				{"forced first cycle", frame(size, 0x00), nil, true, true, tt.firstInit},
+				{"routine changed cycle", frame(size, 0xFF), frame(size, 0x00), true, true, tt.routineInit},
+				{"unchanged cycle skips", frame(size, 0xFF), frame(size, 0xFF), true, false, nil},
+			}
+			for _, c := range cycles {
+				mock.Calls = nil
+				pushed, err := app.refresh(c.buf, c.last, c.due)
+				if err != nil || pushed != c.wantPushed {
+					t.Fatalf("%s: pushed=%v err=%v, want pushed=%v", c.name, pushed, err, c.wantPushed)
+				}
+				if !c.wantPushed {
+					if len(mock.Calls) != 0 {
+						t.Errorf("%s: %d hardware calls, want none", c.name, len(mock.Calls))
+					}
+					continue
+				}
+				if got := countResets(mock); got != 1 {
+					t.Errorf("%s: resets = %d, want exactly 1 before the init sequence", c.name, got)
+				}
+				want := slices.Concat(cmdRegs(c.wantInit), push, sleep)
+				if got := mock.Commands(); !bytes.Equal(got, want) {
+					t.Errorf("%s: commands = %# x\n                     want %# x", c.name, got, want)
+				}
+			}
+		})
+	}
 }
 
 // countResets returns how many hardware Reset() calls are recorded so far.
@@ -534,55 +566,6 @@ func countResets(mock *MockHardware) int {
 		}
 	}
 	return n
-}
-
-// TestApp_RefreshGray4EveryPushForcesReInit confirms every Gray4 push — not
-// just the periodic burn-in cycle — performs a genuine hardware re-init
-// (reset + the Init4Gray power-on/booster sequence), even though the
-// resulting waveform label (Init4Gray) never changes from what's already
-// applied. An earlier version of this fix forced the re-init only on the
-// periodic cadence tick; real hardware testing showed the panel rendered
-// crisp immediately after that forced re-init and then visibly faded on
-// the very next routine push, meaning the electrical state drifts even
-// between consecutive Gray4 pushes, not just over the long burn-in window
-// (inkwell fading investigation, Sept 2026). Gray4 has no cheaper steady
-// state worth preserving — a label-change check alone would never re-fire
-// after the first cycle anyway, since Gray4 has only one waveform — so
-// every push now forces it, matching the upstream Waveshare reference
-// driver's own pattern of re-running its 4-gray init before every 4-gray
-// display call.
-func TestApp_RefreshGray4EveryPushForcesReInit(t *testing.T) {
-	app, mock := newGray4RefreshApp(t, 3)
-	size := app.profile.BufferSize()
-	mode := Init4Gray // the LUT a startup Init4Gray leaves loaded
-	frameA := make([]byte, size)
-	frameB := bytes.Repeat([]byte{0xFF}, size)
-	frameC := make([]byte, size)
-
-	// Cycle 1 (tick 1): forced periodic refresh.
-	if pushed, err := app.refresh(frameA, nil, true, &mode); err != nil || !pushed {
-		t.Fatalf("cycle 1: pushed=%v err=%v, want pushed=true", pushed, err)
-	}
-	if got := countResets(mock); got != 1 {
-		t.Fatalf("resets after cycle 1 = %d, want 1", got)
-	}
-
-	// Cycle 2 (tick 2): routine changed cycle, same waveform label as
-	// cycle 1 — must still force a re-init.
-	if pushed, err := app.refresh(frameB, frameA, true, &mode); err != nil || !pushed {
-		t.Fatalf("cycle 2: pushed=%v err=%v, want pushed=true", pushed, err)
-	}
-	if got := countResets(mock); got != 2 {
-		t.Fatalf("resets after cycle 2 (routine) = %d, want 2 — every Gray4 push must force a hardware re-init", got)
-	}
-
-	// Cycle 3 (tick 3, fullEvery=3): the periodic burn-in cycle again.
-	if pushed, err := app.refresh(frameC, frameB, true, &mode); err != nil || !pushed {
-		t.Fatalf("cycle 3: pushed=%v err=%v, want pushed=true", pushed, err)
-	}
-	if got := countResets(mock); got != 3 {
-		t.Fatalf("resets after cycle 3 (periodic) = %d, want 3", got)
-	}
 }
 
 func TestRun_WidgetRenderError(t *testing.T) {
