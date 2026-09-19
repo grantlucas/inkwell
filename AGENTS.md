@@ -104,11 +104,14 @@ cleanly settles the box inverted under the partial waveform on real
 hardware (inkwell-6jq). The flash is hardware-only — the web preview can't
 show it.
 
-Every push starts with a hardware reset + the waveform's init sequence,
-then the frame. The panel stays powered between pushes: powering it off
-after each refresh (the vendor wiki's advice for long-running panels) was
-tried on hardware and collapsed the freshly written image within half a
-second, so the sleep sequence runs only at shutdown (ADR 0012). The init
+Every push runs a hardware reset + the waveform's init sequence, the frame,
+then `EPD.Sleep`: a settle of a few seconds, the sleep sequence (power off
+and deep sleep), and the deep-sleep settle. The panel is not left energised
+between refreshes — the vendor says that damages it, and an energised panel
+is what lets light on the TFT backplane fade a settled image. The settle
+before the power-off is load-bearing: issued 20 ms after BUSY released, the
+power-off wiped a freshly written image edge to edge on real hardware
+(ADR 0012). Don't shorten it without the photo protocol in ADR 0014. The init
 sequences in `profile.go` are pinned byte for byte by test — `InitFull`
 deliberately keeps the controller's reset-default drive rails instead of
 the vendor's `0x01` bytes, which under-drove this panel (ADR 0013). Do not

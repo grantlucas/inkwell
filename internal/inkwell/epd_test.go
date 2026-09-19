@@ -853,10 +853,12 @@ func TestWaitIdleSettleDelays(t *testing.T) {
 	}{
 		{"Display", func(e *EPD) error { return e.Display(make([]byte, e.profile.BufferSize())) }, handshake},
 		{"execSequence power on", func(e *EPD) error { return e.execSequence([]Command{{0x04, nil}}) }, handshake},
-		// Sleep's power-off command goes through the same handshake, and the
-		// deep-sleep command is followed by the vendor's 2 s settle before the
-		// controller may be reset or have its supply cut.
-		{"Sleep", (*EPD).Sleep, slices.Concat(handshake, []time.Duration{defaultDeepSleepSettle})},
+		// Sleep waits before touching the panel at all (powering off 20 ms after
+		// a refresh wiped the image on hardware), runs the power-off command
+		// through the same handshake, and follows the deep-sleep command with the
+		// vendor's 2 s settle before the controller may be reset or have its
+		// supply cut.
+		{"Sleep", (*EPD).Sleep, slices.Concat([]time.Duration{defaultPreSleepSettle}, handshake, []time.Duration{defaultDeepSleepSettle})},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {

@@ -41,10 +41,10 @@ with no cutouts behind the active area, and no gaps at the edges that admit
 light from a lamp above or a window behind. A liner of black card inside the
 case is sufficient; the panel's own back sheet is thin.
 
-Inkwell keeps the panel powered between refreshes
-([ADR 0012](0012-sleep-the-panel-between-refreshes.md) records why the
-alternative failed), so a settled image remains sensitive to stray light for
-as long as it is displayed. The enclosure is the only protection.
+Inkwell powers the panel off a few seconds after each refresh
+([ADR 0012](0012-sleep-the-panel-between-refreshes.md)), so a settled image
+is not sensitive to stray light between refreshes; light still weakens the
+refresh while it runs, so that does not license leaving the back open.
 
 ## Consequences
 
