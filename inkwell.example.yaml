@@ -74,8 +74,27 @@ dashboard:
           bounds: [0, 52, 800, 480]
           refresh: "15m"   # how often the calendar/weather may refresh the panel
           config:
+            # Each feed is an ICS URL string, or an object with optional
+            # per-feed `rules` that rewrite or drop that feed's events.
+            # Useful when a feed prepends the same boilerplate to every
+            # event (league calendars tend to lead with player and team),
+            # which crowds the part that differs out of a narrow column.
+            # Rules apply to the event summary only, run in order, and
+            # an invalid regex fails config loading. See the weekly
+            # widget README section "Feed rules".
             feeds:
               - "https://example.com/my-calendar.ics"
+              # - url: "https://example.com/team-calendar.ics"
+              #   name: "Hockey"          # names this feed in config errors
+              #   rules:
+              #     # No `replace` deletes the match — here, a fixed prefix.
+              #     - match: '^Jane Doe\n(Ravens\n)?'
+              #     # `$1` expands capture groups.
+              #     - match: 'vs (.*)'
+              #       replace: 'v $1'
+              #     # `exclude` drops the event entirely.
+              #     - match: 'Bottle Drive'
+              #       exclude: true
             show_weather: true
             show_weather_label: true
             max_events: 5

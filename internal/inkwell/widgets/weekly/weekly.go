@@ -20,7 +20,7 @@ const defaultWeatherH = 145
 
 // Config holds parsed weekly-calendar configuration.
 type Config struct {
-	Feeds            []string
+	Feeds            []calendar.Feed
 	Refresh          time.Duration
 	WeekStart        time.Weekday
 	MaxEvents        int
@@ -249,20 +249,11 @@ func parseConfig(config map[string]any) (Config, error) {
 	if !ok {
 		return cfg, fmt.Errorf("weekly-calendar: feeds is required")
 	}
-	feedList, ok := f.([]any)
-	if !ok {
-		return cfg, fmt.Errorf("weekly-calendar: feeds must be a list, got %T", f)
+	feeds, err := parseFeeds(f)
+	if err != nil {
+		return cfg, err
 	}
-	if len(feedList) == 0 {
-		return cfg, fmt.Errorf("weekly-calendar: feeds must not be empty")
-	}
-	for i, item := range feedList {
-		s, ok := item.(string)
-		if !ok {
-			return cfg, fmt.Errorf("weekly-calendar: feeds[%d] must be a string, got %T", i, item)
-		}
-		cfg.Feeds = append(cfg.Feeds, s)
-	}
+	cfg.Feeds = feeds
 
 	if v, ok := config["refresh"]; ok {
 		s, ok := v.(string)

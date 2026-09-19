@@ -22,17 +22,19 @@ type HTTPClient interface {
 // error branch. Production paths go straight through.
 var newRequestWithContext = http.NewRequestWithContext
 
-// HTTPSource fetches and parses iCal feeds from a list of URLs.
+// HTTPSource fetches and parses iCal feeds from a list of Feeds.
 // It merges events from all feeds, deduplicates by UID, and filters
-// to the requested time range.
+// to the requested time range. Each feed's rules are applied to its own
+// events as they are parsed, so everything downstream — dedup, caching,
+// rendering — only ever sees cleaned-up events.
 type HTTPSource struct {
-	urls   []string
+	feeds  []Feed
 	client HTTPClient
 }
 
-// NewHTTPSource creates an HTTPSource that fetches from the given URLs.
-func NewHTTPSource(urls []string, client HTTPClient) *HTTPSource {
-	return &HTTPSource{urls: urls, client: client}
+// NewHTTPSource creates an HTTPSource that fetches from the given feeds.
+func NewHTTPSource(feeds []Feed, client HTTPClient) *HTTPSource {
+	return &HTTPSource{feeds: feeds, client: client}
 }
 
 // Events fetches all feeds, merges, deduplicates, filters to [start, end),
@@ -41,8 +43,8 @@ func (s *HTTPSource) Events(ctx context.Context, start, end time.Time) ([]Event,
 	seen := make(map[string]bool)
 	var all []Event
 
-	for _, url := range s.urls {
-		if err := s.fetchFeed(ctx, url, start, end, seen, &all); err != nil {
+	for _, feed := range s.feeds {
+		if err := s.fetchFeed(ctx, feed, start, end, seen, &all); err != nil {
 			return nil, err
 		}
 	}
@@ -58,7 +60,8 @@ func (s *HTTPSource) Events(ctx context.Context, start, end time.Time) ([]Event,
 // is closed at the end of each iteration rather than lingering until
 // Events returns. Close errors are surfaced when no other error
 // preceded them.
-func (s *HTTPSource) fetchFeed(ctx context.Context, url string, start, end time.Time, seen map[string]bool, all *[]Event) (retErr error) {
+func (s *HTTPSource) fetchFeed(ctx context.Context, feed Feed, start, end time.Time, seen map[string]bool, all *[]Event) (retErr error) {
+	url := feed.URL
 	req, err := newRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("build request %q: %w", url, err) //nolint:goerr113 // only reachable via test override
@@ -84,6 +87,10 @@ func (s *HTTPSource) fetchFeed(ctx context.Context, url string, start, end time.
 
 	for _, e := range events {
 		if seen[e.UID] {
+			continue
+		}
+		e, keep := applyRules(e, feed.Rules)
+		if !keep {
 			continue
 		}
 		// Filter: event overlaps [start, end) if event.Start < end && event.End > start.
