@@ -33,13 +33,6 @@ type Config struct {
 	WeatherModel     weather.Model
 	HighlightHour    int
 
-	// Location is the zone event clock labels and day columns render in.
-	// It defaults to time.Local but is worth setting explicitly: a headless
-	// device with an unconfigured system TZ otherwise renders every event in
-	// UTC, which looks correct for feeds that happen to serialize in the
-	// viewer's zone and is hours off for the rest.
-	Location *time.Location
-
 	// Presence of each weather override in this widget's config. When false,
 	// Factory fills the corresponding field from the shared Provider's
 	// defaults, so a dashboard sets location/model/unit once at the top level.
@@ -59,14 +52,7 @@ type Widget struct {
 }
 
 // New creates a weekly Widget with pre-built data sources.
-//
-// A zero Config.Location falls back to time.Local so a caller that builds
-// Config directly (rather than through parseConfig) gets the documented
-// default instead of a nil-location panic at render time.
 func New(bounds image.Rectangle, cal calendar.Source, ws weather.Source, now func() time.Time, cfg Config) *Widget {
-	if cfg.Location == nil {
-		cfg.Location = time.Local
-	}
 	return &Widget{
 		bounds:  bounds,
 		cal:     cal,
@@ -83,12 +69,13 @@ func (w *Widget) Bounds() image.Rectangle { return w.bounds }
 func (w *Widget) Render(frame *image.Paletted) error {
 	fillWhite(frame, w.bounds)
 
-	// Anchor everything day- and hour-derived to the configured display
-	// zone, not the clock's own. w.now() is typically time.Now (host local),
-	// but a device with an unconfigured system TZ reports UTC, which would
-	// silently shift the whole 7-day window and the weather highlight hour.
-	now := w.now().In(w.config.Location)
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, w.config.Location)
+	// The clock arrives already in the dashboard's display zone (see the
+	// top-level timezone config), so everything day- and hour-derived reads
+	// from it rather than re-resolving a zone here. Events carry whatever
+	// zone their feed serialized them with, so they still need converting.
+	now := w.now()
+	loc := now.Location()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 
 	weekStart := today
 	weekEnd := today.AddDate(0, 0, 7)
@@ -157,7 +144,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 		renderEvents(frame, col.Events, dayEvents, eventOptions{
 			MaxEvents:    w.config.MaxEvents,
 			ShowLocation: w.config.ShowLocation,
-			Location:     w.config.Location,
+			Location:     loc,
 		})
 
 		if !col.IsLast {
@@ -265,7 +252,6 @@ func parseConfig(config map[string]any) (Config, error) {
 		ShowWeather:      true,
 		ShowWeatherLabel: true,
 		HighlightHour:    15,
-		Location:         time.Local,
 	}
 
 	f, ok := config["feeds"]
@@ -306,18 +292,6 @@ func parseConfig(config map[string]any) (Config, error) {
 		default:
 			return cfg, fmt.Errorf("weekly-calendar: invalid week_start %q (must be monday or sunday)", s)
 		}
-	}
-
-	if v, ok := config["timezone"]; ok {
-		s, ok := v.(string)
-		if !ok {
-			return cfg, fmt.Errorf("weekly-calendar: timezone must be a string, got %T", v)
-		}
-		loc, err := time.LoadLocation(s)
-		if err != nil {
-			return cfg, fmt.Errorf("weekly-calendar: invalid timezone %q: %w", s, err)
-		}
-		cfg.Location = loc
 	}
 
 	if v, ok := config["max_events"]; ok {

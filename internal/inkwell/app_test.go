@@ -1507,3 +1507,53 @@ image:
 		t.Fatal("expected non-nil App")
 	}
 }
+
+// TestNewApp_TimezoneZonesTheWidgetClock pins that the dashboard-wide timezone
+// reaches every widget, not just the calendar. clock, date and fuzzy_clock all
+// render with w.now().Format(...), so the zone has to ride on the clock the
+// factories receive rather than being re-resolved per widget.
+func TestNewApp_TimezoneZonesTheWidgetClock(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Timezone = "America/Toronto"
+	cfg.Dashboard.Screens = []ScreenConfig{{
+		Name: "s",
+		Widgets: []WidgetConfig{{
+			Type:    "capture",
+			Bounds:  [4]int{0, 0, 10, 10},
+			Refresh: WidgetRefresh{set: true, every: time.Minute},
+		}},
+	}}
+
+	var got func() time.Time
+	reg := widget.NewRegistry()
+	reg.Register("capture", func(bounds image.Rectangle, _ map[string]any, deps widget.Deps) (widget.Widget, error) {
+		got = deps.Now
+		return &changingWidget{bounds: bounds}, nil
+	})
+
+	if _, err := NewApp(cfg, WithHardware(&MockHardware{}), WithRegistry(reg)); err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if got == nil {
+		t.Fatal("widget factory never ran")
+	}
+	if name := got().Location().String(); name != "America/Toronto" {
+		t.Errorf("widget clock zone = %q, want %q", name, "America/Toronto")
+	}
+}
+
+// TestNewApp_InvalidTimezone covers a Config built in code rather than through
+// LoadConfig, which is the only way an unresolvable zone reaches NewApp —
+// LoadConfig rejects it first.
+func TestNewApp_InvalidTimezone(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Timezone = "Mars/Olympus_Mons"
+
+	_, err := NewApp(cfg, WithHardware(&MockHardware{}))
+	if err == nil {
+		t.Fatal("expected an error for an unknown timezone")
+	}
+	if !strings.Contains(err.Error(), "timezone") {
+		t.Errorf("error = %q, want mention of timezone", err.Error())
+	}
+}

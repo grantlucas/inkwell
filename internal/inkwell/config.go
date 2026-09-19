@@ -103,6 +103,7 @@ type Config struct {
 	Backend         string          `yaml:"backend"`
 	ColorMode       string          `yaml:"color_mode,omitempty"`
 	ClearOnShutdown bool            `yaml:"clear_on_shutdown"`
+	Timezone        string          `yaml:"timezone,omitempty"`
 	Preview         PreviewConfig   `yaml:"preview,omitempty"`
 	Image           ImageConfig     `yaml:"image,omitempty"`
 	Weather         WeatherConfig   `yaml:"weather,omitempty"`
@@ -118,6 +119,26 @@ type WeatherConfig struct {
 	Longitude float64 `yaml:"longitude"`
 	Model     string  `yaml:"model"`
 	TempUnit  string  `yaml:"temp_unit"`
+}
+
+// Location resolves the dashboard-wide display timezone. An empty Timezone
+// means the host's system zone, which is right on a workstation and often
+// wrong on an appliance: a device imaged without a timezone reports UTC, and
+// since most calendar feeds serialize events as UTC instants they would then
+// render at their raw UTC clock rather than being converted. Naming the zone
+// here makes the panel independent of how the device was provisioned.
+//
+// The zone database is embedded by cmd/inkwell (time/tzdata), so this does not
+// depend on a system zoneinfo package.
+func (c *Config) Location() (*time.Location, error) {
+	if c.Timezone == "" {
+		return time.Local, nil
+	}
+	loc, err := time.LoadLocation(c.Timezone)
+	if err != nil {
+		return nil, fmt.Errorf("timezone: %w", err)
+	}
+	return loc, nil
 }
 
 // PreviewConfig holds web preview server settings.
@@ -174,6 +195,10 @@ func LoadConfig(r io.Reader) (*Config, error) {
 		// valid
 	default:
 		return nil, fmt.Errorf("invalid color_mode: %q (must be bw or gray4)", cfg.ColorMode)
+	}
+
+	if _, err := cfg.Location(); err != nil {
+		return nil, err
 	}
 
 	if err := validateWeather(&cfg.Weather); err != nil {

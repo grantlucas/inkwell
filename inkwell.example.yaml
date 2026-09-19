@@ -17,6 +17,14 @@ color_mode: gray4  # 4-level grayscale (recommended). Set to "bw" for
 # How often the panel does its periodic full/ghosting-clearing flash is fixed
 # internally (it's a hardware property, not user config). What you DO control is
 # each widget's `refresh:` below — how often that widget may refresh the panel.
+# IANA zone every widget renders in — clock and date text, the calendar's
+# day columns and event times, and the hour the weather chart highlights.
+# Defaults to the host's system zone. Set it explicitly on a device: a Pi
+# imaged without a timezone reports UTC, and since calendar feeds serialize
+# most events as UTC instants, those events would render hours off (and a
+# whole day out near midnight) while the clock widget quietly shows UTC too.
+timezone: "America/Toronto"
+
 preview:
   port: 8080
 
@@ -100,12 +108,6 @@ dashboard:
             show_weather: true
             show_weather_label: true
             max_events: 5
-            # IANA zone the day columns and event clock labels render in.
-            # Defaults to the host's system timezone. Set it explicitly on a
-            # headless device: most feeds serialize events as UTC instants, so
-            # a Pi whose system TZ was never configured renders every event
-            # hours off (and can be a whole day out near midnight).
-            timezone: "America/Toronto"
             # Location, model, and temp_unit are inherited from the top-level
             # weather: block above. Override any of them here per widget, e.g.:
             #   longitude: -123.1   # show a different city in this widget
