@@ -104,15 +104,17 @@ cleanly settles the box inverted under the partial waveform on real
 hardware (inkwell-6jq). The flash is hardware-only — the web preview can't
 show it.
 
-Every push runs the vendor lifecycle: hardware reset + the waveform's init
-sequence, the frame, then the sleep sequence (power off + deep sleep). The
-panel is never left energised between refreshes — Waveshare says that
-damages it, and an energised panel is what lets light on the TFT backplane
-fade a settled image. The init sequences in `profile.go` are the vendor
-driver's byte for byte and are pinned by test; do not "tune" them against
-the preview. If the panel fades region-by-region within a second of a
-refresh settling, suspect light reaching the back of the panel before
-suspecting the driver (ADR 0014).
+Every push starts with a hardware reset + the waveform's init sequence,
+then the frame. The panel stays powered between pushes: powering it off
+after each refresh (the vendor wiki's advice for long-running panels) was
+tried on hardware and collapsed the freshly written image within half a
+second, so the sleep sequence runs only at shutdown (ADR 0012). The init
+sequences in `profile.go` are pinned byte for byte by test — `InitFull`
+deliberately keeps the controller's reset-default drive rails instead of
+the vendor's `0x01` bytes, which under-drove this panel (ADR 0013). Do not
+"tune" them against the preview. If the panel fades region-by-region within
+a second of a refresh settling, suspect light reaching the back of the panel
+before suspecting the driver (ADR 0014).
 
 *When* a change is allowed to push is a further axis. The burn-in/waveform
 cadence is fixed internally (`defaultFullEvery` in `refresh.go`), not user

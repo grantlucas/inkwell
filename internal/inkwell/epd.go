@@ -280,9 +280,9 @@ func (d *EPD) Clear() error {
 // Sleep puts the display into deep sleep mode by executing the profile's
 // sleep sequence (VCOM setting, power off, deep sleep command), then waits
 // deepSleepSettle so the controller has finished entering deep sleep before
-// anything else happens to it — the next push's Reset, or Close cutting its
-// supply. It is called after every push (see App.refresh), so this settle is
-// the tail of every refresh cycle, not just shutdown.
+// anything else happens to it, such as Close cutting its supply. It runs from
+// Close only: sleeping the panel after each push was tried and undid the
+// refresh on real hardware (see App.refresh and ADR 0012).
 func (d *EPD) Sleep() error {
 	if err := d.execSequence(d.profile.SleepSequence); err != nil {
 		return err
@@ -292,10 +292,9 @@ func (d *EPD) Sleep() error {
 }
 
 // Close puts the display to sleep and then releases hardware resources. The
-// hardware is released even if the sleep sequence fails: the render loop
-// leaves the panel in deep sleep after every push, so Close is routinely
-// talking to a controller that is already asleep, and a sleep error must not
-// leave the panel's supply on and the SPI port open. Both errors are returned.
+// hardware is released even if the sleep sequence fails, so a wire error
+// during sleep cannot leave the panel's supply on and the SPI port open. Both
+// errors are returned.
 func (d *EPD) Close() error {
 	return errors.Join(d.Sleep(), d.hw.Close())
 }

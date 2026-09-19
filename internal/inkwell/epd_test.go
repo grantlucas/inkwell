@@ -200,14 +200,15 @@ func TestExecSequenceSendDataError(t *testing.T) {
 // --- Init ---
 
 // TestInitSendsResetThenProfileCommands pins every byte of the Waveshare
-// 7.5" V2 init sequences — command registers and data — against the vendor
-// reference driver (epd7in5_V2.py at waveshareteam/e-Paper master, 2024-10).
-// The sequences are the panel's electrical contract: a "tuning" that drops
-// or reorders a byte is invisible in the preview and only shows up as
-// contrast drift on real hardware, so the table is deliberately exhaustive
-// rather than checking registers alone. See the profile.go comments for what
-// each byte does and why InitFull carries the power setting (0x01) that the
-// fast, partial and 4-gray sequences omit.
+// 7.5" V2 init sequences — command registers and data. Fast, partial and
+// 4-gray are the vendor reference driver's (epd7in5_V2.py at
+// waveshareteam/e-Paper master, 2024-10) byte for byte; InitFull differs
+// from the vendor init() in two deliberate, hardware-verified ways recorded in
+// profile.go (no 0x01 power setting, fast-path booster). The sequences are the
+// panel's electrical contract: a change that drops or reorders a byte is
+// invisible in the preview and only shows up as contrast drift on real
+// hardware, so the table is deliberately exhaustive rather than checking
+// registers alone.
 func TestInitSendsResetThenProfileCommands(t *testing.T) {
 	tests := []struct {
 		name string
@@ -215,9 +216,8 @@ func TestInitSendsResetThenProfileCommands(t *testing.T) {
 		want []Command
 	}{
 		{"InitFull", InitFull, []Command{
-			{0x06, []byte{0x17, 0x17, 0x28, 0x17}}, // booster soft start
-			{0x01, []byte{0x07, 0x07, 0x28, 0x17}}, // power setting: VGH/VGL ±20 V, VDH +10.5 V, VDL −7 V
-			{0x04, nil},                            // power on (+ busy wait)
+			{0x06, []byte{0x27, 0x27, 0x18, 0x17}}, // booster soft start (fast-path strength, see profile.go)
+			{0x04, nil},                            // power on (+ busy wait); no 0x01 — reset-default rails
 			{0x00, []byte{0x1F}},                   // panel setting: OTP LUT, KW, booster on
 			{0x61, []byte{0x03, 0x20, 0x01, 0xE0}}, // resolution 800x480
 			{0x15, []byte{0x00}},                   // dual SPI off

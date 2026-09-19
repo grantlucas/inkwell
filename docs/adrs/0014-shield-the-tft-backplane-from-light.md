@@ -41,11 +41,10 @@ with no cutouts behind the active area, and no gaps at the edges that admit
 light from a lamp above or a window behind. A liner of black card inside the
 case is sufficient; the panel's own back sheet is thin.
 
-Inkwell sleeps the panel between refreshes
-([ADR 0012](0012-sleep-the-panel-between-refreshes.md)) so that a settled
-image is no longer sensitive to stray light; that protects against the
-symptom but does not license leaving the back open, since light still weakens
-the refresh while it runs.
+Inkwell keeps the panel powered between refreshes
+([ADR 0012](0012-sleep-the-panel-between-refreshes.md) records why the
+alternative failed), so a settled image remains sensitive to stray light for
+as long as it is displayed. The enclosure is the only protection.
 
 ## Consequences
 
@@ -56,7 +55,7 @@ diagnostic: cover the back of the panel completely and refresh again. The
 reverse test also works on an energised panel: hold a torch against the back
 for a few seconds and watch a matching patch fade on the front.
 
-The three earlier ADRs stand as a record of what was tried; 0009 and 0010 are
-superseded by [ADR 0013](0013-restore-the-vendor-init-sequence.md) and
-[ADR 0012](0012-sleep-the-panel-between-refreshes.md), which return the driver
-to the vendor's sequences and lifecycle.
+The three earlier ADRs stand as a record of what was tried. ADR 0010 is
+superseded by [ADR 0012](0012-sleep-the-panel-between-refreshes.md); ADR 0009's
+bytes stand with a corrected rationale in
+[ADR 0013](0013-restore-the-vendor-init-sequence.md).

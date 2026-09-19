@@ -290,19 +290,21 @@ func (a *App) Run(ctx context.Context) error {
 
 // refresh applies the planner's decision for one cycle: it picks a refresh
 // waveform based on whether buf differs from the frame on the panel and, unless
-// the decision is to skip, runs the full vendor lifecycle around the push —
-// hardware reset plus the waveform's init sequence, the frame, then the sleep
-// sequence (VCOM setting, power off, deep sleep). It reports whether a frame
-// was actually pushed (false on a skip), so the caller knows whether to advance
-// its last-pushed buffer.
+// the decision is to skip, re-initialises the controller (hardware reset plus
+// the waveform's init sequence) and pushes the frame. It reports whether a
+// frame was actually pushed (false on a skip), so the caller knows whether to
+// advance its last-pushed buffer.
 //
-// Re-initialising before every push and sleeping after it is what the
-// Waveshare reference flow does and what the vendor wiki requires for a
-// long-running panel: left powered between refreshes the panel sits in its
-// high-voltage state, which the wiki says damages it irreparably, and an
-// energised panel is also what lets light on the TFT backplane disturb a
-// settled image. The reset-plus-init costs well under a second and every push
-// is already gated behind a widget cadence with a one-minute floor.
+// Every push starts from a fresh init, in either color mode: the controller's
+// analog state is then never inherited from an earlier waveform, and the
+// reset-plus-init costs well under a second against a push cadence with a
+// one-minute floor. The panel stays powered between pushes. Powering it off
+// (POF + deep sleep) right after each refresh — what the vendor wiki asks of a
+// long-running panel — was tried on hardware and collapsed the freshly written
+// image to light gray, edge to edge, within half a second of the waveform
+// settling; the controller still drives VCOM for two frames after BUSY
+// releases, and cutting power there appears to undo the write. See ADR 0012.
+// The sleep sequence therefore runs only from Close.
 //
 // due is the refresh-queue gate: a content change is only allowed to drive a
 // refresh when at least one widget is due this minute, so widgets on
@@ -329,9 +331,6 @@ func (a *App) refresh(buf, lastBuffer []byte, due bool) (bool, error) {
 	if err := a.epd.Display(buf); err != nil {
 		return false, fmt.Errorf("display: %w", err)
 	}
-	if err := a.epd.Sleep(); err != nil {
-		return false, fmt.Errorf("sleep display %q: %w", a.profile.Name, err)
-	}
 	return true, nil
 }
 
@@ -355,10 +354,9 @@ func initModeForKind(kind refreshKind) InitMode {
 // display error paths skip the clear so a partial/broken frame isn't
 // "corrected" on top of an already-failing state.
 //
-// The clear first re-initializes the panel: the render loop leaves it in deep
-// sleep after every push, and a sleeping controller ignores frame data until
-// it has been reset and initialised again. Init (hardware reset + InitFull /
-// Init4Gray) wakes it with a full-frame waveform before pushing the white frame.
+// The clear first re-initializes the panel with its full-frame waveform
+// (hardware reset + InitFull / Init4Gray) so the white frame is driven by the
+// full refresh rather than whatever waveform the last push loaded.
 //
 // A re-init or Clear failure is reported but Close still runs — we want the
 // panel in deep sleep even if the refresh couldn't complete, otherwise we'd

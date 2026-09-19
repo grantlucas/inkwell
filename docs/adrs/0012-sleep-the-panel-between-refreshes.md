@@ -1,4 +1,4 @@
-# ADR 0012: Sleep the panel after every push and re-init before the next
+# ADR 0012: Re-init before every push; keep the panel powered between refreshes
 
 - **Status:** Accepted
 - **Recorded:** 2026-09-19
@@ -8,39 +8,36 @@
 ## Context
 
 Until this decision the render loop initialised the panel once at start-up and
-then only re-ran `EPD.Init` when the planned waveform changed (BW) or on every
-Gray4 push ([ADR 0010](0010-re-init-before-every-gray4-push.md)). The sleep
-sequence (`0x50 F7` VCOM setting, `0x02` power off, `0x07 A5` deep sleep) ran
-only from `EPD.Close` at process exit. Between refreshes the panel therefore
-sat with its boosters, VCOM and ±20 V gate rails live, for hours in BW steady
-state and for the whole life of the process overall.
+then re-ran `EPD.Init` only when the planned waveform changed (BW) or on every
+Gray4 push ([ADR 0010](0010-re-init-before-every-gray4-push.md)). ADR 0010
+justified the Gray4 rule by saying the upstream driver re-runs its 4-gray init
+before every 4-gray display. It does not: upstream `display_4Gray()` sends only
+the two planes and the refresh trigger. The observation behind that ADR (crisp
+after a re-init, faded on the next routine push) turned out to be light on the
+backplane ([ADR 0014](0014-shield-the-tft-backplane-from-light.md)) and needed
+no Gray4-specific theory.
 
-The Waveshare wiki for this panel is explicit:
+The Waveshare wiki asks long-running deployments to sleep the panel between
+refreshes:
 
 > When the screen is not refreshed, please set the screen to sleep mode or
 > power off it. Otherwise, the screen will remain in a high voltage state for a
 > long time, which will damage the e-Paper and cannot be repaired!
 
-Its FAQ gives the same instruction as the answer to "after using for a period
-of time, the screen has a serious afterimage problem that cannot be repaired".
-The vendor demo sleeps only at its end because it runs for seconds; Inkwell
-runs for months.
-
-There is a second, more immediate reason that surfaced while investigating the
-fading in issue #77 ([ADR 0014](0014-shield-the-tft-backplane-from-light.md)).
-The panel's pixels are switched by amorphous-silicon transistors, which are
-photoconductive. Light on the backplane makes them leak, but a leaking
-transistor only moves charge if there is voltage behind it. Sleeping the panel
-between refreshes removes that voltage, so a stray light source can degrade a
-refresh while it runs but can no longer erode a settled image afterwards.
-
-Finally, [ADR 0010](0010-re-init-before-every-gray4-push.md) justified its
-per-push re-init by saying the upstream driver re-runs its 4-gray init before
-every 4-gray display. It does not: upstream `display_4Gray()` sends only the
-two planes and the refresh trigger, and the vendor example initialises once
-per section. The observation behind that ADR (crisp after a re-init, faded on
-the next routine push) is consistent with the light-leak explanation and did
-not need a Gray4-specific theory.
+Inkwell's sleep sequence (`0x50 F7` VCOM setting, `0x02` power off, `0x07 A5`
+deep sleep) ran only from `EPD.Close` at process exit. An earlier revision of
+this ADR added it after every push. **That was tried on the panel on
+2026-09-19 and reverted the same day.** With the case sealed (so light was not
+a factor), the first full refresh after start-up settled crisp and then, within
+200 to 400 ms, the whole image collapsed to light gray edge to edge and stayed
+there. The vendor demo with identical init bytes, which does not power off
+after its displays, held the same content. The one difference was the power-off
+and deep-sleep commands landing about 20 ms after BUSY released. The UC8179
+datasheet notes that after the LUT finishes the VCOM driver still outputs two
+frames of VCOM_DC before floating; cutting the boosters inside or right after
+that tail is the most plausible way to undo a freshly written image everywhere
+at once. Whether a *delayed* power-off (seconds after the refresh) would be
+safe is untested and is the open follow-up below.
 
 Two timing details of the vendor busy handshake were also missing from
 `waitIdle` ([ADR 0007](0007-poll-the-busy-pin-in-waitidle.md)). The reference
@@ -49,32 +46,28 @@ read (the C source marks it "necessary, 200uS at least"; the datasheet says
 BUSY_N *becomes* low after the command, it is not low yet on the next
 instruction), and sleeps 20 ms after BUSY releases before the next command.
 Reading the pin immediately can see it still idle and turn the wait into a
-no-op. That was tolerable while a full minute separated a refresh from the
-next command; it is not once a power-off follows every refresh.
+no-op.
 
 ## Decision
 
-Every frame pushed to the panel, in either colour mode, runs the vendor
-lifecycle in `App.refresh` ([`app.go`](../../internal/inkwell/app.go)):
+Every frame pushed to the panel, in either colour mode, starts from a fresh
+init in `App.refresh` ([`app.go`](../../internal/inkwell/app.go)): hardware
+reset, the waveform's init sequence, then the two planes and the refresh
+trigger. Nothing follows the refresh. The panel stays powered between pushes;
+the sleep sequence runs from `Close` only.
 
-1. `EPD.Init(mode)`: hardware reset, then the waveform's init sequence.
-2. `EPD.Display(buf)`: both planes, refresh trigger, busy wait.
-3. `EPD.Sleep()`: VCOM setting, power off with busy wait, deep sleep.
-
-A skipped cycle touches the hardware not at all. The planner
-([`refresh.go`](../../internal/inkwell/refresh.go)) now returns only the
-waveform to use; the `forceInit` signal and the render loop's `appliedMode`
-tracking are gone because every push re-inits, and so is the start-up `Init`
-in `Run`, which had double-initialised the panel on the first cycle.
+The planner ([`refresh.go`](../../internal/inkwell/refresh.go)) returns only
+the waveform to use. The `forceInit` signal and the render loop's
+`appliedMode` tracking are gone because every push re-inits, and so is the
+start-up `Init` in `Run`, which had double-initialised the panel on the first
+cycle.
 
 `waitIdle` sleeps 100 ms before its first BUSY read and 20 ms after the pin
 releases (`triggerSettle` and `idleSettle` on `EPD`, alongside the existing
 poll interval and timeout). `EPD.Sleep` waits the vendor's 2 s after the
-deep-sleep command ("important, at least 2s") before returning, so whatever
-touches the controller next, the next push's `Reset` or `Close` dropping
-PWR, finds it fully asleep. `EPD.Close` releases the hardware even when the
-sleep sequence fails, since it now routinely runs against a controller that
-is already in deep sleep.
+deep-sleep command ("important, at least 2s") so `Close` does not cut PWR while
+the controller is still entering sleep, and `EPD.Close` releases the hardware
+even when the sleep sequence fails.
 
 The vendor Python driver sends the Get Status command (`0x71`) before each
 BUSY read; that is deliberately not replicated. The datasheet lists BUSY_N as
@@ -83,15 +76,17 @@ driver polls the pin without it.
 
 ## Consequences
 
-Each push costs a reset, an init sequence, a power-on wait, a power-off wait
-and the 2 s deep-sleep settle on top of the refresh itself: a few seconds in
-total, against a push cadence with a one-minute floor
-([ADR 0011](0011-require-a-per-widget-refresh-cadence.md)).
+Each push costs a reset, an init sequence and a power-on wait on top of the
+refresh itself: well under a second against a push cadence with a one-minute
+floor ([ADR 0011](0011-require-a-per-widget-refresh-cadence.md)).
 
-The panel spends its idle time in deep sleep, which is what the vendor asks
-of a long-running deployment, and what makes it insensitive to back-side
-light between refreshes.
+The panel remains energised between refreshes, against the vendor wiki's
+advice. That is a known trade: the alternative destroyed the image. Two
+follow-ups are worth a hardware session each: a power-off issued several
+seconds after BUSY releases rather than immediately, and the panel-setting
+`SHD_N` bit (`0x00`), which turns off the charge pump without a full power-off.
+Either would need the photo protocol in
+[ADR 0014](0014-shield-the-tft-backplane-from-light.md) to sign off.
 
-The shutdown path is unchanged in shape: `Init` wakes the sleeping controller
-(a sleeping panel ignores frame data until it is reset and initialised again),
-`Clear` pushes white, `Close` sleeps it once more and cuts power.
+The shutdown path is unchanged in shape: `Init` loads the full-frame waveform,
+`Clear` pushes white, `Close` sleeps the panel and cuts power.

@@ -65,35 +65,29 @@ var Waveshare7in5V2 = DisplayProfile{
 		PartialRefresh: true,
 		Grayscale:      true,
 	},
-	// InitFull is the vendor init() byte for byte (epd7in5_V2.py, Waveshare
-	// e-Paper master, 2024-10). Two of its bytes are the panel's drive
-	// contract and are easy to get wrong, so what they do is recorded here
-	// (UC8179c datasheet, R01H / R06H):
+	// InitFull is the vendor init() with one deliberate difference, kept on
+	// hardware evidence: it does not send the power setting (0x01) and it uses
+	// the fast sequence's booster bytes.
 	//
-	//   - 0x01 power setting {07 07 28 17}: VGH/VGL ±20 V (byte 2 = 0x07),
-	//     VDH ≈ +10.5 V (0x28), VDL = −7 V (0x17). Waveshare lowered these
-	//     from the older {07 07 3F 3F} (±15 V) in Sept 2024 to suit the newer
-	//     film batch. Omitting the command is NOT neutral: the controller's
-	//     power-on default is 0x3A = ±14 V on both rails, i.e. a harder,
-	//     symmetric drive than the vendor asks for on this film.
-	//   - 0x06 booster {17 17 28 17}: bits [5:3] are drive strength (1–8).
-	//     Phases A/B at 3 shape the start-up ramp; phase C1 at 6 (0x28) is
-	//     the sustain phase that holds the rails for the whole multi-flash
-	//     refresh. The fast/4-gray sequences use {27 27 18 17} — a faster
-	//     ramp but a weaker sustain (4) — which is fine for their short
-	//     waveforms and wrong for the full one.
+	// Vendor init() sends 0x01 = {07 07 28 17}: VGH/VGL ±20 V, VDH ≈ +10.5 V,
+	// VDL = −7 V (Waveshare lowered these from {07 07 3F 3F}, ±15 V, in Sept
+	// 2024 for a newer film batch). Omitting the command leaves the UC8179's
+	// power-on defaults: VG_LVL the same ±20 V, VDH/VDL = 0x3A = ±14 V — a
+	// harder, symmetric source drive than the vendor's bytes. On the panel this
+	// project runs, the vendor bytes were tried (2026-09-19) and the full
+	// refresh came back visibly lighter than with the defaults; the defaults
+	// hold. Booster 0x06: bits [5:3] are drive strength (1–8). Vendor init()
+	// uses {17 17 28 17} (start-up phases at 3, sustain phase C1 at 6); this
+	// profile keeps the fast/4-gray {27 27 18 17} (start-up 5, sustain 4),
+	// which is the combination that held. ADR 0009 first made this change for
+	// a reason the datasheet does not support (it thought the default was
+	// "lower"); ADR 0013 corrects the rationale and keeps the bytes.
 	//
-	// An earlier revision dropped 0x01 and borrowed the fast booster on the
-	// theory that the reset default was crisper (ADR 0009). The datasheet
-	// says otherwise and the fading it was chasing turned out to be light on
-	// the TFT backplane (ADR 0014), so the profile is back on the vendor
-	// sequence (ADR 0013). If Waveshare changes init() again, change this to
-	// match; do not tune it by eye on the preview, which cannot show drive
-	// strength.
+	// Do not tune these by eye on the preview, which cannot show drive
+	// strength; any change needs the on-device photo protocol in ADR 0014.
 	InitFull: []Command{
-		{0x06, []byte{0x17, 0x17, 0x28, 0x17}}, // Booster soft start
-		{0x01, []byte{0x07, 0x07, 0x28, 0x17}}, // Power setting
-		{0x04, nil},                            // Power on (+ busy wait)
+		{0x06, []byte{0x27, 0x27, 0x18, 0x17}}, // Booster soft start (fast-path strength)
+		{0x04, nil},                            // Power on (+ busy wait) — power setting stays at reset default
 		{0x00, []byte{0x1F}},                   // Panel setting
 		{0x61, []byte{0x03, 0x20, 0x01, 0xE0}}, // Resolution 800x480
 		{0x15, []byte{0x00}},                   // Dual SPI off
