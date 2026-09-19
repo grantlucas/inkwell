@@ -222,7 +222,11 @@ func TestPlanEvents(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
-			plan := planEvents(tc.events, tc.maxEvents, tc.capacity, tc.maxChars, tc.showLocation)
+			plan := planEvents(tc.events, tc.capacity, tc.maxChars, eventOptions{
+				MaxEvents:    tc.maxEvents,
+				ShowLocation: tc.showLocation,
+				Location:     time.UTC,
+			})
 			if len(plan) != len(tc.wantBudgets) {
 				t.Fatalf("plan has %d events, want %d", len(plan), len(tc.wantBudgets))
 			}
@@ -252,7 +256,7 @@ func TestRenderEvents_WrappedTitleWithLocation(t *testing.T) {
 	// spans the whole multi-line event.
 	frame := newTestFrame(114, 200)
 	events := []ical.Event{evLoc("A Very Long Event Title That Overflows", "Conference Room")}
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), events, 5, true)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), events, eventOptions{MaxEvents: 5, ShowLocation: true, Location: time.UTC})
 	if rendered != 1 {
 		t.Fatalf("rendered %d events, want 1", rendered)
 	}
@@ -266,7 +270,7 @@ func TestRenderEvents_WrappedTitleWithLocation(t *testing.T) {
 func TestRenderEvents_SparseTitleWraps(t *testing.T) {
 	render := func(summary string) *image.Paletted {
 		f := newTestFrame(114, 200)
-		renderEvents(f, image.Rect(0, 0, 114, 200), []ical.Event{ev(summary)}, 5, false)
+		renderEvents(f, image.Rect(0, 0, 114, 200), []ical.Event{ev(summary)}, eventOptions{MaxEvents: 5, ShowLocation: false, Location: time.UTC})
 		return f
 	}
 	// textX past the 2px rule + gaps: eventPadX(4)+eventRuleW(2)+eventGap(2).
@@ -299,7 +303,7 @@ func TestRenderEvents_WithEvents(t *testing.T) {
 		},
 	}
 
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), events, 5, false)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), events, eventOptions{MaxEvents: 5, ShowLocation: false, Location: time.UTC})
 	if rendered != 2 {
 		t.Errorf("rendered %d events, want 2", rendered)
 	}
@@ -328,7 +332,7 @@ func TestRenderEvents_AllDay(t *testing.T) {
 		},
 	}
 
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), events, 5, false)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), events, eventOptions{MaxEvents: 5, ShowLocation: false, Location: time.UTC})
 	if rendered != 1 {
 		t.Errorf("rendered %d events, want 1", rendered)
 	}
@@ -336,7 +340,7 @@ func TestRenderEvents_AllDay(t *testing.T) {
 
 func TestRenderEvents_NoEvents(t *testing.T) {
 	frame := newTestFrame(114, 200)
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), nil, 5, false)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), nil, eventOptions{MaxEvents: 5, ShowLocation: false, Location: time.UTC})
 	if rendered != 0 {
 		t.Errorf("rendered %d events, want 0", rendered)
 	}
@@ -365,7 +369,7 @@ func TestRenderEvents_MaxEventsLimit(t *testing.T) {
 		})
 	}
 
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 400), events, 3, false)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 400), events, eventOptions{MaxEvents: 3, ShowLocation: false, Location: time.UTC})
 	if rendered != 3 {
 		t.Errorf("rendered %d events, want 3", rendered)
 	}
@@ -383,7 +387,7 @@ func TestRenderEvents_WithLocation(t *testing.T) {
 		},
 	}
 
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), events, 5, true)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), events, eventOptions{MaxEvents: 5, ShowLocation: true, Location: time.UTC})
 	if rendered != 1 {
 		t.Errorf("rendered %d events, want 1", rendered)
 	}
@@ -399,7 +403,7 @@ func TestRenderEvents_TinyBounds(t *testing.T) {
 			End:     time.Date(2026, 4, 28, 10, 0, 0, 0, time.UTC),
 		},
 	}
-	rendered := renderEvents(frame, image.Rect(0, 0, 10, 10), events, 5, false)
+	rendered := renderEvents(frame, image.Rect(0, 0, 10, 10), events, eventOptions{MaxEvents: 5, ShowLocation: false, Location: time.UTC})
 	if rendered != 0 {
 		t.Errorf("rendered %d events in tiny bounds, want 0", rendered)
 	}
@@ -417,7 +421,7 @@ func TestRenderEvents_HeightClipping(t *testing.T) {
 		})
 	}
 
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 50), events, 10, false)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 50), events, eventOptions{MaxEvents: 10, ShowLocation: false, Location: time.UTC})
 	if rendered >= 5 {
 		t.Errorf("rendered %d events in 50px, expected clipping", rendered)
 	}
@@ -519,7 +523,7 @@ func TestRenderEvents_TitleClippedByHeight(t *testing.T) {
 			End:     time.Date(2026, 4, 28, 10, 0, 0, 0, time.UTC),
 		},
 	}
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 38), events, 5, false)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 38), events, eventOptions{MaxEvents: 5, ShowLocation: false, Location: time.UTC})
 	if rendered != 1 {
 		t.Errorf("rendered %d events, want 1", rendered)
 	}
@@ -573,8 +577,35 @@ func TestRenderEvents_StopsAtPreEventYOverflow(t *testing.T) {
 		{UID: "3", Summary: "Third", Start: time.Date(2026, 4, 28, 11, 0, 0, 0, time.UTC)},
 	}
 
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 70), events, 10, false)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 70), events, eventOptions{MaxEvents: 10, ShowLocation: false, Location: time.UTC})
 	if rendered != 1 {
 		t.Errorf("rendered %d events, want 1 (pre-event y-overflow should have stopped the loop after event 1)", rendered)
+	}
+}
+
+// TestPlanEvents_TimeLabelUsesDisplayZone pins the fix for the bug where an
+// event's clock label was rendered in whatever zone the feed happened to
+// serialize it with. Google emits Z-suffixed UTC instants for most events and
+// TZID-qualified wall times for others; both are the same kind of appointment
+// to the viewer and must read in the viewer's zone.
+func TestPlanEvents_TimeLabelUsesDisplayZone(t *testing.T) {
+	toronto, err := time.LoadLocation("America/Toronto")
+	if err != nil {
+		t.Fatalf("load America/Toronto: %v", err)
+	}
+
+	// 13:00 UTC on 2026-09-20 is 09:00 EDT — the reported failure.
+	utcStart := time.Date(2026, 9, 20, 13, 0, 0, 0, time.UTC)
+
+	plan := planEvents(
+		[]ical.Event{{Summary: "Air show", Start: utcStart, End: utcStart.Add(5 * time.Hour)}},
+		10, 13,
+		eventOptions{MaxEvents: 5, Location: toronto},
+	)
+	if len(plan) != 1 {
+		t.Fatalf("plan has %d events, want 1", len(plan))
+	}
+	if got, want := plan[0].timeLine, "09:00"; got != want {
+		t.Errorf("timeLine = %q, want %q", got, want)
 	}
 }

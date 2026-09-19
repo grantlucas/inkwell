@@ -33,6 +33,13 @@ type Config struct {
 	WeatherModel     weather.Model
 	HighlightHour    int
 
+	// Location is the zone event clock labels and day columns render in.
+	// It defaults to time.Local but is worth setting explicitly: a headless
+	// device with an unconfigured system TZ otherwise renders every event in
+	// UTC, which looks correct for feeds that happen to serialize in the
+	// viewer's zone and is hours off for the rest.
+	Location *time.Location
+
 	// Presence of each weather override in this widget's config. When false,
 	// Factory fills the corresponding field from the shared Provider's
 	// defaults, so a dashboard sets location/model/unit once at the top level.
@@ -52,7 +59,14 @@ type Widget struct {
 }
 
 // New creates a weekly Widget with pre-built data sources.
+//
+// A zero Config.Location falls back to time.Local so a caller that builds
+// Config directly (rather than through parseConfig) gets the documented
+// default instead of a nil-location panic at render time.
 func New(bounds image.Rectangle, cal calendar.Source, ws weather.Source, now func() time.Time, cfg Config) *Widget {
+	if cfg.Location == nil {
+		cfg.Location = time.Local
+	}
 	return &Widget{
 		bounds:  bounds,
 		cal:     cal,
@@ -136,7 +150,11 @@ func (w *Widget) Render(frame *image.Paletted) error {
 		}
 
 		dayEvents := filterEventsForDay(events, day, dayEnd)
-		renderEvents(frame, col.Events, dayEvents, w.config.MaxEvents, w.config.ShowLocation)
+		renderEvents(frame, col.Events, dayEvents, eventOptions{
+			MaxEvents:    w.config.MaxEvents,
+			ShowLocation: w.config.ShowLocation,
+			Location:     w.config.Location,
+		})
 
 		if !col.IsLast {
 			// Column divider in PaperBlack so it stays a continuous rule
@@ -243,6 +261,7 @@ func parseConfig(config map[string]any) (Config, error) {
 		ShowWeather:      true,
 		ShowWeatherLabel: true,
 		HighlightHour:    15,
+		Location:         time.Local,
 	}
 
 	f, ok := config["feeds"]

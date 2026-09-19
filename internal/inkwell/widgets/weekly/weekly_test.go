@@ -841,3 +841,13 @@ func TestFactory_ResolvesWeatherFromProvider(t *testing.T) {
 		}
 	})
 }
+
+// TestNew_NilLocationDefaultsToLocal keeps a directly-built Config (one that
+// skipped parseConfig, as programmatic callers and tests do) from carrying a
+// nil zone into the render path, where Format would panic.
+func TestNew_NilLocationDefaultsToLocal(t *testing.T) {
+	w := New(image.Rect(0, 0, 100, 100), nil, nil, time.Now, Config{})
+	if w.config.Location != time.Local {
+		t.Errorf("Location = %v, want %v", w.config.Location, time.Local)
+	}
+}
