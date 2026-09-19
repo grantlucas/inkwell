@@ -344,12 +344,18 @@ func TestSPIHardware_Reset_PulseSequence(t *testing.T) {
 
 func TestSPIHardware_Close_PowersDown(t *testing.T) {
 	hw, _, _, _, _, pwrPin := newTestSPIHardware(t)
-	hw.sleep = func(time.Duration) {}
+	var slept time.Duration
+	hw.sleep = func(d time.Duration) { slept = d }
 
 	if err := hw.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
 
+	// The vendor waits 2 s between the deep-sleep command and cutting the
+	// panel's rail ("important, at least 2s"); dropping the wait must fail here.
+	if slept != pwrOffSettle {
+		t.Errorf("Close settle = %v, want %v", slept, pwrOffSettle)
+	}
 	if pwrPin.L != gpio.Low {
 		t.Errorf("PWR pin after Close = %v, want Low", pwrPin.L)
 	}
