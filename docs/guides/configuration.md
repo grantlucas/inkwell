@@ -60,6 +60,7 @@ Everything else has a default. Run that, open
 | `backend` | string | `preview` | `preview`, `image`, `spi` |
 | `color_mode` | string | `gray4` | `gray4`, `bw` |
 | `clear_on_shutdown` | bool | `true` | `true`, `false` |
+| `timezone` | string | host system zone | Any IANA name (`America/Toronto`) |
 <!-- markdownlint-enable MD013 -->
 
 ### `display`
@@ -114,6 +115,30 @@ with no power, and a frame left sitting for weeks can ghost
 permanently. Set it `false` only when you want the last frame to stay
 visible — debugging a render bug after the process exits is the usual
 reason.
+
+### `timezone`
+
+The zone every widget renders in — clock and date text, the calendar's
+day columns and event times, and the hour the weather chart highlights.
+
+```yaml
+timezone: "America/Toronto"
+```
+
+It defaults to the host's system zone, which is right on a workstation
+and often wrong on an appliance. A Raspberry Pi imaged without a
+timezone reports UTC, and the failure is quiet rather than obvious: the
+clock widget shows UTC, and because calendar feeds serialize most events
+as UTC instants (`DTSTART:20260920T130000Z`), those events render at
+their raw UTC clock — hours late, and a whole day out near midnight.
+Feeds are inconsistent about this, so some events on the same panel can
+look correct while others do not.
+
+Naming the zone here makes the panel independent of how the device was
+provisioned. The value is any IANA zone name; an unknown one fails
+`LoadConfig` at startup rather than falling back silently. The zone
+database is compiled into the binary, so no system `tzdata` package is
+required.
 
 ## `preview` — the web preview server
 

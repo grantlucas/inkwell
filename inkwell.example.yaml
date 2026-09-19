@@ -17,6 +17,14 @@ color_mode: gray4  # 4-level grayscale (recommended). Set to "bw" for
 # How often the panel does its periodic full/ghosting-clearing flash is fixed
 # internally (it's a hardware property, not user config). What you DO control is
 # each widget's `refresh:` below — how often that widget may refresh the panel.
+# IANA zone every widget renders in — clock and date text, the calendar's
+# day columns and event times, and the hour the weather chart highlights.
+# Defaults to the host's system zone. Set it explicitly on a device: a Pi
+# imaged without a timezone reports UTC, and since calendar feeds serialize
+# most events as UTC instants, those events would render hours off (and a
+# whole day out near midnight) while the clock widget quietly shows UTC too.
+timezone: "America/Toronto"
+
 preview:
   port: 8080
 

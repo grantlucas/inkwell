@@ -69,8 +69,13 @@ func (w *Widget) Bounds() image.Rectangle { return w.bounds }
 func (w *Widget) Render(frame *image.Paletted) error {
 	fillWhite(frame, w.bounds)
 
+	// The clock arrives already in the dashboard's display zone (see the
+	// top-level timezone config), so everything day- and hour-derived reads
+	// from it rather than re-resolving a zone here. Events carry whatever
+	// zone their feed serialized them with, so they still need converting.
 	now := w.now()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	loc := now.Location()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 
 	weekStart := today
 	weekEnd := today.AddDate(0, 0, 7)
@@ -136,7 +141,11 @@ func (w *Widget) Render(frame *image.Paletted) error {
 		}
 
 		dayEvents := filterEventsForDay(events, day, dayEnd)
-		renderEvents(frame, col.Events, dayEvents, w.config.MaxEvents, w.config.ShowLocation)
+		renderEvents(frame, col.Events, dayEvents, eventOptions{
+			MaxEvents:    w.config.MaxEvents,
+			ShowLocation: w.config.ShowLocation,
+			Location:     loc,
+		})
 
 		if !col.IsLast {
 			// Column divider in PaperBlack so it stays a continuous rule

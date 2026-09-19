@@ -160,6 +160,34 @@ The widget-specific keys live under `config:`.
 Any value of the wrong type, an empty or missing `feeds`, or an out-of-range
 number is a configuration error that fails `LoadConfig`.
 
+## Timezone
+
+A feed does not express every event the same way. Google emits most
+events as UTC instants (`DTSTART:20260920T130000Z`) and others as wall
+times qualified by a zone (`DTSTART;TZID=America/Toronto:20260919T104500`).
+The parser preserves whichever form it found, so an `Event.Start` is
+always a correct *instant* but carries the feed's zone, not the
+viewer's. Rendering it directly would print two neighbouring events on
+the same panel in two different zones.
+
+The widget converts every event into one display zone before drawing it.
+That zone is **not** configured here — it is the dashboard-wide
+top-level [`timezone`](../../../docs/guides/configuration.md#timezone)
+key, which also governs the `clock`, `date` and `fuzzy_clock` widgets so
+the whole panel agrees:
+
+```yaml
+timezone: "America/Toronto"   # top level, not under the widget's config:
+```
+
+The widget receives it as the zone on its injected clock, and derives
+the day columns, the event labels, and the weather chart's highlighted
+hour from that one value.
+
+One caveat the parser cannot fix: a feed using a non-IANA `TZID` (Outlook
+emits names like `"Eastern Standard Time"`) falls back to UTC with a log
+line, because `VTIMEZONE` blocks are not yet read.
+
 ## Weather configuration
 
 Weather settings are configured **once** at the top level of the config, not

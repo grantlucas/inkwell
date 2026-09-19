@@ -4,6 +4,7 @@ import (
 	"context"
 	"image"
 	nethttp "net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -21,9 +22,14 @@ func fixedClock(t time.Time) func() time.Time {
 type stubCalSource struct {
 	events []ical.Event
 	err    error
+
+	// gotStart/gotEnd record the window Render asked for, so tests can pin
+	// which zone the 7-day span was anchored in.
+	gotStart, gotEnd time.Time
 }
 
 func (s *stubCalSource) Events(_ context.Context, start, end time.Time) ([]ical.Event, error) {
+	s.gotStart, s.gotEnd = start, end
 	if s.err != nil {
 		return s.events, s.err
 	}
@@ -840,4 +846,70 @@ func TestFactory_ResolvesWeatherFromProvider(t *testing.T) {
 			t.Errorf("WeatherModel = %q, want override ecmwf", c.WeatherModel)
 		}
 	})
+}
+
+// TestWidget_RenderAnchorsWeekToDisplayZone pins that the 7-day window is
+// built in the configured zone rather than the clock's own. The instant used
+// here is late evening in Toronto but already the next calendar day in UTC, so
+// the two zones disagree about which day "today" is.
+func TestWidget_RenderAnchorsWeekToDisplayZone(t *testing.T) {
+	toronto, err := time.LoadLocation("America/Toronto")
+	if err != nil {
+		t.Fatalf("load America/Toronto: %v", err)
+	}
+
+	// 2026-09-20T02:00Z is 2026-09-19 22:00 EDT — still Saturday locally.
+	now := time.Date(2026, 9, 20, 2, 0, 0, 0, time.UTC).In(toronto)
+	cal := &stubCalSource{}
+	w := New(image.Rect(0, 0, 800, 480), cal, nil, fixedClock(now), Config{
+		MaxEvents:   5,
+		ShowWeather: false,
+	})
+	if err := w.Render(image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	wantStart := time.Date(2026, 9, 19, 0, 0, 0, 0, toronto)
+	if !cal.gotStart.Equal(wantStart) {
+		t.Errorf("week start = %v, want %v", cal.gotStart, wantStart)
+	}
+	if !cal.gotEnd.Equal(wantStart.AddDate(0, 0, 7)) {
+		t.Errorf("week end = %v, want %v", cal.gotEnd, wantStart.AddDate(0, 0, 7))
+	}
+}
+
+// TestWidget_HighlightHourUsesDisplayZone pins that the weather column's
+// "current hour" marker follows the configured zone too. Two viewers looking
+// at the same instant from zones four hours apart must see the marker on
+// different hours, so rendering the same frame for both means the highlight is
+// still reading the clock's raw hour.
+func TestWidget_HighlightHourUsesDisplayZone(t *testing.T) {
+	toronto, err := time.LoadLocation("America/Toronto")
+	if err != nil {
+		t.Fatalf("load America/Toronto: %v", err)
+	}
+
+	// Mid-afternoon UTC, late morning in Toronto — same day in both zones, so
+	// only the hour differs and the frames stay otherwise comparable.
+	now := time.Date(2026, 4, 27, 18, 0, 0, 0, time.UTC)
+
+	render := func(loc *time.Location) *image.Paletted {
+		t.Helper()
+		bounds := image.Rect(0, 0, 800, 480)
+		w := New(bounds, &stubCalSource{}, &stubWeatherSource{forecast: sampleForecast()},
+			fixedClock(now.In(loc)), Config{
+				MaxEvents:   5,
+				ShowWeather: true,
+				TempUnit:    "C",
+			})
+		frame := image.NewPaletted(bounds, widget.PaperPalette)
+		if err := w.Render(frame); err != nil {
+			t.Fatalf("Render: %v", err)
+		}
+		return frame
+	}
+
+	if slices.Equal(render(time.UTC).Pix, render(toronto).Pix) {
+		t.Error("UTC and America/Toronto rendered identically; highlight hour ignores the display zone")
+	}
 }
