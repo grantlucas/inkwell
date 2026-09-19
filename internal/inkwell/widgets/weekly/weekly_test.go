@@ -4,6 +4,7 @@ import (
 	"context"
 	"image"
 	nethttp "net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -21,9 +22,14 @@ func fixedClock(t time.Time) func() time.Time {
 type stubCalSource struct {
 	events []ical.Event
 	err    error
+
+	// gotStart/gotEnd record the window Render asked for, so tests can pin
+	// which zone the 7-day span was anchored in.
+	gotStart, gotEnd time.Time
 }
 
 func (s *stubCalSource) Events(_ context.Context, start, end time.Time) ([]ical.Event, error) {
+	s.gotStart, s.gotEnd = start, end
 	if s.err != nil {
 		return s.events, s.err
 	}
@@ -840,4 +846,124 @@ func TestFactory_ResolvesWeatherFromProvider(t *testing.T) {
 			t.Errorf("WeatherModel = %q, want override ecmwf", c.WeatherModel)
 		}
 	})
+}
+
+// TestNew_NilLocationDefaultsToLocal keeps a directly-built Config (one that
+// skipped parseConfig, as programmatic callers and tests do) from carrying a
+// nil zone into the render path, where Format would panic.
+func TestNew_NilLocationDefaultsToLocal(t *testing.T) {
+	w := New(image.Rect(0, 0, 100, 100), nil, nil, time.Now, Config{})
+	if w.config.Location != time.Local {
+		t.Errorf("Location = %v, want %v", w.config.Location, time.Local)
+	}
+}
+
+func TestParseConfig_Timezone(t *testing.T) {
+	cases := []struct {
+		label   string
+		value   any
+		unset   bool
+		want    string // IANA name the parsed Location must report
+		wantErr bool
+	}{
+		{label: "unset falls back to the host zone", unset: true, want: time.Local.String()},
+		{label: "IANA name is loaded", value: "America/Toronto", want: "America/Toronto"},
+		{label: "positive-offset zone is loaded", value: "Europe/Berlin", want: "Europe/Berlin"},
+		{label: "UTC is loaded", value: "UTC", want: "UTC"},
+		{label: "unknown zone is rejected", value: "Mars/Olympus_Mons", wantErr: true},
+		{label: "non-string is rejected", value: 42, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			cfg := minimalConfig()
+			if !tc.unset {
+				cfg["timezone"] = tc.value
+			}
+
+			c, err := parseConfig(cfg)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("parseConfig(%v) = nil error, want an error", tc.value)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseConfig: %v", err)
+			}
+			if c.Location == nil {
+				t.Fatal("Location is nil")
+			}
+			if got := c.Location.String(); got != tc.want {
+				t.Errorf("Location = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestWidget_RenderAnchorsWeekToDisplayZone pins that the 7-day window is
+// built in the configured zone rather than the clock's own. The instant used
+// here is late evening in Toronto but already the next calendar day in UTC, so
+// the two zones disagree about which day "today" is.
+func TestWidget_RenderAnchorsWeekToDisplayZone(t *testing.T) {
+	toronto, err := time.LoadLocation("America/Toronto")
+	if err != nil {
+		t.Fatalf("load America/Toronto: %v", err)
+	}
+
+	// 2026-09-20T02:00Z is 2026-09-19 22:00 EDT — still Saturday locally.
+	now := time.Date(2026, 9, 20, 2, 0, 0, 0, time.UTC)
+	cal := &stubCalSource{}
+	w := New(image.Rect(0, 0, 800, 480), cal, nil, fixedClock(now), Config{
+		MaxEvents:   5,
+		ShowWeather: false,
+		Location:    toronto,
+	})
+	if err := w.Render(image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	wantStart := time.Date(2026, 9, 19, 0, 0, 0, 0, toronto)
+	if !cal.gotStart.Equal(wantStart) {
+		t.Errorf("week start = %v, want %v", cal.gotStart, wantStart)
+	}
+	if !cal.gotEnd.Equal(wantStart.AddDate(0, 0, 7)) {
+		t.Errorf("week end = %v, want %v", cal.gotEnd, wantStart.AddDate(0, 0, 7))
+	}
+}
+
+// TestWidget_HighlightHourUsesDisplayZone pins that the weather column's
+// "current hour" marker follows the configured zone too. Two viewers looking
+// at the same instant from zones four hours apart must see the marker on
+// different hours, so rendering the same frame for both means the highlight is
+// still reading the clock's raw hour.
+func TestWidget_HighlightHourUsesDisplayZone(t *testing.T) {
+	toronto, err := time.LoadLocation("America/Toronto")
+	if err != nil {
+		t.Fatalf("load America/Toronto: %v", err)
+	}
+
+	// Mid-afternoon UTC, late morning in Toronto — same day in both zones, so
+	// only the hour differs and the frames stay otherwise comparable.
+	now := time.Date(2026, 4, 27, 18, 0, 0, 0, time.UTC)
+
+	render := func(loc *time.Location) *image.Paletted {
+		t.Helper()
+		bounds := image.Rect(0, 0, 800, 480)
+		w := New(bounds, &stubCalSource{}, &stubWeatherSource{forecast: sampleForecast()},
+			fixedClock(now), Config{
+				MaxEvents:   5,
+				ShowWeather: true,
+				TempUnit:    "C",
+				Location:    loc,
+			})
+		frame := image.NewPaletted(bounds, widget.PaperPalette)
+		if err := w.Render(frame); err != nil {
+			t.Fatalf("Render: %v", err)
+		}
+		return frame
+	}
+
+	if slices.Equal(render(time.UTC).Pix, render(toronto).Pix) {
+		t.Error("UTC and America/Toronto rendered identically; highlight hour ignores the display zone")
+	}
 }

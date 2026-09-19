@@ -365,6 +365,7 @@ layout and feed setup in more depth.
 | `show_weather` | bool | `true` | `true`, `false` | Renders the per-day weather block. When false, the space is given back to events. |
 | `show_weather_label` | bool | `true` | `true`, `false` | Shows the condition word (`CLOUDY`) above the temperatures. |
 | `week_start` | string | `"monday"` | `monday`, `sunday` | **Validated but not yet applied** — the view always starts on today. |
+| `timezone` | string | host system zone | Any IANA name (`America/Toronto`) | Zone the day columns and event times render in. Set explicitly on a headless device — see [timezone](#timezone). |
 | `highlight_hour` | integer | `15` | `[0, 23]` | **Validated but not yet applied** — the hourly chart always highlights the current hour. |
 | `latitude` | number | inherits `weather.latitude` | `[-90, 90]` | Per-widget forecast location override. |
 | `longitude` | number | inherits `weather.longitude` | `[-180, 180]` | Per-widget forecast location override. |
@@ -376,6 +377,37 @@ The four inheriting keys exist for the multi-location case — a second
 weekly-calendar showing another city. If every widget wants the same
 values, set them once under top-level [`weather`](#weather--shared-forecast-defaults)
 and leave these out; overriding here defeats the shared cache.
+
+#### Timezone
+
+An ICS feed does not agree with itself about how to express a time.
+Google Calendar serializes most events as UTC instants
+(`DTSTART:20260920T130000Z`) and others as wall times qualified by a
+zone (`DTSTART;TZID=America/Toronto:20260919T104500`). Both describe the
+same kind of appointment, so Inkwell converts every event into one
+display zone before drawing it.
+
+`timezone` names that zone:
+
+```yaml
+config:
+  timezone: "America/Toronto"
+```
+
+It defaults to the host's system timezone, which is right on a
+workstation and often wrong on an appliance. A Raspberry Pi imaged
+without a timezone reports UTC, and because most feed events are UTC
+instants they would render at their raw UTC clock — four or five hours
+late for North American zones, and a whole day out for anything near
+midnight. Setting the key explicitly makes the panel independent of how
+the device was provisioned.
+
+The value is any IANA zone name; an unknown one fails `LoadConfig` at
+startup rather than silently falling back. The zone database is compiled
+into the binary, so no system `tzdata` package is required.
+
+This also governs which day column an event lands in and which hour the
+weather chart highlights — all three derive from the same clock.
 
 #### Feed rules
 

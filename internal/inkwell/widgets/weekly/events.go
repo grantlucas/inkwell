@@ -36,18 +36,30 @@ type eventPlan struct {
 	titleBudget  int // number of lines budgeted for the title (>= 1)
 }
 
+// eventOptions carries the per-render knobs that come from widget config
+// rather than from the column geometry. Location is the zone event clock
+// labels are rendered in: a parsed Event.Start is a correct instant but
+// carries whatever zone the feed serialized it with (UTC for a Z value, the
+// named zone for a TZID value), so formatting it directly leaks the feed's
+// zone onto the panel. It must never be nil; parseConfig defaults it.
+type eventOptions struct {
+	MaxEvents    int
+	ShowLocation bool
+	Location     *time.Location
+}
+
 // renderEvents draws calendar events for a single day within the given bounds.
 // Each event gets a 2px left rule, time line, and title. On a sparse day the
 // leftover vertical space is spent wrapping overflowing titles across extra
 // lines (see planEvents); a full column draws exactly as it did before.
 // Returns the number of events actually drawn.
-func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calendar.Event, maxEvents int, showLocation bool) int {
+func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calendar.Event, opts eventOptions) int {
 	maxChars := (bounds.Dx() - eventPadX - eventRuleW - eventGap) / charWidth
 	if maxChars < 3 {
 		return 0
 	}
 
-	plan := planEvents(events, maxEvents, lineCapacity(bounds), maxChars, showLocation)
+	plan := planEvents(events, lineCapacity(bounds), maxChars, opts)
 
 	ruleX := bounds.Min.X + eventPadX
 	textX := ruleX + eventRuleW + eventGap
@@ -113,11 +125,11 @@ func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calend
 // mirroring the original draw loop's slot accounting, then assignTitleLines
 // hands any leftover slots to titles that overflow the column width so sparse
 // days wrap instead of truncating.
-func planEvents(events []calendar.Event, maxEvents, capacity, maxChars int, showLocation bool) []eventPlan {
+func planEvents(events []calendar.Event, capacity, maxChars int, opts eventOptions) []eventPlan {
 	var plans []eventPlan
 	used := 0
 	for _, e := range events {
-		if len(plans) >= maxEvents {
+		if len(plans) >= opts.MaxEvents {
 			break
 		}
 		if used >= capacity { // no slot for this event's time line
@@ -128,7 +140,7 @@ func planEvents(events []calendar.Event, maxEvents, capacity, maxChars int, show
 		if e.AllDay {
 			p.timeLine = "ALL DAY"
 		} else {
-			p.timeLine = e.Start.Format("15:04")
+			p.timeLine = e.Start.In(opts.Location).Format("15:04")
 		}
 		used++ // time line
 
@@ -139,7 +151,7 @@ func planEvents(events []calendar.Event, maxEvents, capacity, maxChars int, show
 		p.drawTitle = true
 		used++ // title line
 
-		if showLocation && e.Location != "" && used < capacity {
+		if opts.ShowLocation && e.Location != "" && used < capacity {
 			p.location = e.Location
 			p.drawLocation = true
 			used++ // location line

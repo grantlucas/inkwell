@@ -222,7 +222,11 @@ func TestPlanEvents(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
-			plan := planEvents(tc.events, tc.maxEvents, tc.capacity, tc.maxChars, tc.showLocation)
+			plan := planEvents(tc.events, tc.capacity, tc.maxChars, eventOptions{
+				MaxEvents:    tc.maxEvents,
+				ShowLocation: tc.showLocation,
+				Location:     time.UTC,
+			})
 			if len(plan) != len(tc.wantBudgets) {
 				t.Fatalf("plan has %d events, want %d", len(plan), len(tc.wantBudgets))
 			}
@@ -252,7 +256,7 @@ func TestRenderEvents_WrappedTitleWithLocation(t *testing.T) {
 	// spans the whole multi-line event.
 	frame := newTestFrame(114, 200)
 	events := []ical.Event{evLoc("A Very Long Event Title That Overflows", "Conference Room")}
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), events, 5, true)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), events, eventOptions{MaxEvents: 5, ShowLocation: true, Location: time.UTC})
 	if rendered != 1 {
 		t.Fatalf("rendered %d events, want 1", rendered)
 	}
@@ -266,7 +270,7 @@ func TestRenderEvents_WrappedTitleWithLocation(t *testing.T) {
 func TestRenderEvents_SparseTitleWraps(t *testing.T) {
 	render := func(summary string) *image.Paletted {
 		f := newTestFrame(114, 200)
-		renderEvents(f, image.Rect(0, 0, 114, 200), []ical.Event{ev(summary)}, 5, false)
+		renderEvents(f, image.Rect(0, 0, 114, 200), []ical.Event{ev(summary)}, eventOptions{MaxEvents: 5, ShowLocation: false, Location: time.UTC})
 		return f
 	}
 	// textX past the 2px rule + gaps: eventPadX(4)+eventRuleW(2)+eventGap(2).
@@ -299,7 +303,7 @@ func TestRenderEvents_WithEvents(t *testing.T) {
 		},
 	}
 
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), events, 5, false)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), events, eventOptions{MaxEvents: 5, ShowLocation: false, Location: time.UTC})
 	if rendered != 2 {
 		t.Errorf("rendered %d events, want 2", rendered)
 	}
@@ -328,7 +332,7 @@ func TestRenderEvents_AllDay(t *testing.T) {
 		},
 	}
 
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), events, 5, false)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), events, eventOptions{MaxEvents: 5, ShowLocation: false, Location: time.UTC})
 	if rendered != 1 {
 		t.Errorf("rendered %d events, want 1", rendered)
 	}
@@ -336,7 +340,7 @@ func TestRenderEvents_AllDay(t *testing.T) {
 
 func TestRenderEvents_NoEvents(t *testing.T) {
 	frame := newTestFrame(114, 200)
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), nil, 5, false)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), nil, eventOptions{MaxEvents: 5, ShowLocation: false, Location: time.UTC})
 	if rendered != 0 {
 		t.Errorf("rendered %d events, want 0", rendered)
 	}
@@ -365,7 +369,7 @@ func TestRenderEvents_MaxEventsLimit(t *testing.T) {
 		})
 	}
 
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 400), events, 3, false)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 400), events, eventOptions{MaxEvents: 3, ShowLocation: false, Location: time.UTC})
 	if rendered != 3 {
 		t.Errorf("rendered %d events, want 3", rendered)
 	}
@@ -383,7 +387,7 @@ func TestRenderEvents_WithLocation(t *testing.T) {
 		},
 	}
 
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), events, 5, true)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 200), events, eventOptions{MaxEvents: 5, ShowLocation: true, Location: time.UTC})
 	if rendered != 1 {
 		t.Errorf("rendered %d events, want 1", rendered)
 	}
@@ -399,7 +403,7 @@ func TestRenderEvents_TinyBounds(t *testing.T) {
 			End:     time.Date(2026, 4, 28, 10, 0, 0, 0, time.UTC),
 		},
 	}
-	rendered := renderEvents(frame, image.Rect(0, 0, 10, 10), events, 5, false)
+	rendered := renderEvents(frame, image.Rect(0, 0, 10, 10), events, eventOptions{MaxEvents: 5, ShowLocation: false, Location: time.UTC})
 	if rendered != 0 {
 		t.Errorf("rendered %d events in tiny bounds, want 0", rendered)
 	}
@@ -417,7 +421,7 @@ func TestRenderEvents_HeightClipping(t *testing.T) {
 		})
 	}
 
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 50), events, 10, false)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 50), events, eventOptions{MaxEvents: 10, ShowLocation: false, Location: time.UTC})
 	if rendered >= 5 {
 		t.Errorf("rendered %d events in 50px, expected clipping", rendered)
 	}
@@ -519,7 +523,7 @@ func TestRenderEvents_TitleClippedByHeight(t *testing.T) {
 			End:     time.Date(2026, 4, 28, 10, 0, 0, 0, time.UTC),
 		},
 	}
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 38), events, 5, false)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 38), events, eventOptions{MaxEvents: 5, ShowLocation: false, Location: time.UTC})
 	if rendered != 1 {
 		t.Errorf("rendered %d events, want 1", rendered)
 	}
@@ -573,8 +577,191 @@ func TestRenderEvents_StopsAtPreEventYOverflow(t *testing.T) {
 		{UID: "3", Summary: "Third", Start: time.Date(2026, 4, 28, 11, 0, 0, 0, time.UTC)},
 	}
 
-	rendered := renderEvents(frame, image.Rect(0, 0, 114, 70), events, 10, false)
+	rendered := renderEvents(frame, image.Rect(0, 0, 114, 70), events, eventOptions{MaxEvents: 10, ShowLocation: false, Location: time.UTC})
 	if rendered != 1 {
 		t.Errorf("rendered %d events, want 1 (pre-event y-overflow should have stopped the loop after event 1)", rendered)
+	}
+}
+
+// TestPlanEvents_TimeLabelUsesDisplayZone pins the fix for the bug where an
+// event's clock label was rendered in whatever zone the feed happened to
+// serialize it with. Google emits Z-suffixed UTC instants for most events and
+// TZID-qualified wall times for others; both are the same kind of appointment
+// to the viewer and must read in the viewer's zone.
+func TestPlanEvents_TimeLabelUsesDisplayZone(t *testing.T) {
+	toronto, err := time.LoadLocation("America/Toronto")
+	if err != nil {
+		t.Fatalf("load America/Toronto: %v", err)
+	}
+
+	// 13:00 UTC on 2026-09-20 is 09:00 EDT — the reported failure.
+	utcStart := time.Date(2026, 9, 20, 13, 0, 0, 0, time.UTC)
+
+	plan := planEvents(
+		[]ical.Event{{Summary: "Air show", Start: utcStart, End: utcStart.Add(5 * time.Hour)}},
+		10, 13,
+		eventOptions{MaxEvents: 5, Location: toronto},
+	)
+	if len(plan) != 1 {
+		t.Fatalf("plan has %d events, want 1", len(plan))
+	}
+	if got, want := plan[0].timeLine, "09:00"; got != want {
+		t.Errorf("timeLine = %q, want %q", got, want)
+	}
+}
+
+// mustLoad is a small guard so zone-sensitive tables read as data rather than
+// error handling. tzdata is embedded by cmd/inkwell, and the test host has a
+// system zone database, so a failure here is a genuine environment problem.
+func mustLoad(t *testing.T, name string) *time.Location {
+	t.Helper()
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		t.Fatalf("load %s: %v", name, err)
+	}
+	return loc
+}
+
+// TestColumnAndLabelAgreeAcrossZones is the bucketing audit. filterEventsForDay
+// buckets timed events by true instant overlap and all-day events by bare date
+// components, both deliberately zone-independent; planEvents then labels in the
+// display zone. The invariant that matters to a viewer is that the two agree —
+// an event must never be drawn in a column whose date contradicts its own
+// printed clock. These cases pin that across both serialization styles, both
+// signs of UTC offset, midnight edges, and DST transitions.
+func TestColumnAndLabelAgreeAcrossZones(t *testing.T) {
+	toronto := mustLoad(t, "America/Toronto")
+	berlin := mustLoad(t, "Europe/Berlin")
+
+	// A timed event, expressed as the instant a feed would carry.
+	timed := func(summary string, start time.Time, mins int) ical.Event {
+		return ical.Event{Summary: summary, Start: start, End: start.Add(time.Duration(mins) * time.Minute)}
+	}
+	allDay := func(summary string, y int, m time.Month, d, days int) ical.Event {
+		s := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+		return ical.Event{Summary: summary, Start: s, End: s.AddDate(0, 0, days), AllDay: true}
+	}
+
+	cases := []struct {
+		label  string
+		loc    *time.Location
+		day    time.Time // midnight in loc, as Render builds it
+		events []ical.Event
+		want   []string // "summary@label", in column order
+	}{
+		{
+			label: "Z-serialized and TZID-serialized events at one instant agree",
+			loc:   toronto,
+			day:   time.Date(2026, 9, 20, 0, 0, 0, 0, toronto),
+			events: []ical.Event{
+				// The reported bug: 13:00Z is 09:00 EDT.
+				timed("Z form", time.Date(2026, 9, 20, 13, 0, 0, 0, time.UTC), 300),
+				timed("TZID form", time.Date(2026, 9, 20, 9, 0, 0, 0, toronto), 300),
+			},
+			want: []string{"Z form@09:00", "TZID form@09:00"},
+		},
+		{
+			label: "late local evening stays in its local column",
+			loc:   toronto,
+			// 2026-09-19 23:30 EDT is 2026-09-20 03:30Z — next day in UTC.
+			day: time.Date(2026, 9, 19, 0, 0, 0, 0, toronto),
+			events: []ical.Event{
+				timed("Nightcap", time.Date(2026, 9, 20, 3, 30, 0, 0, time.UTC), 30),
+			},
+			want: []string{"Nightcap@23:30"},
+		},
+		{
+			label: "late local evening does not leak into the next column",
+			loc:   toronto,
+			day:   time.Date(2026, 9, 20, 0, 0, 0, 0, toronto),
+			events: []ical.Event{
+				timed("Nightcap", time.Date(2026, 9, 20, 3, 30, 0, 0, time.UTC), 30),
+			},
+			want: nil,
+		},
+		{
+			label: "early local morning stays in its local column",
+			loc:   toronto,
+			day:   time.Date(2026, 9, 20, 0, 0, 0, 0, toronto),
+			events: []ical.Event{
+				timed("Airport run", time.Date(2026, 9, 20, 4, 30, 0, 0, time.UTC), 60),
+			},
+			want: []string{"Airport run@00:30"},
+		},
+		{
+			label: "positive-offset zone labels ahead of UTC",
+			loc:   berlin,
+			day:   time.Date(2026, 9, 20, 0, 0, 0, 0, berlin),
+			events: []ical.Event{
+				timed("Standup", time.Date(2026, 9, 20, 7, 0, 0, 0, time.UTC), 30),
+			},
+			want: []string{"Standup@09:00"},
+		},
+		{
+			label: "positive-offset zone pulls a late-UTC event into the next column",
+			loc:   berlin,
+			// 2026-09-19 23:00Z is 2026-09-20 01:00 CEST.
+			day: time.Date(2026, 9, 20, 0, 0, 0, 0, berlin),
+			events: []ical.Event{
+				timed("Late call", time.Date(2026, 9, 19, 23, 0, 0, 0, time.UTC), 30),
+			},
+			want: []string{"Late call@01:00"},
+		},
+		{
+			label: "spring-forward 23-hour day keeps its events",
+			loc:   toronto,
+			// 2026-03-08 is the DST jump; 14:00Z is 10:00 EDT.
+			day: time.Date(2026, 3, 8, 0, 0, 0, 0, toronto),
+			events: []ical.Event{
+				timed("Brunch", time.Date(2026, 3, 8, 14, 0, 0, 0, time.UTC), 90),
+			},
+			want: []string{"Brunch@10:00"},
+		},
+		{
+			label: "fall-back 25-hour day keeps a post-transition event",
+			loc:   toronto,
+			// 2026-11-01 falls back at 02:00; 18:00Z is 13:00 EST.
+			day: time.Date(2026, 11, 1, 0, 0, 0, 0, toronto),
+			events: []ical.Event{
+				timed("Late lunch", time.Date(2026, 11, 1, 18, 0, 0, 0, time.UTC), 60),
+			},
+			want: []string{"Late lunch@13:00"},
+		},
+		{
+			label:  "all-day span covers its dates in a negative-offset zone",
+			loc:    toronto,
+			day:    time.Date(2026, 9, 21, 0, 0, 0, 0, toronto),
+			events: []ical.Event{allDay("Visitors", 2026, 9, 19, 9)},
+			want:   []string{"Visitors@ALL DAY"},
+		},
+		{
+			label:  "all-day span covers its dates in a positive-offset zone",
+			loc:    berlin,
+			day:    time.Date(2026, 9, 21, 0, 0, 0, 0, berlin),
+			events: []ical.Event{allDay("Visitors", 2026, 9, 19, 9)},
+			want:   []string{"Visitors@ALL DAY"},
+		},
+		{
+			label:  "all-day span is exclusive of its DTEND date",
+			loc:    toronto,
+			day:    time.Date(2026, 9, 28, 0, 0, 0, 0, toronto),
+			events: []ical.Event{allDay("Visitors", 2026, 9, 19, 9)},
+			want:   nil,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			dayEvents := filterEventsForDay(tc.events, tc.day, tc.day.AddDate(0, 0, 1))
+			plan := planEvents(dayEvents, 40, 20, eventOptions{MaxEvents: 10, Location: tc.loc})
+
+			var got []string
+			for _, p := range plan {
+				got = append(got, p.summary+"@"+p.timeLine)
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("column contents = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

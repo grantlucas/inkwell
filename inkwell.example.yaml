@@ -100,6 +100,12 @@ dashboard:
             show_weather: true
             show_weather_label: true
             max_events: 5
+            # IANA zone the day columns and event clock labels render in.
+            # Defaults to the host's system timezone. Set it explicitly on a
+            # headless device: most feeds serialize events as UTC instants, so
+            # a Pi whose system TZ was never configured renders every event
+            # hours off (and can be a whole day out near midnight).
+            timezone: "America/Toronto"
             # Location, model, and temp_unit are inherited from the top-level
             # weather: block above. Override any of them here per widget, e.g.:
             #   longitude: -123.1   # show a different city in this widget
