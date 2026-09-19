@@ -109,8 +109,9 @@ func TestRun_ServerShutdownOnCancel(t *testing.T) {
 	}
 
 	// Server should be shut down — connection refused.
-	_, err := http.Get("http://" + addr + "/")
+	resp, err := http.Get("http://" + addr + "/")
 	if err == nil {
+		_ = resp.Body.Close()
 		t.Fatal("expected connection refused after shutdown")
 	}
 }
