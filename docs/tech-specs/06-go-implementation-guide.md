@@ -140,8 +140,8 @@ a non-nil `Data` are sent as command-then-data pairs.
 
 The application currently only invokes `InitFull` from the run loop in
 [`app.go`][app]; switching dynamically to `InitFast` or `InitPartial`
-is a future optimisation (see open beads issues for `Gray4` and partial
-refresh work).
+is a future optimisation (see `Gray4` and partial refresh work in the
+execution plan).
 
 ## Hardware Interface
 
@@ -214,8 +214,8 @@ See [`epd.go`][epd]. Notable behaviour:
   (`white`/`light gray`/`dark gray`/`black`) packed 4 pixels per byte.
   Selected when `color_mode: gray4` is set in `inkwell.yaml`; the
   Init4Gray device wiring (plane-split write, `Init4Gray` `InitMode`
-  selection at startup, WebPreview unpacker) is tracked under beads
-  issues `inkwell-usv`, `inkwell-101`, `inkwell-0p7`, `inkwell-0yd`.
+  selection at startup, WebPreview unpacker) was tracked under
+  `inkwell-usv`, `inkwell-101`, `inkwell-0p7`, `inkwell-0yd`.
 - **`Color7`** is reserved in the `ColorDepth` enum for future panels;
   there is no packer for it yet.
 
@@ -269,7 +269,7 @@ prevents accidental cross-compilation drag from system libraries.
 
 These pieces are designed but not fully wired in the current tree.
 The execution plan in [`inkwell-execution-plan.md`](../../inkwell-execution-plan.md)
-and the active beads workspace track them.
+tracks them.
 
 - **Gray4 device path.** Fully wired host-side: `packGray4` produces the
   2bpp buffer, `EPD.Display` splits it into two 1bpp planes (low bit →
@@ -278,7 +278,7 @@ and the active beads workspace track them.
   encodings), and the capture backends (`WebPreview`, `ImageBackend`)
   join the planes via `reconstructFrame` to render four distinct shades
   in PNG. Remaining work is on-device validation
-  (beads `inkwell-0p7`) — needs a Raspberry Pi + Waveshare panel.
+  (`inkwell-0p7`) — needs a Raspberry Pi + Waveshare panel.
 - **Partial refresh in the render loop.** `EPD.DisplayPartial` is
   implemented but the render loop in `App.Run` only calls
   `EPD.Display` (full refresh). Switching to partial selectively is a
