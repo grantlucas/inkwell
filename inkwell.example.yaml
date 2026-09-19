@@ -1,3 +1,5 @@
+# Every setting below is documented in docs/guides/configuration.md —
+# accepted values, defaults, and what each one changes on the panel.
 display: waveshare_7in5_v2
 backend: preview
 color_mode: gray4  # 4-level grayscale (recommended). Set to "bw" for

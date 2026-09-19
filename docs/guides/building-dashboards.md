@@ -190,6 +190,11 @@ Screens and dashboards are defined in `inkwell.yaml`. You don't need
 to write Go code to arrange widgets — just edit the config and
 restart.
 
+> This section covers enough config to place a widget. For the full
+> list of settings — every top-level key, every built-in widget's
+> options, and what each one changes on the panel — see the
+> [configuration reference](configuration.md).
+
 ### Example config
 
 ```yaml
