@@ -114,7 +114,7 @@ the correct commands and data.
 
 Note: every widget instance must set a `refresh:` in config (a duration >= 1m,
 or `"static"`); loading fails otherwise. See
-[Refresh Strategy](docs/tech-specs/08-refresh-strategy.md#per-widget-refresh-cadence-the-refresh-queue).
+[ADR 0011](docs/adrs/0011-require-a-per-widget-refresh-cadence.md).
 
 See the [Building Dashboards
 guide](docs/guides/building-dashboards.md#creating-a-widget) for a full

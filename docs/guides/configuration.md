@@ -288,7 +288,7 @@ minute.
 
 Burn-in protection is *not* configurable: the periodic full-panel
 clearing refresh is a hardware property, fixed internally. See
-[08-refresh-strategy.md](../tech-specs/08-refresh-strategy.md).
+[ADR 0008](../adrs/0008-full-screen-fast-refresh-instead-of-windowed-partial.md).
 
 ## Widget reference
 
@@ -516,7 +516,8 @@ image:
   actually show, and why `color_mode` matters.
 - [Installation](installation.md) — running on a Raspberry Pi with
   `backend: spi`.
-- [Refresh strategy](../tech-specs/08-refresh-strategy.md) — the
+- [ADR 0008](../adrs/0008-full-screen-fast-refresh-instead-of-windowed-partial.md)
+  and [ADR 0011](../adrs/0011-require-a-per-widget-refresh-cadence.md) — the
   waveform and cadence machinery behind `refresh`.
 - [weekly-calendar README](../../internal/inkwell/widgets/weekly/README.md)
   — feed setup and layout detail.

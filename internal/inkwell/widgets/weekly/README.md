@@ -136,7 +136,7 @@ Top-level keys (`type`, `bounds`, `refresh`) are required by every widget.
 > *render cadence* — how often a frame change is allowed to push to the panel
 > (a duration `>= 1m`, or `"static"`). The **nested** `config.refresh` is the
 > *calendar data cache TTL* — how often the ICS feeds are re-fetched. They are
-> independent; see [`docs/tech-specs/08-refresh-strategy.md`](../../../../docs/tech-specs/08-refresh-strategy.md).
+> independent; see [ADR 0011](../../../../docs/adrs/0011-require-a-per-widget-refresh-cadence.md).
 
 The widget-specific keys live under `config:`.
 
