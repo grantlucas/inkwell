@@ -52,7 +52,9 @@ var Profiles = map[string]*DisplayProfile{
 }
 
 // Waveshare7in5V2 is the profile for the Waveshare 7.5" e-Paper V2 (800x480, BW).
-// Init sequences sourced from docs/05-spi-command-reference.md.
+// Init sequences follow the Waveshare reference driver (epd7in5_V2.py); this
+// file is their only copy in the tree, and TestInitSendsResetThenProfileCommands
+// pins every byte.
 var Waveshare7in5V2 = DisplayProfile{
 	Name:   "waveshare_7in5_v2",
 	Width:  800,
@@ -63,33 +65,48 @@ var Waveshare7in5V2 = DisplayProfile{
 		PartialRefresh: true,
 		Grayscale:      true,
 	},
-	// InitFull deliberately matches InitFast's drive strength so the periodic
-	// full refresh settles at full contrast instead of muted. The stock
-	// Waveshare init() clamps the power setting (0x01) to a lower VDH/VDL and
-	// uses a weaker booster than init_fast(); because inkwell force-drives every
-	// BW pixel (old=^new) on both paths, that asymmetry made the hourly full
-	// refresh drive softer than the surrounding fast refreshes and come back
-	// blotchy. So we adopt the fast booster and drop the 0x01 clamp, letting
-	// VDH/VDL inherit the post-reset default the (crisp) fast path already
-	// relies on. This does NOT turn it into a fast refresh: the full/GC
-	// multi-flash waveform is still selected because InitFull never forces
-	// temperature (0xE5) the way InitFast does.
+	// InitFull is the vendor init() byte for byte (epd7in5_V2.py, Waveshare
+	// e-Paper master, 2024-10). Two of its bytes are the panel's drive
+	// contract and are easy to get wrong, so what they do is recorded here
+	// (UC8179c datasheet, R01H / R06H):
+	//
+	//   - 0x01 power setting {07 07 28 17}: VGH/VGL ±20 V (byte 2 = 0x07),
+	//     VDH ≈ +10.5 V (0x28), VDL = −7 V (0x17). Waveshare lowered these
+	//     from the older {07 07 3F 3F} (±15 V) in Sept 2024 to suit the newer
+	//     film batch. Omitting the command is NOT neutral: the controller's
+	//     power-on default is 0x3A = ±14 V on both rails, i.e. a harder,
+	//     symmetric drive than the vendor asks for on this film.
+	//   - 0x06 booster {17 17 28 17}: bits [5:3] are drive strength (1–8).
+	//     Phases A/B at 3 shape the start-up ramp; phase C1 at 6 (0x28) is
+	//     the sustain phase that holds the rails for the whole multi-flash
+	//     refresh. The fast/4-gray sequences use {27 27 18 17} — a faster
+	//     ramp but a weaker sustain (4) — which is fine for their short
+	//     waveforms and wrong for the full one.
+	//
+	// An earlier revision dropped 0x01 and borrowed the fast booster on the
+	// theory that the reset default was crisper (ADR 0009). The datasheet
+	// says otherwise and the fading it was chasing turned out to be light on
+	// the TFT backplane (ADR 0014), so the profile is back on the vendor
+	// sequence (ADR 0013). If Waveshare changes init() again, change this to
+	// match; do not tune it by eye on the preview, which cannot show drive
+	// strength.
 	InitFull: []Command{
-		{0x06, []byte{0x27, 0x27, 0x18, 0x17}}, // Booster soft start (matches InitFast)
-		{0x04, nil},                             // Power on (+ busy wait) — power setting inherits reset default
-		{0x00, []byte{0x1F}},                    // Panel setting
+		{0x06, []byte{0x17, 0x17, 0x28, 0x17}}, // Booster soft start
+		{0x01, []byte{0x07, 0x07, 0x28, 0x17}}, // Power setting
+		{0x04, nil},                            // Power on (+ busy wait)
+		{0x00, []byte{0x1F}},                   // Panel setting
 		{0x61, []byte{0x03, 0x20, 0x01, 0xE0}}, // Resolution 800x480
-		{0x15, []byte{0x00}},                    // Dual SPI off
-		{0x50, []byte{0x10, 0x07}},              // VCOM interval
-		{0x60, []byte{0x22}},                    // TCON setting
+		{0x15, []byte{0x00}},                   // Dual SPI off
+		{0x50, []byte{0x10, 0x07}},             // VCOM interval
+		{0x60, []byte{0x22}},                   // TCON setting
 	},
 	InitFast: []Command{
-		{0x00, []byte{0x1F}},                    // Panel setting
-		{0x50, []byte{0x10, 0x07}},              // VCOM interval
-		{0x04, nil},                             // Power on (+ busy wait)
+		{0x00, []byte{0x1F}},                   // Panel setting
+		{0x50, []byte{0x10, 0x07}},             // VCOM interval
+		{0x04, nil},                            // Power on (+ busy wait)
 		{0x06, []byte{0x27, 0x27, 0x18, 0x17}}, // Booster
-		{0xE0, []byte{0x02}},                    // Cascade setting
-		{0xE5, []byte{0x5A}},                    // Force temperature
+		{0xE0, []byte{0x02}},                   // Cascade setting
+		{0xE5, []byte{0x5A}},                   // Force temperature
 	},
 	InitPartial: []Command{
 		{0x00, []byte{0x1F}}, // Panel setting

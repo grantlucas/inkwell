@@ -339,6 +339,15 @@ service user can read it (group `gpio` after re-login); (3) the
 `journalctl -u inkwell` logs for `periph host init` errors that would
 indicate the kernel GPIO driver failed to load.
 
+**Panel fades region-by-region a second or two after a refresh** — text
+that lands crisp and then washes out to patchy gray in one part of the
+panel, worse where there is more ink, is almost never the driver. The
+pixels are switched by transistors on the *back* of the glass, and those
+transistors leak under light. Check the enclosure: any cutout or gap that
+lets room light, a lamp, or a window reach the back of the panel will do
+it. Cover the back completely and refresh again; if the fade goes, fix the
+case. See [ADR 0014](../adrs/0014-shield-the-tft-backplane-from-light.md).
+
 ## Building from Source (Advanced)
 
 If you need to run an unreleased commit or target an architecture

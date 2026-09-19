@@ -3,6 +3,7 @@ package inkwell
 import (
 	"bytes"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 )
@@ -136,7 +137,7 @@ func TestExecSequenceThreeCommands(t *testing.T) {
 
 	seq := []Command{
 		{0x06, []byte{0x17, 0x17}}, // command with data
-		{0x04, nil},                 // command without data (triggers busy wait)
+		{0x04, nil},                // command without data (triggers busy wait)
 		{0x00, []byte{0x1F}},       // command with data
 	}
 
@@ -198,21 +199,59 @@ func TestExecSequenceSendDataError(t *testing.T) {
 
 // --- Init ---
 
+// TestInitSendsResetThenProfileCommands pins every byte of the Waveshare
+// 7.5" V2 init sequences — command registers and data — against the vendor
+// reference driver (epd7in5_V2.py at waveshareteam/e-Paper master, 2024-10).
+// The sequences are the panel's electrical contract: a "tuning" that drops
+// or reorders a byte is invisible in the preview and only shows up as
+// contrast drift on real hardware, so the table is deliberately exhaustive
+// rather than checking registers alone. See the profile.go comments for what
+// each byte does and why InitFull carries the power setting (0x01) that the
+// fast, partial and 4-gray sequences omit.
 func TestInitSendsResetThenProfileCommands(t *testing.T) {
 	tests := []struct {
-		name     string
-		mode     InitMode
-		wantCmds []byte
+		name string
+		mode InitMode
+		want []Command
 	}{
-		{"InitFull", InitFull, []byte{0x06, 0x04, 0x00, 0x61, 0x15, 0x50, 0x60}},
-		{"InitFast", InitFast, []byte{0x00, 0x50, 0x04, 0x06, 0xE0, 0xE5}},
-		{"InitPartial", InitPartial, []byte{0x00, 0x04, 0xE0, 0xE5}},
-		{"Init4Gray", Init4Gray, []byte{0x00, 0x50, 0x04, 0x06, 0xE0, 0xE5}},
+		{"InitFull", InitFull, []Command{
+			{0x06, []byte{0x17, 0x17, 0x28, 0x17}}, // booster soft start
+			{0x01, []byte{0x07, 0x07, 0x28, 0x17}}, // power setting: VGH/VGL ±20 V, VDH +10.5 V, VDL −7 V
+			{0x04, nil},                            // power on (+ busy wait)
+			{0x00, []byte{0x1F}},                   // panel setting: OTP LUT, KW, booster on
+			{0x61, []byte{0x03, 0x20, 0x01, 0xE0}}, // resolution 800x480
+			{0x15, []byte{0x00}},                   // dual SPI off
+			{0x50, []byte{0x10, 0x07}},             // VCOM and data interval
+			{0x60, []byte{0x22}},                   // TCON
+		}},
+		{"InitFast", InitFast, []Command{
+			{0x00, []byte{0x1F}},
+			{0x50, []byte{0x10, 0x07}},
+			{0x04, nil},
+			{0x06, []byte{0x27, 0x27, 0x18, 0x17}},
+			{0xE0, []byte{0x02}},
+			{0xE5, []byte{0x5A}},
+		}},
+		{"InitPartial", InitPartial, []Command{
+			{0x00, []byte{0x1F}},
+			{0x04, nil},
+			{0xE0, []byte{0x02}},
+			{0xE5, []byte{0x6E}},
+		}},
+		{"Init4Gray", Init4Gray, []Command{
+			{0x00, []byte{0x1F}},
+			{0x50, []byte{0x10, 0x07}},
+			{0x04, nil},
+			{0x06, []byte{0x27, 0x27, 0x18, 0x17}},
+			{0xE0, []byte{0x02}},
+			{0xE5, []byte{0x5F}},
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := &MockHardware{}
 			epd := NewEPD(m, &Waveshare7in5V2)
+			epd.sleep = func(time.Duration) {}
 
 			if err := epd.Init(tt.mode); err != nil {
 				t.Fatal(err)
@@ -220,11 +259,34 @@ func TestInitSendsResetThenProfileCommands(t *testing.T) {
 			if m.Calls[0].Type != "reset" {
 				t.Errorf("first call = %q, want reset", m.Calls[0].Type)
 			}
-			if cmds := m.Commands(); !bytes.Equal(cmds, tt.wantCmds) {
-				t.Errorf("commands = %#v, want %#v", cmds, tt.wantCmds)
+			got := recordedCommands(m)
+			if len(got) != len(tt.want) {
+				t.Fatalf("sent %d commands, want %d:\n got  %v\n want %v", len(got), len(tt.want), got, tt.want)
+			}
+			for i := range tt.want {
+				if got[i].Reg != tt.want[i].Reg || !bytes.Equal(got[i].Data, tt.want[i].Data) {
+					t.Errorf("command %d = {%#02x % x}, want {%#02x % x}", i, got[i].Reg, got[i].Data, tt.want[i].Reg, tt.want[i].Data)
+				}
 			}
 		})
 	}
+}
+
+// recordedCommands rebuilds the Command sequence the mock saw: each command
+// byte paired with the data payload (if any) sent immediately after it.
+func recordedCommands(m *MockHardware) []Command {
+	var out []Command
+	for i, c := range m.Calls {
+		if c.Type != "command" {
+			continue
+		}
+		cmd := Command{Reg: c.Data[0]}
+		if i+1 < len(m.Calls) && m.Calls[i+1].Type == "data" {
+			cmd.Data = m.Calls[i+1].Data
+		}
+		out = append(out, cmd)
+	}
+	return out
 }
 
 func TestInitUnsupportedModeReturnsError(t *testing.T) {
@@ -731,7 +793,7 @@ func TestDisplayPartialWindowEncoding(t *testing.T) {
 		0x01, 0x1F, // Xend=287
 		0x00, 0x64, // Ystart=100
 		0x00, 0x95, // Yend=149
-		0x01,       // Scan direction
+		0x01, // Scan direction
 	}
 	if !bytes.Equal(wd, want) {
 		t.Errorf("window data = %#v, want %#v", wd, want)
@@ -777,5 +839,41 @@ func TestDisplayPartialSendDataErrors(t *testing.T) {
 		if err := NewEPD(ed, p).DisplayPartial(buf, buf, region); err == nil {
 			t.Errorf("expected error on SendData #%d", n)
 		}
+	}
+}
+
+// TestWaitIdleSettleDelays pins the vendor busy handshake around every
+// waveform trigger. The Waveshare reference driver never reads BUSY on the
+// instruction after the trigger command: it waits 100 ms first (the C source
+// notes the delay is "necessary, 200uS at least" — BUSY_N only *becomes* low
+// after the command, so an immediate read can see the pin still idle and
+// skip the wait entirely), polls at 10 ms, and settles 20 ms after BUSY
+// releases before the next command. With BusyCount=2 the recorded sleeps
+// must therefore be [trigger settle, poll, poll, idle settle].
+func TestWaitIdleSettleDelays(t *testing.T) {
+	want := []time.Duration{
+		defaultTriggerSettle, defaultBusyPollInterval, defaultBusyPollInterval, defaultIdleSettle,
+	}
+	tests := []struct {
+		label string
+		run   func(*EPD) error
+	}{
+		{"Display", func(e *EPD) error { return e.Display(make([]byte, e.profile.BufferSize())) }},
+		{"execSequence power on", func(e *EPD) error { return e.execSequence([]Command{{0x04, nil}}) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			m := &MockHardware{BusyCount: 2}
+			epd := NewEPD(m, smallTestProfile())
+			var got []time.Duration
+			epd.sleep = func(d time.Duration) { got = append(got, d) }
+
+			if err := tt.run(epd); err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(got, want) {
+				t.Errorf("sleeps = %v, want %v", got, want)
+			}
+		})
 	}
 }

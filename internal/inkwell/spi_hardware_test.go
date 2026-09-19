@@ -7,6 +7,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"periph.io/x/conn/v3"
 	"periph.io/x/conn/v3/gpio"
@@ -343,11 +344,18 @@ func TestSPIHardware_Reset_PulseSequence(t *testing.T) {
 
 func TestSPIHardware_Close_PowersDown(t *testing.T) {
 	hw, _, _, _, _, pwrPin := newTestSPIHardware(t)
+	var slept time.Duration
+	hw.sleep = func(d time.Duration) { slept = d }
 
 	if err := hw.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
 
+	// The vendor waits 2 s between the deep-sleep command and cutting the
+	// panel's rail ("important, at least 2s"); dropping the wait must fail here.
+	if slept != pwrOffSettle {
+		t.Errorf("Close settle = %v, want %v", slept, pwrOffSettle)
+	}
 	if pwrPin.L != gpio.Low {
 		t.Errorf("PWR pin after Close = %v, want Low", pwrPin.L)
 	}
@@ -376,6 +384,7 @@ func TestSPIHardware_Close_CollectsErrors(t *testing.T) {
 		t.Fatalf("NewSPIHardware: %v", err)
 	}
 
+	hw.sleep = func(time.Duration) {}
 	closeErr := hw.Close()
 	if closeErr == nil {
 		t.Fatal("expected error from Close")
@@ -772,6 +781,7 @@ func TestSPIHardware_Close_PortCloseError(t *testing.T) {
 	}
 	hw.port = port
 
+	hw.sleep = func(time.Duration) {}
 	closeErr := hw.Close()
 	if !errors.Is(closeErr, portErr) {
 		t.Errorf("Close error = %v, want %v", closeErr, portErr)

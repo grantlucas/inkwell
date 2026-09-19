@@ -86,7 +86,10 @@ legibility, `color_mode: bw` is the answer.
 The web preview reconstructs the device buffer from captured planes, so it can't
 show flicker. Sign-off for any change here is on real hardware, in both modes.
 
-See also [ADR 0009](0009-match-initfull-drive-strength-to-initfast.md) and
-[ADR 0010](0010-re-init-before-every-gray4-push.md), which fix contrast problems
-this cadence exposed, and [ADR 0011](0011-require-a-per-widget-refresh-cadence.md),
-which decides when a change is allowed to push at all.
+See also [ADR 0011](0011-require-a-per-widget-refresh-cadence.md), which
+decides when a change is allowed to push at all, and
+[ADR 0012](0012-sleep-the-panel-between-refreshes.md), which replaced the
+"re-init only when the waveform changes" rule above with a full init, display,
+sleep cycle on every push. The contrast problems first attributed to this
+cadence (ADRs 0009 and 0010, both superseded) were light on the panel's
+backplane; see [ADR 0014](0014-shield-the-tft-backplane-from-light.md).

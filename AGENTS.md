@@ -104,6 +104,16 @@ cleanly settles the box inverted under the partial waveform on real
 hardware (inkwell-6jq). The flash is hardware-only — the web preview can't
 show it.
 
+Every push runs the vendor lifecycle: hardware reset + the waveform's init
+sequence, the frame, then the sleep sequence (power off + deep sleep). The
+panel is never left energised between refreshes — Waveshare says that
+damages it, and an energised panel is what lets light on the TFT backplane
+fade a settled image. The init sequences in `profile.go` are the vendor
+driver's byte for byte and are pinned by test; do not "tune" them against
+the preview. If the panel fades region-by-region within a second of a
+refresh settling, suspect light reaching the back of the panel before
+suspecting the driver (ADR 0014).
+
 *When* a change is allowed to push is a further axis. The burn-in/waveform
 cadence is fixed internally (`defaultFullEvery` in `refresh.go`), not user
 config. What the config controls is each widget's
@@ -115,7 +125,7 @@ widget is *due* this minute (wall-clock aligned, so equal cadences coalesce;
 static widgets never open the gate). Don't confuse a widget's top-level
 `refresh` (render cadence) with `weekly-calendar`'s nested `config.refresh`
 (data cache TTL). See the
-[architecture decision records](docs/adrs/), 0008 through 0011.
+[architecture decision records](docs/adrs/), 0008 through 0014.
 
 ## Workflow
 

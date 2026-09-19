@@ -31,6 +31,9 @@ their only copy now.
 | [0009](0009-match-initfull-drive-strength-to-initfast.md) | Tune `InitFull` to drive as hard as `InitFast` |
 | [0010](0010-re-init-before-every-gray4-push.md) | Re-run the hardware init before every Gray4 push |
 | [0011](0011-require-a-per-widget-refresh-cadence.md) | Require a per-widget `refresh:` and gate pushes on a wall-clock queue |
+| [0012](0012-sleep-the-panel-between-refreshes.md) | Sleep the panel after every push and re-init before the next (supersedes 0010) |
+| [0013](0013-restore-the-vendor-init-sequence.md) | Restore the vendor `init()` sequence for the full refresh (supersedes 0009) |
+| [0014](0014-shield-the-tft-backplane-from-light.md) | Shield the panel's TFT backplane from light |
 
 ## Writing a new one
 
