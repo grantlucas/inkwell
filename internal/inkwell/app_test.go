@@ -536,16 +536,22 @@ func countResets(mock *MockHardware) int {
 	return n
 }
 
-// TestApp_RefreshGray4PeriodicCycleForcesReInit confirms the burn-in-cadence
-// refresh in Gray4 mode performs a genuine hardware re-init (reset + the
-// Init4Gray power-on/booster sequence), not just another Display() push —
-// even though the resulting waveform label (Init4Gray) never changes from
-// what's already applied. Gray4 has only one waveform, so the naive
-// "re-init only when the target label differs" guard would otherwise never
-// fire again after the very first cycle, silently disabling the periodic
-// clearing flash that's supposed to prevent ghosting/fading (inkwell fading
-// investigation, Sept 2026).
-func TestApp_RefreshGray4PeriodicCycleForcesReInit(t *testing.T) {
+// TestApp_RefreshGray4EveryPushForcesReInit confirms every Gray4 push — not
+// just the periodic burn-in cycle — performs a genuine hardware re-init
+// (reset + the Init4Gray power-on/booster sequence), even though the
+// resulting waveform label (Init4Gray) never changes from what's already
+// applied. An earlier version of this fix forced the re-init only on the
+// periodic cadence tick; real hardware testing showed the panel rendered
+// crisp immediately after that forced re-init and then visibly faded on
+// the very next routine push, meaning the electrical state drifts even
+// between consecutive Gray4 pushes, not just over the long burn-in window
+// (inkwell fading investigation, Sept 2026). Gray4 has no cheaper steady
+// state worth preserving — a label-change check alone would never re-fire
+// after the first cycle anyway, since Gray4 has only one waveform — so
+// every push now forces it, matching the upstream Waveshare reference
+// driver's own pattern of re-running its 4-gray init before every 4-gray
+// display call.
+func TestApp_RefreshGray4EveryPushForcesReInit(t *testing.T) {
 	app, mock := newGray4RefreshApp(t, 3)
 	size := app.profile.BufferSize()
 	mode := Init4Gray // the LUT a startup Init4Gray leaves loaded
@@ -553,8 +559,7 @@ func TestApp_RefreshGray4PeriodicCycleForcesReInit(t *testing.T) {
 	frameB := bytes.Repeat([]byte{0xFF}, size)
 	frameC := make([]byte, size)
 
-	// Cycle 1 (tick 1): forced periodic refresh. Must re-init even though
-	// mode is already Init4Gray, since this is the burn-in clearing cycle.
+	// Cycle 1 (tick 1): forced periodic refresh.
 	if pushed, err := app.refresh(frameA, nil, true, &mode); err != nil || !pushed {
 		t.Fatalf("cycle 1: pushed=%v err=%v, want pushed=true", pushed, err)
 	}
@@ -562,24 +567,21 @@ func TestApp_RefreshGray4PeriodicCycleForcesReInit(t *testing.T) {
 		t.Fatalf("resets after cycle 1 = %d, want 1", got)
 	}
 
-	// Cycle 2 (tick 2): routine changed cycle, same waveform label — no
-	// re-init needed here.
+	// Cycle 2 (tick 2): routine changed cycle, same waveform label as
+	// cycle 1 — must still force a re-init.
 	if pushed, err := app.refresh(frameB, frameA, true, &mode); err != nil || !pushed {
 		t.Fatalf("cycle 2: pushed=%v err=%v, want pushed=true", pushed, err)
 	}
-	if got := countResets(mock); got != 1 {
-		t.Fatalf("resets after cycle 2 = %d, want still 1 (routine cycle must not force re-init)", got)
+	if got := countResets(mock); got != 2 {
+		t.Fatalf("resets after cycle 2 (routine) = %d, want 2 — every Gray4 push must force a hardware re-init", got)
 	}
 
-	// Cycle 3 (tick 3, fullEvery=3): the periodic burn-in cycle again. The
-	// waveform label is still Init4Gray — unchanged from *mode — so the old
-	// "only re-init when the label changes" guard would skip this. It must
-	// still force a real re-init to actually clear ghosting.
+	// Cycle 3 (tick 3, fullEvery=3): the periodic burn-in cycle again.
 	if pushed, err := app.refresh(frameC, frameB, true, &mode); err != nil || !pushed {
 		t.Fatalf("cycle 3: pushed=%v err=%v, want pushed=true", pushed, err)
 	}
-	if got := countResets(mock); got != 2 {
-		t.Fatalf("resets after cycle 3 (periodic) = %d, want 2 — periodic Gray4 cycle must force a hardware re-init even when the waveform label is unchanged", got)
+	if got := countResets(mock); got != 3 {
+		t.Fatalf("resets after cycle 3 (periodic) = %d, want 3", got)
 	}
 }
 
