@@ -82,7 +82,8 @@ flowchart TB
 ```
 
 All source lives in `internal/inkwell/`. The entry point is `cmd/inkwell/main.go`.
-Configuration is loaded from `inkwell.yaml`.
+Configuration is loaded from `inkwell.yaml`; every setting is documented in the
+[configuration reference](docs/guides/configuration.md).
 
 ## Quick Start
 
@@ -184,6 +185,8 @@ and register it in the `Profiles` map. No driver code changes are needed.
 The `docs/` directory contains detailed reference material:
 
 - **Guides** ([docs/guides/](docs/guides/)) — user-facing how-tos:
+  - [Configuration reference](docs/guides/configuration.md) — every
+    setting, its accepted values, and what it changes on the panel
   - [Installation on a Raspberry Pi](docs/guides/installation.md)
   - [Building dashboards](docs/guides/building-dashboards.md)
   - [Hardware grayscale ceilings](docs/guides/hardware-grayscale.md)

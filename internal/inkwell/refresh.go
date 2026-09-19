@@ -41,9 +41,31 @@ func newRefreshPlanner(color ColorDepth, fullEvery int) *refreshPlanner {
 	return &refreshPlanner{color: color, fullEvery: fullEvery}
 }
 
-// next advances the cycle counter and returns the refresh action to take.
-// changed reports whether the packed frame differs from what's on the panel.
-func (p *refreshPlanner) next(changed bool) refreshKind {
+// next advances the cycle counter and returns the refresh action to take,
+// plus whether the caller must force a genuine hardware re-init (reset +
+// power-on/booster) before pushing, even if the resulting refreshKind's
+// waveform label is unchanged from what's already applied. changed reports
+// whether the packed frame differs from what's on the panel.
+//
+// In BW mode, forceInit is true only on the burn-in cadence tick: a routine
+// refreshFast reuses the electrical state InitFast already left loaded, and
+// that's been fine in practice (the label still changes at the Full/Fast
+// boundary, which forces a re-init at that boundary regardless).
+//
+// In Gray4 mode, forceInit is unconditionally true on every tick that
+// pushes a frame. Gray4 has only one waveform (refreshGray), so a routine
+// tick and the periodic tick are otherwise indistinguishable to the
+// caller — a label-change check alone would never re-fire after the very
+// first cycle. That was tried (only forcing the re-init on the periodic
+// tick) and confirmed insufficient on real hardware: the panel rendered
+// crisp immediately after a forced re-init and then visibly faded on the
+// very next routine push, meaning the booster/analog drive state drifts
+// even between consecutive Gray4 pushes, not just over the long burn-in
+// window. This matches the upstream Waveshare reference driver, which
+// re-runs its 4-gray init sequence before every single 4-gray display
+// call rather than amortizing it — Gray4 has no cheaper steady state to
+// preserve, so there's nothing to gain by skipping it.
+func (p *refreshPlanner) next(changed bool) (kind refreshKind, forceInit bool) {
 	p.tick++
 
 	// A full refresh on the first cycle and on the full cadence clears
@@ -51,20 +73,20 @@ func (p *refreshPlanner) next(changed bool) refreshKind {
 	// rule even when content is static.
 	if p.tick == 1 || (p.fullEvery > 0 && p.tick%p.fullEvery == 0) {
 		if p.color == Gray4 {
-			return refreshGray
+			return refreshGray, true
 		}
-		return refreshFull
+		return refreshFull, true
 	}
 
 	// Nothing changed since the last frame on the panel — don't reflash.
 	if !changed {
-		return refreshSkip
+		return refreshSkip, false
 	}
 
 	if p.color == Gray4 {
-		return refreshGray
+		return refreshGray, true
 	}
 
 	// BW: a single-flicker fast full refresh redraws the changed content cleanly.
-	return refreshFast
+	return refreshFast, false
 }

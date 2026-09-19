@@ -49,7 +49,7 @@ const defaultConfigPath = "inkwell.yaml"
 // contains "." or "/" is treated as a config path (every realistic
 // config file does); a flagless arg without those characters has to
 // be a known subcommand or it's an error. This keeps
-// `inkwell inkwell.yaml` and `inkwell /etc/inkwell/config.yaml`
+// `inkwell inkwell.yaml` and `inkwell /etc/inkwell/inkwell.yaml`
 // working while still catching typos like `inkwell self-updat`.
 //
 // Dispatch precedence:

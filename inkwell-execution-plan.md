@@ -2,12 +2,12 @@
 
 > **Source Documents**:
 >
-> - [Hardware Overview](docs/01-hardware-overview.md)
-> - [Python Driver Architecture](docs/03-python-driver-architecture.md)
-> - [Rendering Pipeline](docs/04-rendering-pipeline.md)
-> - [SPI Command Reference](docs/05-spi-command-reference.md)
-> - [Go Implementation Guide](docs/06-go-implementation-guide.md)
-> - [Testing Strategy](docs/07-testing-strategy.md)
+> - [Hardware Overview](docs/tech-specs/01-hardware-overview.md)
+> - [Python Driver Architecture](docs/tech-specs/03-python-driver-architecture.md)
+> - [Rendering Pipeline](docs/tech-specs/04-rendering-pipeline.md)
+> - [SPI Command Reference](docs/tech-specs/05-spi-command-reference.md)
+> - [Go Implementation Guide](docs/tech-specs/06-go-implementation-guide.md)
+> - [Testing Strategy](docs/tech-specs/07-testing-strategy.md)
 
 ## Executive Summary
 

@@ -505,6 +505,86 @@ func TestApp_RefreshBWRoutineCycleIsFullScreenFast(t *testing.T) {
 	}
 }
 
+// newGray4RefreshApp mirrors newBWRefreshApp for Gray4-mode dispatch tests.
+func newGray4RefreshApp(t *testing.T, fullEvery int) (*App, *MockHardware) {
+	t.Helper()
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+color_mode: gray4
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	mock := &MockHardware{}
+	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Hour))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	app.planner = newRefreshPlanner(Gray4, fullEvery)
+	return app, mock
+}
+
+// countResets returns how many hardware Reset() calls are recorded so far.
+func countResets(mock *MockHardware) int {
+	n := 0
+	for _, c := range mock.Calls {
+		if c.Type == "reset" {
+			n++
+		}
+	}
+	return n
+}
+
+// TestApp_RefreshGray4EveryPushForcesReInit confirms every Gray4 push — not
+// just the periodic burn-in cycle — performs a genuine hardware re-init
+// (reset + the Init4Gray power-on/booster sequence), even though the
+// resulting waveform label (Init4Gray) never changes from what's already
+// applied. An earlier version of this fix forced the re-init only on the
+// periodic cadence tick; real hardware testing showed the panel rendered
+// crisp immediately after that forced re-init and then visibly faded on
+// the very next routine push, meaning the electrical state drifts even
+// between consecutive Gray4 pushes, not just over the long burn-in window
+// (inkwell fading investigation, Sept 2026). Gray4 has no cheaper steady
+// state worth preserving — a label-change check alone would never re-fire
+// after the first cycle anyway, since Gray4 has only one waveform — so
+// every push now forces it, matching the upstream Waveshare reference
+// driver's own pattern of re-running its 4-gray init before every 4-gray
+// display call.
+func TestApp_RefreshGray4EveryPushForcesReInit(t *testing.T) {
+	app, mock := newGray4RefreshApp(t, 3)
+	size := app.profile.BufferSize()
+	mode := Init4Gray // the LUT a startup Init4Gray leaves loaded
+	frameA := make([]byte, size)
+	frameB := bytes.Repeat([]byte{0xFF}, size)
+	frameC := make([]byte, size)
+
+	// Cycle 1 (tick 1): forced periodic refresh.
+	if pushed, err := app.refresh(frameA, nil, true, &mode); err != nil || !pushed {
+		t.Fatalf("cycle 1: pushed=%v err=%v, want pushed=true", pushed, err)
+	}
+	if got := countResets(mock); got != 1 {
+		t.Fatalf("resets after cycle 1 = %d, want 1", got)
+	}
+
+	// Cycle 2 (tick 2): routine changed cycle, same waveform label as
+	// cycle 1 — must still force a re-init.
+	if pushed, err := app.refresh(frameB, frameA, true, &mode); err != nil || !pushed {
+		t.Fatalf("cycle 2: pushed=%v err=%v, want pushed=true", pushed, err)
+	}
+	if got := countResets(mock); got != 2 {
+		t.Fatalf("resets after cycle 2 (routine) = %d, want 2 — every Gray4 push must force a hardware re-init", got)
+	}
+
+	// Cycle 3 (tick 3, fullEvery=3): the periodic burn-in cycle again.
+	if pushed, err := app.refresh(frameC, frameB, true, &mode); err != nil || !pushed {
+		t.Fatalf("cycle 3: pushed=%v err=%v, want pushed=true", pushed, err)
+	}
+	if got := countResets(mock); got != 3 {
+		t.Fatalf("resets after cycle 3 (periodic) = %d, want 3", got)
+	}
+}
+
 func TestRun_WidgetRenderError(t *testing.T) {
 	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2

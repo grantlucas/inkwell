@@ -71,6 +71,63 @@ scheme to `https://`), Outlook/Office 365 ("Publish a calendar" → ICS link), a
 most other calendar apps expose an equivalent ICS/iCal URL. As long as the URL
 returns a `BEGIN:VCALENDAR` body over HTTP(S), it works here.
 
+## Feed rules
+
+Some feeds prepend the same boilerplate to every event. A league team calendar
+typically leads each summary with the player and team — every event on the feed
+starts `Jane Doe / Ravens / …` — which is identical everywhere and crowds the
+part that actually differs (*Practice* vs *Game* vs the opponent) out of a
+narrow day column.
+
+A feed entry can therefore be an object instead of a bare URL, carrying `rules`
+that clean up that feed's events as they are parsed:
+
+```yaml
+feeds:
+  # A bare URL string still works, and applies no rules.
+  - "https://example.com/my-calendar.ics"
+
+  # The object form adds a label and rules.
+  - url: "https://example.com/team-calendar.ics"
+    name: "Hockey"             # optional; names the feed in config errors
+    rules:
+      # Drop the "Jane Doe / Ravens" heading from every summary.
+      - match: '^Jane Doe\n(Ravens\n)?'
+      # Shorten the opponent prefix.
+      - match: 'vs '
+        replace: 'v '
+      # Hide fundraisers entirely.
+      - match: 'Bottle Drive'
+        exclude: true
+```
+
+Rules apply to the event **summary** only, and only to the feed they are
+declared on.
+
+<!-- markdownlint-disable MD013 -->
+| Key       | Type   | Description                                                                 |
+|-----------|--------|-----------------------------------------------------------------------------|
+| `match`   | string | **Required.** A [Go RE2](https://pkg.go.dev/regexp/syntax) regular expression. |
+| `replace` | string | Replacement for each match. Supports `$1` capture-group expansion. Defaults to `""`, which deletes the matched text. |
+| `exclude` | bool   | When true, an event whose summary matches is dropped from the calendar. Cannot be combined with `replace`. |
+<!-- markdownlint-enable MD013 -->
+
+Notes:
+
+- **Rules run in order, as a pipeline.** Each rule sees the summary as the
+  rules before it left it, so an `exclude` can match on text an earlier
+  `replace` produced.
+- **`^` anchors the whole summary, not each line.** Summaries often contain
+  real newlines (the parser unescapes `\n` per RFC 5545), so `^Practice` only
+  matches a summary that *starts* with `Practice`. Use Go's `(?m)` flag —
+  `(?m)^Practice$` — for per-line anchoring.
+- **A rewritten summary is trimmed.** Stripping a leading line otherwise leaves
+  its separator behind as blank space at the top of the event.
+- **An invalid regex fails `LoadConfig`**, naming the feed (by `name` when it
+  has one) and the rule index, rather than silently skipping the rule.
+- Rules are applied at the feed boundary, before deduplication and caching, so
+  everything downstream only ever sees cleaned-up events.
+
 ## Configuration
 
 Top-level keys (`type`, `bounds`, `refresh`) are required by every widget.
@@ -86,7 +143,7 @@ The widget-specific keys live under `config:`.
 <!-- markdownlint-disable MD013 -->
 | Key                  | Type            | Default   | Description                                                                                          |
 |----------------------|-----------------|-----------|------------------------------------------------------------------------------------------------------|
-| `feeds`              | list of strings | —         | **Required**, non-empty. ICS feed URLs to merge into the calendar.                                   |
+| `feeds`              | list            | —         | **Required**, non-empty. Each entry is an ICS feed URL string, or a feed object (`url`, optional `name`, optional `rules`) — see [Feed rules](#feed-rules). |
 | `refresh`            | string          | `"15m"`   | Calendar data cache TTL. A Go duration `>= 1m`. (Distinct from the top-level render cadence.)         |
 | `max_events`         | integer         | `5`       | Maximum events shown per day column. Must be positive.                                                |
 | `show_location`      | bool            | `false`   | Show each event's location line when present.                                                        |
@@ -170,6 +227,11 @@ dashboard:
             feeds:
               # Use the ICS feed URL, not a "?cid=" web link — see "Calendar feeds".
               - "https://example.com/my-calendar.ics"
+              # Object form: strip a league feed's per-event boilerplate.
+              - url: "https://example.com/team-calendar.ics"
+                name: "Hockey"
+                rules:
+                  - match: '^Jane Doe\n(Ravens\n)?'
             refresh: "15m"      # calendar data cache TTL (nested)
             show_weather: true
             show_weather_label: true
