@@ -62,7 +62,7 @@ func TestHTTPSource_SingleFeed(t *testing.T) {
 			"https://example.com/cal.ics": newMockResponse(testICS),
 		},
 	}
-	src := NewHTTPSource([]string{"https://example.com/cal.ics"}, client)
+	src := NewHTTPSource(FeedsFromURLs([]string{"https://example.com/cal.ics"}), client)
 
 	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
@@ -85,10 +85,10 @@ func TestHTTPSource_MultipleFeeds(t *testing.T) {
 			"https://example.com/b.ics": newMockResponse(testICS2),
 		},
 	}
-	src := NewHTTPSource([]string{
+	src := NewHTTPSource(FeedsFromURLs([]string{
 		"https://example.com/a.ics",
 		"https://example.com/b.ics",
-	}, client)
+	}), client)
 
 	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
@@ -115,10 +115,10 @@ func TestHTTPSource_DeduplicatesByUID(t *testing.T) {
 			"https://example.com/b.ics": newMockResponse(testICS), // same event
 		},
 	}
-	src := NewHTTPSource([]string{
+	src := NewHTTPSource(FeedsFromURLs([]string{
 		"https://example.com/a.ics",
 		"https://example.com/b.ics",
-	}, client)
+	}), client)
 
 	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
@@ -152,7 +152,7 @@ END:VCALENDAR
 			"https://example.com/cal.ics": newMockResponse(ics),
 		},
 	}
-	src := NewHTTPSource([]string{"https://example.com/cal.ics"}, client)
+	src := NewHTTPSource(FeedsFromURLs([]string{"https://example.com/cal.ics"}), client)
 
 	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
@@ -174,7 +174,7 @@ func TestHTTPSource_HTTPError(t *testing.T) {
 			"https://example.com/cal.ics": fmt.Errorf("network error"),
 		},
 	}
-	src := NewHTTPSource([]string{"https://example.com/cal.ics"}, client)
+	src := NewHTTPSource(FeedsFromURLs([]string{"https://example.com/cal.ics"}), client)
 
 	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
@@ -198,7 +198,7 @@ END:VCALENDAR
 			"https://example.com/cal.ics": newMockResponse(badICS),
 		},
 	}
-	src := NewHTTPSource([]string{"https://example.com/cal.ics"}, client)
+	src := NewHTTPSource(FeedsFromURLs([]string{"https://example.com/cal.ics"}), client)
 
 	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
@@ -225,7 +225,7 @@ func TestHTTPSource_BodyCloseErrorSurfaced(t *testing.T) {
 			},
 		},
 	}
-	src := NewHTTPSource([]string{"https://example.com/cal.ics"}, client)
+	src := NewHTTPSource(FeedsFromURLs([]string{"https://example.com/cal.ics"}), client)
 
 	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
@@ -251,7 +251,7 @@ func TestHTTPSource_BuildRequestError(t *testing.T) {
 	defer func() { newRequestWithContext = orig }()
 
 	client := &mockHTTPClient{}
-	src := NewHTTPSource([]string{"https://example.com/cal.ics"}, client)
+	src := NewHTTPSource(FeedsFromURLs([]string{"https://example.com/cal.ics"}), client)
 
 	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
@@ -269,7 +269,7 @@ func TestHTTPSource_BuildRequestError(t *testing.T) {
 // simulates a transport honoring the deadline.
 func TestHTTPSource_HonorsContextCancellation(t *testing.T) {
 	client := &ctxAwareCalClient{}
-	src := NewHTTPSource([]string{"https://example.com/cal.ics"}, client)
+	src := NewHTTPSource(FeedsFromURLs([]string{"https://example.com/cal.ics"}), client)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -300,7 +300,7 @@ func TestHTTPSource_Non200Status(t *testing.T) {
 			},
 		},
 	}
-	src := NewHTTPSource([]string{"https://example.com/cal.ics"}, client)
+	src := NewHTTPSource(FeedsFromURLs([]string{"https://example.com/cal.ics"}), client)
 
 	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
