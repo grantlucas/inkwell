@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"testing"
+	"time"
 )
 
 // --- Test helpers ---
@@ -495,6 +496,110 @@ func TestClearSendsWhiteBuffers(t *testing.T) {
 				t.Errorf("new plane = % X, want % X", dataCalls[1], tc.wantNew)
 			}
 		})
+	}
+}
+
+// --- waitIdle ---
+
+// neverIdleHardware's ReadBusy always reports busy (false). Used to prove
+// waitIdle actually polls instead of trusting a single read, and that it
+// times out (rather than hanging forever) when the busy pin is stuck.
+type neverIdleHardware struct {
+	MockHardware
+}
+
+func (h *neverIdleHardware) ReadBusy() bool {
+	h.MockHardware.ReadBusy() // still record the call
+	return false
+}
+
+// TestDisplayWaitsForBusyPinAcrossMultiplePolls proves EPD.Display actually
+// polls the busy pin until it reports idle, rather than checking it once and
+// barreling ahead regardless (the bug: the controller drives its multi-flash
+// waveform autonomously for seconds after the refresh trigger and only
+// raises BUSY once done — sending the next command before that corrupts
+// whatever part of the waveform hasn't completed yet, which reads as a
+// reproducible, position-dependent fade rather than a uniform one).
+// MockHardware{BusyCount: 3} reports busy for 3 reads before going idle;
+// Display must keep polling through all of them.
+func TestDisplayWaitsForBusyPinAcrossMultiplePolls(t *testing.T) {
+	m := &MockHardware{BusyCount: 3}
+	p := smallTestProfile()
+	epd := NewEPD(m, p)
+	epd.sleep = func(time.Duration) {} // no real delay in tests
+	epd.busyPollInterval = time.Microsecond
+
+	buf := make([]byte, p.BufferSize())
+	if err := epd.Display(buf); err != nil {
+		t.Fatal(err)
+	}
+
+	busyCalls := 0
+	for _, c := range m.Calls {
+		if c.Type == "busy" {
+			busyCalls++
+		}
+	}
+	if busyCalls != 4 { // 3 busy + 1 idle
+		t.Errorf("busy calls = %d, want 4 (waitIdle must keep polling until idle, not check once)", busyCalls)
+	}
+}
+
+// TestExecSequenceWaitsForBusyPinAcrossMultiplePolls is the same proof for
+// the init-sequence path (e.g. the Power On command), which shares waitIdle.
+func TestExecSequenceWaitsForBusyPinAcrossMultiplePolls(t *testing.T) {
+	m := &MockHardware{BusyCount: 2}
+	epd := NewEPD(m, &DisplayProfile{Name: "test", Width: 8, Height: 8, Color: BW})
+	epd.sleep = func(time.Duration) {}
+	epd.busyPollInterval = time.Microsecond
+
+	seq := []Command{{0x04, nil}} // Power On: no data, triggers a busy wait
+	if err := epd.execSequence(seq); err != nil {
+		t.Fatal(err)
+	}
+
+	busyCalls := 0
+	for _, c := range m.Calls {
+		if c.Type == "busy" {
+			busyCalls++
+		}
+	}
+	if busyCalls != 3 { // 2 busy + 1 idle
+		t.Errorf("busy calls = %d, want 3", busyCalls)
+	}
+}
+
+// TestExecSequenceBusyTimeoutReturnsError is the execSequence-path
+// counterpart to TestDisplayBusyTimeoutReturnsError: a stuck busy pin during
+// an init-sequence command (e.g. Power On) must fail loudly too.
+func TestExecSequenceBusyTimeoutReturnsError(t *testing.T) {
+	m := &neverIdleHardware{}
+	epd := NewEPD(m, &DisplayProfile{Name: "test", Width: 8, Height: 8, Color: BW})
+	epd.sleep = func(time.Duration) {}
+	epd.busyPollInterval = time.Microsecond
+	epd.busyTimeout = time.Millisecond
+
+	err := epd.execSequence([]Command{{0x04, nil}})
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+}
+
+// TestDisplayBusyTimeoutReturnsError confirms a stuck busy pin (hardware
+// fault or miswiring) fails loudly with a bounded wait instead of hanging
+// the render loop forever.
+func TestDisplayBusyTimeoutReturnsError(t *testing.T) {
+	m := &neverIdleHardware{}
+	p := smallTestProfile()
+	epd := NewEPD(m, p)
+	epd.sleep = func(time.Duration) {}
+	epd.busyPollInterval = time.Microsecond
+	epd.busyTimeout = time.Millisecond
+
+	buf := make([]byte, p.BufferSize())
+	err := epd.Display(buf)
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
 	}
 }
 
