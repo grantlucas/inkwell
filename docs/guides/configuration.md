@@ -375,8 +375,9 @@ reason the panel flashes.
 
 ### `weekly-calendar`
 
-A seven-day calendar-and-weather dashboard, one column per day starting
-with today. The largest widget and the one with the most options; the
+A rolling calendar-and-weather dashboard of up to seven days, one column
+per day starting with today — set `days` to show fewer and get wider
+columns. The largest widget and the one with the most options; the
 [widget README](../../internal/inkwell/widgets/weekly/README.md) covers
 layout and feed setup in more depth.
 
@@ -385,6 +386,7 @@ layout and feed setup in more depth.
 |-----|------|---------|-----------------|--------|
 | `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Each entry is a URL string, or an object with `url`, optional `name`, and optional `rules` — see [feed rules](#feed-rules). |
 | `refresh` | duration | `"15m"` | `>= 1m` | **Calendar data cache TTL** — how often feeds are re-fetched. Not the render cadence. |
+| `days` | integer | `7` | `[1, 7]` | Day columns to draw, counting from today. Fewer days means wider columns and more room for event text: across 800 px, `7` leaves 13 characters per line and `5` leaves 19. |
 | `max_events` | integer | `5` | Positive | Cap on events shown per day column. Extra events are dropped, not scrolled. |
 | `show_location` | bool | `false` | `true`, `false` | Draws each event's location on its own line below the title, when the event has one and the column has room. |
 | `show_weather` | bool | `true` | `true`, `false` | Renders the per-day weather block. When false, the space is given back to events. |

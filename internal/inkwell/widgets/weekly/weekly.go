@@ -18,11 +18,16 @@ var _ widget.Widget = (*Widget)(nil)
 
 const defaultWeatherH = 145
 
+// defaultDays is the number of day columns rendered when `days` is omitted,
+// and the most the panel can fit.
+const defaultDays = 7
+
 // Config holds parsed weekly-calendar configuration.
 type Config struct {
 	Feeds            []calendar.Feed
 	Refresh          time.Duration
 	WeekStart        time.Weekday
+	Days             int
 	MaxEvents        int
 	ShowLocation     bool
 	Latitude         float64
@@ -42,7 +47,7 @@ type Config struct {
 	modelSet bool
 }
 
-// Widget renders a 7-day calendar+weather dashboard.
+// Widget renders a rolling multi-day calendar+weather dashboard.
 type Widget struct {
 	bounds  image.Rectangle
 	cal     calendar.Source
@@ -51,8 +56,14 @@ type Widget struct {
 	config  Config
 }
 
-// New creates a weekly Widget with pre-built data sources.
+// New creates a weekly Widget with pre-built data sources. A cfg.Days that
+// was never set falls back to the full week, so a hand-built Config (rather
+// than one through parseConfig, which defaults it) still renders columns
+// instead of none.
 func New(bounds image.Rectangle, cal calendar.Source, ws weather.Source, now func() time.Time, cfg Config) *Widget {
+	if cfg.Days < 1 {
+		cfg.Days = defaultDays
+	}
 	return &Widget{
 		bounds:  bounds,
 		cal:     cal,
@@ -65,7 +76,8 @@ func New(bounds image.Rectangle, cal calendar.Source, ws weather.Source, now fun
 // Bounds returns the rectangle this widget occupies on the display.
 func (w *Widget) Bounds() image.Rectangle { return w.bounds }
 
-// Render draws the 7-day calendar+weather dashboard into frame.
+// Render draws the calendar+weather dashboard into frame, one column per
+// configured day starting with today.
 func (w *Widget) Render(frame *image.Paletted) error {
 	fillWhite(frame, w.bounds)
 
@@ -78,7 +90,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 
 	weekStart := today
-	weekEnd := today.AddDate(0, 0, 7)
+	weekEnd := today.AddDate(0, 0, w.config.Days)
 
 	// One render-scope context shared by calendar + weather fetches.
 	// A slow upstream on either side won't stall the render loop past
@@ -102,7 +114,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 			Latitude:  w.config.Latitude,
 			Longitude: w.config.Longitude,
 		}
-		f, err := w.weather.Forecast(ctx, loc, 7)
+		f, err := w.weather.Forecast(ctx, loc, w.config.Days)
 		if err != nil {
 			log.Printf("weekly: fetch weather forecast: %v", err)
 		}
@@ -112,7 +124,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 		}
 	}
 
-	cols := computeColumns(w.bounds, weatherH)
+	cols := computeColumns(w.bounds, weatherH, w.config.Days)
 
 	var forecastDays []weather.DailyForecast
 	if forecast != nil {
@@ -248,6 +260,7 @@ func parseConfig(config map[string]any) (Config, error) {
 	cfg := Config{
 		Refresh:          15 * time.Minute,
 		WeekStart:        time.Monday,
+		Days:             defaultDays,
 		MaxEvents:        5,
 		ShowWeather:      true,
 		ShowWeatherLabel: true,
@@ -303,6 +316,17 @@ func parseConfig(config map[string]any) (Config, error) {
 			return cfg, fmt.Errorf("weekly-calendar: max_events must be positive, got %d", n)
 		}
 		cfg.MaxEvents = n
+	}
+
+	if v, ok := config["days"]; ok {
+		n, ok := v.(int)
+		if !ok {
+			return cfg, fmt.Errorf("weekly-calendar: days must be an integer, got %T", v)
+		}
+		if n < 1 || n > defaultDays {
+			return cfg, fmt.Errorf("weekly-calendar: days must be in [1, %d], got %d", defaultDays, n)
+		}
+		cfg.Days = n
 	}
 
 	if v, ok := config["show_location"]; ok {

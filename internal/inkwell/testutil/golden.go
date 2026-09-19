@@ -69,6 +69,12 @@ func AssertGoldenBuffer(t THelper, buf []byte) {
 // AssertGoldenPNG compares img against the golden PNG file
 // testdata/<TestName>.png. With -update, it writes img as a PNG to that file
 // instead.
+//
+// The comparison is pixel by pixel, not byte by byte. Go's PNG encoder is not
+// byte-stable across releases (1.27 emits three fewer bytes than 1.26 for the
+// clock widget's golden, pixel for pixel identical), so comparing the encoded
+// bytes would pin the encoder rather than the render and fail on every
+// toolchain bump. Golden files stay readable PNGs either way.
 func AssertGoldenPNG(t THelper, img image.Image) {
 	t.Helper()
 	path := goldenPath(t, ".png")
@@ -90,18 +96,41 @@ func AssertGoldenPNG(t THelper, img image.Image) {
 		return
 	}
 
-	want, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("golden: read %s: %v (run with -update to create)", path, err)
 		return
 	}
 
-	var gotBuf bytes.Buffer
-	if err := GoldenEncodePNG(&gotBuf, img); err != nil {
-		t.Fatalf("golden: encode PNG: %v", err)
+	want, err := png.Decode(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("golden: decode %s: %v", path, err)
 		return
 	}
-	if !bytes.Equal(gotBuf.Bytes(), want) {
-		t.Errorf("golden: PNG mismatch for %s", path)
+
+	if got, wantB := img.Bounds(), want.Bounds(); got != wantB {
+		t.Errorf("golden: bounds %v, want %v for %s", got, wantB, path)
+		return
 	}
+	if x, y, ok := firstPixelDiff(img, want); !ok {
+		t.Errorf("golden: PNG mismatch for %s (first differing pixel at %d,%d)", path, x, y)
+	}
+}
+
+// firstPixelDiff reports the first pixel where got and want disagree, scanning
+// in row-major order. ok is true when every pixel matches. Colors are compared
+// through RGBA() so a paletted image and the color model a decoded PNG happens
+// to use still compare equal.
+func firstPixelDiff(got, want image.Image) (x, y int, ok bool) {
+	b := got.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			gr, gg, gb, ga := got.At(x, y).RGBA()
+			wr, wg, wb, wa := want.At(x, y).RGBA()
+			if gr != wr || gg != wg || gb != wb || ga != wa {
+				return x, y, false
+			}
+		}
+	}
+	return 0, 0, true
 }

@@ -144,6 +144,47 @@ func TestAssertGoldenPNG_Match(t *testing.T) {
 	AssertGoldenPNG(t, img)
 }
 
+// A golden PNG that holds the same pixels but different bytes must still
+// match. Go's PNG encoder is not byte-stable across releases — 1.27 emits 229
+// bytes where 1.26 emitted 232 for the clock widget's golden, pixel for pixel
+// identical — so comparing encoded bytes pins the encoder rather than the
+// render, and every toolchain bump falsely fails.
+func TestAssertGoldenPNG_MatchesDespiteDifferentEncoding(t *testing.T) {
+	dir := goldenFixDir(t)
+
+	img := image.NewPaletted(image.Rect(0, 0, 4, 4), widget.PaperPalette)
+	img.SetColorIndex(1, 1, 11)
+	img.SetColorIndex(2, 3, 5)
+
+	p := goldenTestPath(dir, t.Name(), ".png")
+	f, err := os.Create(p)
+	if err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	// A different compression level stands in for a different encoder
+	// version: same pixels, different bytes on disk.
+	enc := png.Encoder{CompressionLevel: png.NoCompression}
+	if err := enc.Encode(f, img); err != nil {
+		f.Close()
+		t.Fatalf("setup: encode: %v", err)
+	}
+	f.Close()
+
+	var reference bytes.Buffer
+	if err := png.Encode(&reference, img); err != nil {
+		t.Fatalf("setup: re-encode: %v", err)
+	}
+	golden, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("setup: read back: %v", err)
+	}
+	if bytes.Equal(golden, reference.Bytes()) {
+		t.Fatal("setup: the two encodings are byte-identical, so this test proves nothing")
+	}
+
+	AssertGoldenPNG(t, img)
+}
+
 func TestAssertGoldenPNG_Mismatch(t *testing.T) {
 	dir := goldenFixDir(t)
 
@@ -343,33 +384,47 @@ func TestAssertGoldenPNG_UpdateEncodeError(t *testing.T) {
 	}
 }
 
-func TestAssertGoldenPNG_CompareEncodeError(t *testing.T) {
+func TestAssertGoldenPNG_UndecodableGolden(t *testing.T) {
 	dir := goldenFixDir(t)
 
-	// Write a golden PNG so ReadFile succeeds.
-	img := image.NewPaletted(image.Rect(0, 0, 2, 2),
-		widget.PaperPalette)
+	// A golden file that is not a PNG at all — a truncated or corrupted
+	// checkout, say — is a setup failure, not a render mismatch.
+	p := goldenTestPath(dir, t.Name(), ".png")
+	if err := os.WriteFile(p, []byte("not a png"), 0o644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	img := image.NewPaletted(image.Rect(0, 0, 2, 2), widget.PaperPalette)
+	spy := runSpy(t, func(s *spyT) {
+		AssertGoldenPNG(s, img)
+	})
+	if !spy.fataled {
+		t.Error("expected fatal on undecodable golden, but none occurred")
+	}
+}
+
+func TestAssertGoldenPNG_BoundsMismatch(t *testing.T) {
+	dir := goldenFixDir(t)
+
+	golden := image.NewPaletted(image.Rect(0, 0, 4, 4), widget.PaperPalette)
 	p := goldenTestPath(dir, t.Name(), ".png")
 	f, err := os.Create(p)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
-	if err := png.Encode(f, img); err != nil {
+	if err := png.Encode(f, golden); err != nil {
 		f.Close()
 		t.Fatalf("setup: encode: %v", err)
 	}
 	f.Close()
 
-	oldEncode := GoldenEncodePNG
-	GoldenEncodePNG = func(_ io.Writer, _ image.Image) error {
-		return os.ErrInvalid
-	}
-	defer func() { GoldenEncodePNG = oldEncode }()
-
+	// A resized widget must report the size change rather than scanning
+	// pixels off the end of the golden.
+	resized := image.NewPaletted(image.Rect(0, 0, 8, 4), widget.PaperPalette)
 	spy := runSpy(t, func(s *spyT) {
-		AssertGoldenPNG(s, img)
+		AssertGoldenPNG(s, resized)
 	})
-	if !spy.fataled {
-		t.Error("expected fatal on encode error during comparison, but none occurred")
+	if !spy.errored {
+		t.Error("expected bounds-mismatch error, but none was reported")
 	}
 }

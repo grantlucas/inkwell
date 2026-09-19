@@ -5,9 +5,10 @@
 <!-- showboat-id: d452bf6c-04db-403a-8f30-67ff227488e8 -->
 
 The weekly calendar+weather dashboard composes three widgets into a single
-800×480 e-ink screen: a date header, a right-aligned clock, and a 7-day
-calendar with weather forecasts. Each widget is independently configured via
-YAML bounds and rendered by the compositor in order.
+800×480 e-ink screen: a date header, a right-aligned clock, and a rolling
+calendar of up to seven days with weather forecasts. Each widget is
+independently configured via YAML bounds and rendered by the compositor in
+order.
 
 ## Screen Configuration
 

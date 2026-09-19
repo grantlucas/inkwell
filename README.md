@@ -36,7 +36,7 @@ from `inkwell.yaml`:
 | `date` | Formatted date header (Go-format strings, e.g. `"Monday, January 2"`). |
 | `clock` | Current time, right-aligned variant available. |
 | `separator` | Soft horizontal hairline; thickness-configurable. |
-| `weekly-calendar` | 7-day calendar + weather dashboard. Fetches events from one or more iCal feeds and forecasts from an Open-Meteo ensemble (GFS / ECMWF / GEM). |
+| `weekly-calendar` | Rolling calendar + weather dashboard of up to 7 days (`days`, default 7). Fetches events from one or more iCal feeds and forecasts from an Open-Meteo ensemble (GFS / ECMWF / GEM). |
 <!-- markdownlint-enable MD013 -->
 
 The weekly calendar widget integrates a built-in iCal parser, an HTTP feed

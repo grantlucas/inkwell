@@ -1,10 +1,12 @@
 # Weekly Calendar Widget
 
-Renders a 7-day calendar-and-weather dashboard, one column per day starting
-with **today**. Each column shows a day header, an optional weather block
-(delegated to the [`weatherview`](../weatherview/README.md) component), and a
-list of that day's events pulled from one or more iCalendar (ICS) feeds.
-Registered under the dashboard `type: weekly-calendar`.
+Renders a rolling calendar-and-weather dashboard of up to seven days, one
+column per day starting with **today**. Set [`days`](#configuration) to show
+fewer — `days: 5` buys wider columns and so more room for event text. Each
+column shows a day header, an optional weather block (delegated to the
+[`weatherview`](../weatherview/README.md) component), and a list of that day's
+events pulled from one or more iCalendar (ICS) feeds. Registered under the
+dashboard `type: weekly-calendar`.
 
 ## Screenshot
 
@@ -145,6 +147,7 @@ The widget-specific keys live under `config:`.
 |----------------------|-----------------|-----------|------------------------------------------------------------------------------------------------------|
 | `feeds`              | list            | —         | **Required**, non-empty. Each entry is an ICS feed URL string, or a feed object (`url`, optional `name`, optional `rules`) — see [Feed rules](#feed-rules). |
 | `refresh`            | string          | `"15m"`   | Calendar data cache TTL. A Go duration `>= 1m`. (Distinct from the top-level render cadence.)         |
+| `days`               | integer         | `7`       | Number of day columns, counting from today. In `[1, 7]`. Fewer days means wider columns: at 800 px, `7` gives a 114 px column (13 characters of event text per line) and `5` gives 160 px (19 characters). |
 | `max_events`         | integer         | `5`       | Maximum events shown per day column. Must be positive.                                                |
 | `show_location`      | bool            | `false`   | Show each event's location line when present.                                                        |
 | `show_weather`       | bool            | `true`    | Render the per-day weather block. When false, weather is omitted and event space expands.            |
@@ -203,10 +206,12 @@ weather:
 
 These become the defaults for every weather widget, served through a single
 shared, cached provider — so multiple widgets at the same location fetch the
-forecast only once. Each widget may override any field (`latitude`,
-`longitude`, `temp_unit`, `weather_model`) in its own `config:` block, e.g. to
-show a second city. Omitted top-level fields default to `model: gem`,
-`temp_unit: C`, and location `0,0`.
+forecast only once. The requested forecast length is part of that cache key, so
+two weekly widgets at one location share a fetch only when their `days` agree.
+Each widget may override any field (`latitude`, `longitude`, `temp_unit`,
+`weather_model`) in its own `config:` block, e.g. to show a second city.
+Omitted top-level fields default to `model: gem`, `temp_unit: C`, and location
+`0,0`.
 
 ## Weather models
 
@@ -261,6 +266,7 @@ dashboard:
                 rules:
                   - match: '^Jane Doe\n(Ravens\n)?'
             refresh: "15m"      # calendar data cache TTL (nested)
+            days: 5             # today + the next four; wider columns
             show_weather: true
             show_weather_label: true
             show_location: true
