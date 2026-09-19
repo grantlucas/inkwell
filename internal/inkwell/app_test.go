@@ -474,13 +474,15 @@ func newRefreshApp(t *testing.T, colorMode string) (*App, *MockHardware) {
 }
 
 // TestApp_RefreshPushLifecycle pins what every frame pushed to the panel
-// does to the hardware: exactly one reset, the mode's init sequence, then the
-// two planes and the refresh trigger — and nothing after. In particular no
-// sleep sequence follows a push: powering the panel off right after a refresh
-// was tried and collapsed the image on real hardware (ADR 0012), so the sleep
-// sequence belongs to Close alone. Every push, routine or periodic, in either
-// color mode, runs init → display; a skipped cycle touches the hardware not at
-// all. No windowed partial command (0x90) appears on the BW path (ADR 0008).
+// does to the hardware: exactly one reset, the mode's init sequence, the two
+// planes and the refresh trigger, then the sleep sequence (VCOM setting, power
+// off, deep sleep). The panel is not left in its high-voltage state between
+// refreshes (the vendor says that damages it, and an energised panel is what
+// lets light on the TFT backplane fade a settled image); the settle EPD.Sleep
+// waits before the power-off is pinned in TestWaitIdleSettleDelays. Every
+// push, routine or periodic, in either color mode, runs init → display →
+// sleep; a skipped cycle touches the hardware not at all. No windowed partial
+// command (0x90) appears on the BW path (ADR 0008).
 func TestApp_RefreshPushLifecycle(t *testing.T) {
 	frame := func(size int, b byte) []byte { return bytes.Repeat([]byte{b}, size) }
 	tests := []struct {
@@ -497,6 +499,7 @@ func TestApp_RefreshPushLifecycle(t *testing.T) {
 			app, mock := newRefreshApp(t, tt.colorMode)
 			size := app.profile.BufferSize()
 			push := []byte{0x10, 0x13, 0x12}
+			sleep := cmdRegs(Waveshare7in5V2.SleepSequence)
 
 			cycles := []struct {
 				name       string
@@ -524,7 +527,7 @@ func TestApp_RefreshPushLifecycle(t *testing.T) {
 				if got := countResets(mock); got != 1 {
 					t.Errorf("%s: resets = %d, want exactly 1 before the init sequence", c.name, got)
 				}
-				want := slices.Concat(cmdRegs(c.wantInit), push)
+				want := slices.Concat(cmdRegs(c.wantInit), push, sleep)
 				if got := mock.Commands(); !bytes.Equal(got, want) {
 					t.Errorf("%s: commands = %# x\n                     want %# x", c.name, got, want)
 				}
@@ -952,10 +955,10 @@ func (d *failCmdHardware) SendCommand(cmd byte) error {
 	return d.MockHardware.SendCommand(cmd)
 }
 
-// TestRun_PushErrorsAbortTheLoop covers the error return of the display step
-// in App.refresh: a wire error on the frame's refresh trigger must stop the
-// loop with an error naming the step (the init step has its own test,
-// TestRun_InitError). Kept table-driven so a future lifecycle step gets a row.
+// TestRun_PushErrorsAbortTheLoop covers the error return of each hardware
+// step in App.refresh's push lifecycle: the frame's refresh trigger and the
+// sleep sequence's power-off command. Either failing must stop the loop with
+// an error naming the step (the init step has its own test, TestRun_InitError).
 func TestRun_PushErrorsAbortTheLoop(t *testing.T) {
 	tests := []struct {
 		label   string
@@ -963,6 +966,7 @@ func TestRun_PushErrorsAbortTheLoop(t *testing.T) {
 		wantErr string
 	}{
 		{"display refresh trigger fails", 0x12, "display"},
+		{"sleep power-off fails", 0x02, "sleep display"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {

@@ -20,6 +20,15 @@ import (
 //   - defaultBusyTimeout: generous headroom over the panel's ~5 s full
 //     refresh (docs/adrs/0007-poll-the-busy-pin-in-waitidle.md) so a stuck
 //     pin is reported instead of hanging the loop.
+//   - defaultPreSleepSettle: sleep at the start of Sleep, before the power-off
+//     command. Powering the panel off 20 ms after BUSY released (the idle
+//     settle alone) wiped a freshly written image edge to edge on real
+//     hardware: the datasheet says the controller still drives two frames of
+//     VCOM_DC after the LUT ends, and the film evidently needs longer than that
+//     to be left alone before the boosters go. 3 s is a generous margin over
+//     the two frames (40 ms at the 50 Hz frame rate) and costs nothing against
+//     a one-minute push cadence; tune it down on the device only with the photo
+//     protocol in ADR 0014.
 //   - defaultDeepSleepSettle: sleep after the deep-sleep command before the
 //     controller is touched again (a Reset to wake it, or cutting its rail).
 //     The vendor delays 2 s there and marks it "important, at least 2s".
@@ -33,6 +42,7 @@ const (
 	defaultBusyPollInterval = 10 * time.Millisecond
 	defaultIdleSettle       = 20 * time.Millisecond
 	defaultBusyTimeout      = 10 * time.Second
+	defaultPreSleepSettle   = 3 * time.Second
 	defaultDeepSleepSettle  = 2 * time.Second
 )
 
@@ -50,6 +60,7 @@ type EPD struct {
 	busyPollInterval time.Duration
 	idleSettle       time.Duration
 	busyTimeout      time.Duration
+	preSleepSettle   time.Duration
 	deepSleepSettle  time.Duration
 }
 
@@ -63,6 +74,7 @@ func NewEPD(hw Hardware, profile *DisplayProfile) *EPD {
 		busyPollInterval: defaultBusyPollInterval,
 		idleSettle:       defaultIdleSettle,
 		busyTimeout:      defaultBusyTimeout,
+		preSleepSettle:   defaultPreSleepSettle,
 		deepSleepSettle:  defaultDeepSleepSettle,
 	}
 }
@@ -277,13 +289,17 @@ func (d *EPD) Clear() error {
 	return d.Display(make([]byte, d.profile.BufferSize()))
 }
 
-// Sleep puts the display into deep sleep mode by executing the profile's
-// sleep sequence (VCOM setting, power off, deep sleep command), then waits
-// deepSleepSettle so the controller has finished entering deep sleep before
-// anything else happens to it, such as Close cutting its supply. It runs from
-// Close only: sleeping the panel after each push was tried and undid the
-// refresh on real hardware (see App.refresh and ADR 0012).
+// Sleep powers the panel off and puts the controller into deep sleep. It
+// first waits preSleepSettle, so the image the last refresh wrote is left
+// alone long enough to hold (powering off 20 ms after BUSY released wiped it;
+// see the constants above), then runs the profile's sleep sequence (VCOM
+// setting, power off, deep sleep command), then waits deepSleepSettle so the
+// controller has finished entering deep sleep before anything else happens to
+// it — the next push's Reset, or Close cutting its supply. App.refresh calls
+// it after every push (ADR 0012), so both settles are part of every refresh
+// cycle; against a one-minute push cadence they are negligible.
 func (d *EPD) Sleep() error {
+	d.sleep(d.preSleepSettle)
 	if err := d.execSequence(d.profile.SleepSequence); err != nil {
 		return err
 	}
@@ -292,9 +308,10 @@ func (d *EPD) Sleep() error {
 }
 
 // Close puts the display to sleep and then releases hardware resources. The
-// hardware is released even if the sleep sequence fails, so a wire error
-// during sleep cannot leave the panel's supply on and the SPI port open. Both
-// errors are returned.
+// hardware is released even if the sleep sequence fails: the render loop
+// leaves the panel in deep sleep after every push, so Close is routinely
+// talking to a controller that is already asleep, and a sleep error must not
+// leave the panel's supply on and the SPI port open. Both errors are returned.
 func (d *EPD) Close() error {
 	return errors.Join(d.Sleep(), d.hw.Close())
 }
