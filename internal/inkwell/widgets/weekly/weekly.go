@@ -83,8 +83,12 @@ func (w *Widget) Bounds() image.Rectangle { return w.bounds }
 func (w *Widget) Render(frame *image.Paletted) error {
 	fillWhite(frame, w.bounds)
 
-	now := w.now()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	// Anchor everything day- and hour-derived to the configured display
+	// zone, not the clock's own. w.now() is typically time.Now (host local),
+	// but a device with an unconfigured system TZ reports UTC, which would
+	// silently shift the whole 7-day window and the weather highlight hour.
+	now := w.now().In(w.config.Location)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, w.config.Location)
 
 	weekStart := today
 	weekEnd := today.AddDate(0, 0, 7)
@@ -302,6 +306,18 @@ func parseConfig(config map[string]any) (Config, error) {
 		default:
 			return cfg, fmt.Errorf("weekly-calendar: invalid week_start %q (must be monday or sunday)", s)
 		}
+	}
+
+	if v, ok := config["timezone"]; ok {
+		s, ok := v.(string)
+		if !ok {
+			return cfg, fmt.Errorf("weekly-calendar: timezone must be a string, got %T", v)
+		}
+		loc, err := time.LoadLocation(s)
+		if err != nil {
+			return cfg, fmt.Errorf("weekly-calendar: invalid timezone %q: %w", s, err)
+		}
+		cfg.Location = loc
 	}
 
 	if v, ok := config["max_events"]; ok {
