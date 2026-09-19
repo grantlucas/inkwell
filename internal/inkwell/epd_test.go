@@ -259,7 +259,7 @@ func TestInitSendsResetThenProfileCommands(t *testing.T) {
 			if m.Calls[0].Type != "reset" {
 				t.Errorf("first call = %q, want reset", m.Calls[0].Type)
 			}
-			got := recordedCommands(m)
+			got := m.CommandsWithData()
 			if len(got) != len(tt.want) {
 				t.Fatalf("sent %d commands, want %d:\n got  %v\n want %v", len(got), len(tt.want), got, tt.want)
 			}
@@ -270,23 +270,6 @@ func TestInitSendsResetThenProfileCommands(t *testing.T) {
 			}
 		})
 	}
-}
-
-// recordedCommands rebuilds the Command sequence the mock saw: each command
-// byte paired with the data payload (if any) sent immediately after it.
-func recordedCommands(m *MockHardware) []Command {
-	var out []Command
-	for i, c := range m.Calls {
-		if c.Type != "command" {
-			continue
-		}
-		cmd := Command{Reg: c.Data[0]}
-		if i+1 < len(m.Calls) && m.Calls[i+1].Type == "data" {
-			cmd.Data = m.Calls[i+1].Data
-		}
-		out = append(out, cmd)
-	}
-	return out
 }
 
 func TestInitUnsupportedModeReturnsError(t *testing.T) {
@@ -700,10 +683,19 @@ func TestCloseSleepsThenCloses(t *testing.T) {
 	}
 }
 
+// TestClosePropagatesSleepError also pins that a failed sleep sequence does
+// not skip releasing the hardware: the panel's supply and the SPI port must
+// be dropped regardless, and both errors surface to the caller.
 func TestClosePropagatesSleepError(t *testing.T) {
-	err := NewEPD(&errorHardware{failOnCall: 1}, &Waveshare7in5V2).Close()
+	m := &errorHardware{failOnCall: 1}
+	epd := NewEPD(m, &Waveshare7in5V2)
+	epd.sleep = func(time.Duration) {}
+	err := epd.Close()
 	if err == nil {
 		t.Fatal("expected error from Sleep during Close")
+	}
+	if last := m.Calls[len(m.Calls)-1]; last.Type != "close" {
+		t.Errorf("last call = %q, want close (hardware must be released even when Sleep fails)", last.Type)
 	}
 }
 
@@ -851,28 +843,33 @@ func TestDisplayPartialSendDataErrors(t *testing.T) {
 // releases before the next command. With BusyCount=2 the recorded sleeps
 // must therefore be [trigger settle, poll, poll, idle settle].
 func TestWaitIdleSettleDelays(t *testing.T) {
-	want := []time.Duration{
+	handshake := []time.Duration{
 		defaultTriggerSettle, defaultBusyPollInterval, defaultBusyPollInterval, defaultIdleSettle,
 	}
 	tests := []struct {
 		label string
 		run   func(*EPD) error
+		want  []time.Duration
 	}{
-		{"Display", func(e *EPD) error { return e.Display(make([]byte, e.profile.BufferSize())) }},
-		{"execSequence power on", func(e *EPD) error { return e.execSequence([]Command{{0x04, nil}}) }},
+		{"Display", func(e *EPD) error { return e.Display(make([]byte, e.profile.BufferSize())) }, handshake},
+		{"execSequence power on", func(e *EPD) error { return e.execSequence([]Command{{0x04, nil}}) }, handshake},
+		// Sleep's power-off command goes through the same handshake, and the
+		// deep-sleep command is followed by the vendor's 2 s settle before the
+		// controller may be reset or have its supply cut.
+		{"Sleep", (*EPD).Sleep, slices.Concat(handshake, []time.Duration{defaultDeepSleepSettle})},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			m := &MockHardware{BusyCount: 2}
-			epd := NewEPD(m, smallTestProfile())
+			epd := NewEPD(m, &Waveshare7in5V2)
 			var got []time.Duration
 			epd.sleep = func(d time.Duration) { got = append(got, d) }
 
 			if err := tt.run(epd); err != nil {
 				t.Fatal(err)
 			}
-			if !slices.Equal(got, want) {
-				t.Errorf("sleeps = %v, want %v", got, want)
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("sleeps = %v, want %v", got, tt.want)
 			}
 		})
 	}

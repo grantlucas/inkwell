@@ -69,14 +69,23 @@ in `Run`, which had double-initialised the panel on the first cycle.
 
 `waitIdle` sleeps 100 ms before its first BUSY read and 20 ms after the pin
 releases (`triggerSettle` and `idleSettle` on `EPD`, alongside the existing
-poll interval and timeout). The SPI backend's `Close` waits the vendor's 2 s
-between the deep-sleep command and dropping PWR.
+poll interval and timeout). `EPD.Sleep` waits the vendor's 2 s after the
+deep-sleep command ("important, at least 2s") before returning, so whatever
+touches the controller next, the next push's `Reset` or `Close` dropping
+PWR, finds it fully asleep. `EPD.Close` releases the hardware even when the
+sleep sequence fails, since it now routinely runs against a controller that
+is already in deep sleep.
+
+The vendor Python driver sends the Get Status command (`0x71`) before each
+BUSY read; that is deliberately not replicated. The datasheet lists BUSY_N as
+a hardware flag asserted by the refresh command itself, and the vendor C
+driver polls the pin without it.
 
 ## Consequences
 
-Each push costs a reset, an init sequence, a power-on wait and a power-off
-wait on top of the refresh itself: well under a second in total, against a
-push cadence with a one-minute floor
+Each push costs a reset, an init sequence, a power-on wait, a power-off wait
+and the 2 s deep-sleep settle on top of the refresh itself: a few seconds in
+total, against a push cadence with a one-minute floor
 ([ADR 0011](0011-require-a-per-widget-refresh-cadence.md)).
 
 The panel spends its idle time in deep sleep, which is what the vendor asks
