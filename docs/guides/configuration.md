@@ -8,7 +8,7 @@ let the binary look for `inkwell.yaml` in the working directory:
 
 ```bash
 inkwell              # reads ./inkwell.yaml
-inkwell /etc/inkwell/config.yaml
+inkwell /etc/inkwell/inkwell.yaml
 ```
 
 Start from [`inkwell.example.yaml`](../../inkwell.example.yaml) in the
