@@ -42,20 +42,30 @@ func newRefreshPlanner(color ColorDepth, fullEvery int) *refreshPlanner {
 }
 
 // next advances the cycle counter and returns the refresh action to take,
-// plus whether this decision falls on the burn-in cadence. changed reports
+// plus whether the caller must force a genuine hardware re-init (reset +
+// power-on/booster) before pushing, even if the resulting refreshKind's
+// waveform label is unchanged from what's already applied. changed reports
 // whether the packed frame differs from what's on the panel.
 //
-// periodic distinguishes the cadence tick from a routine one even when they
-// select the same refreshKind. In BW mode the periodic tick's refreshFull
-// differs from a routine refreshFast, so the caller naturally re-inits on
-// the label change alone. Gray4 has only one waveform, so its periodic tick
-// and a routine tick both return refreshGray — the label never changes — and
-// periodic is the only signal the caller has that this tick must still force
-// a genuine hardware re-init (reset + power-on/booster) rather than reusing
-// whatever electrical state the panel has drifted into. Without it, the
-// "periodic burn-in refresh" degrades into an ordinary Display() push and
-// never actually re-clears the panel.
-func (p *refreshPlanner) next(changed bool) (kind refreshKind, periodic bool) {
+// In BW mode, forceInit is true only on the burn-in cadence tick: a routine
+// refreshFast reuses the electrical state InitFast already left loaded, and
+// that's been fine in practice (the label still changes at the Full/Fast
+// boundary, which forces a re-init at that boundary regardless).
+//
+// In Gray4 mode, forceInit is unconditionally true on every tick that
+// pushes a frame. Gray4 has only one waveform (refreshGray), so a routine
+// tick and the periodic tick are otherwise indistinguishable to the
+// caller — a label-change check alone would never re-fire after the very
+// first cycle. That was tried (only forcing the re-init on the periodic
+// tick) and confirmed insufficient on real hardware: the panel rendered
+// crisp immediately after a forced re-init and then visibly faded on the
+// very next routine push, meaning the booster/analog drive state drifts
+// even between consecutive Gray4 pushes, not just over the long burn-in
+// window. This matches the upstream Waveshare reference driver, which
+// re-runs its 4-gray init sequence before every single 4-gray display
+// call rather than amortizing it — Gray4 has no cheaper steady state to
+// preserve, so there's nothing to gain by skipping it.
+func (p *refreshPlanner) next(changed bool) (kind refreshKind, forceInit bool) {
 	p.tick++
 
 	// A full refresh on the first cycle and on the full cadence clears
@@ -74,7 +84,7 @@ func (p *refreshPlanner) next(changed bool) (kind refreshKind, periodic bool) {
 	}
 
 	if p.color == Gray4 {
-		return refreshGray, false
+		return refreshGray, true
 	}
 
 	// BW: a single-flicker fast full refresh redraws the changed content cleanly.

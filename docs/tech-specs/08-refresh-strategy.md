@@ -39,6 +39,31 @@ Two facts drive the whole design:
    noise. `EPD.DisplayPartial` therefore takes both the new frame and the
    frame currently on the panel.
 
+## Busy-pin synchronization (waitIdle)
+
+Every waveform above is executed **autonomously by the panel controller**
+once triggered (`RefreshCmd`, 0x12, or a no-data init command like Power
+On) — it does not need further SPI traffic to progress, and it pulls the
+BUSY pin LOW for the whole duration (up to the ~5s full-refresh worst case
+above), raising it HIGH only once the pass is fully done. Sending it
+another command — a subsequent init/display call, or worst of all a
+hardware `Reset()` — while it's still LOW aborts or corrupts whatever part
+of the pass hadn't finished yet. That reads as a reproducible,
+position-dependent fade or ghost (e.g. rows the controller hadn't reached
+yet before being interrupted), not a uniform failure — a different
+signature than the periodic-reinit bug above, but with the same practical
+result.
+
+`Hardware.ReadBusy()` is documented as a single, instantaneous read of the
+pin — it does not block. `EPD.waitIdle()` is what turns that into an actual
+wait: it polls `ReadBusy()` (10ms interval, matching the Waveshare
+reference driver's own cadence) until it reports idle, or up to a 10s
+timeout, at which point it returns an error instead of hanging the render
+loop forever on a stuck or miswired pin. Every call site that triggers a
+waveform — `Display()`, `DisplayPartial()`, and `execSequence()`'s no-data
+commands (e.g. Power On) — goes through `waitIdle()` before returning,
+rather than calling `ReadBusy()` once and discarding the result.
+
 ## Reference implementations
 
 - **Waveshare `epd7in5_V2.py`** exposes `init()`, `init_fast()`,
@@ -115,22 +140,37 @@ refresh:
 - Otherwise, when content changed → **grayscale refresh**.
 - When content is unchanged → **skip**.
 
-> **The periodic tick must force a real hardware re-init, not just another
-> Display() push.** `App.refresh` only re-runs `EPD.Init` (hardware reset +
-> the mode's power-on/booster sequence) when the resulting waveform label
-> differs from what's already applied — that's a cheap way to avoid
-> needless resets on BW, where a routine `refreshFast` and the periodic
-> `refreshFull` are different labels and naturally trigger it. Gray4 has
-> only one waveform: both the periodic tick and a routine changed tick
-> resolve to `Init4Gray`, so the label never changes after the very first
-> cycle. Gating re-init on the label alone silently reduced the entire
-> burn-in cadence to a single `Init4Gray` at process start, followed by
-> nothing but `Display()` calls for the process's whole lifetime — the
-> periodic "clearing flash" never actually re-asserted power/booster state,
-> and the panel's contrast drifted (visible as fading and patchy fills)
-> over long-running operation. `refreshPlanner.next` therefore returns a
-> `periodic` bool alongside the `refreshKind`, and `App.refresh` forces
-> `EPD.Init` whenever `periodic` is true, independent of the label check.
+> **Every Gray4 push forces a real hardware re-init, not just the periodic
+> one.** `App.refresh` re-runs `EPD.Init` (hardware reset + the mode's
+> power-on/booster sequence) whenever the resulting waveform label differs
+> from what's already applied, **or** whenever the planner says to
+> (`forceInit`). The label-diff check alone is a cheap way to avoid needless
+> resets on BW, where a routine `refreshFast` and the periodic `refreshFull`
+> are different labels and naturally trigger it on their own.
+>
+> Gray4 has only one waveform, so the label-diff check alone can't
+> distinguish anything: both the periodic tick and a routine changed tick
+> resolve to `Init4Gray`, and the label never changes after the very first
+> cycle. The first version of this fix addressed only the periodic tick —
+> `refreshPlanner.next` returned a `periodic` bool and `App.refresh` forced
+> `EPD.Init` only when it was true. That fixed the "no re-init for the
+> entire process lifetime" failure (see below) but real-hardware testing
+> found it wasn't enough: the panel rendered crisp immediately after the
+> forced periodic re-init and then visibly faded on the very next *routine*
+> push. The electrical state drifts even between consecutive Gray4 pushes,
+> not just over the long burn-in window. So `forceInit` is now true on
+> *every* Gray4 push that isn't skipped, not only the periodic one — Gray4
+> has no cheaper steady state worth preserving, and this matches the
+> upstream Waveshare reference driver, which re-runs its 4-gray init
+> sequence before every single 4-gray display call rather than amortizing
+> it.
+>
+> Before either version of this fix, gating re-init on the label alone
+> silently reduced the entire burn-in cadence to a single `Init4Gray` at
+> process start, followed by nothing but `Display()` calls for the
+> process's whole lifetime — the periodic "clearing flash" never actually
+> re-asserted power/booster state, and the panel's contrast drifted
+> (visible as fading and patchy fills) over long-running operation.
 
 ### Configuration
 
@@ -152,6 +192,13 @@ per-widget cadence below.
   box inverted (see the note above).
 - **gray4 can't be made flicker-free** — if flicker matters more than the
   grayscale legibility, run `color_mode: bw`.
+- **Every gray4 push now re-runs the full `Init4Gray` sequence** (hardware
+  reset + power-on/booster), adding roughly its own duration on top of each
+  push rather than only on the periodic cadence. Given gray4 pushes are
+  already gated behind each widget's own `refresh:` cadence (minimum one
+  minute), this is negligible against the cadence itself, and it's what
+  fixed the fading — there was no cheaper option that held up on real
+  hardware.
 
 ## Per-widget refresh cadence (the refresh queue)
 

@@ -288,10 +288,10 @@ func (a *App) Run(ctx context.Context) error {
 
 // refresh applies the planner's decision for one cycle: it picks a refresh
 // waveform based on whether buf differs from the frame on the panel, re-inits
-// the controller only when the waveform's LUT changes, and pushes the full
-// frame. appliedMode is updated in place. It reports whether a frame was
-// actually pushed (false on a skip), so the caller knows whether to advance its
-// last-pushed buffer.
+// the controller when the waveform's LUT changes or the planner demands it
+// (forceInit), and pushes the full frame. appliedMode is updated in place.
+// It reports whether a frame was actually pushed (false on a skip), so the
+// caller knows whether to advance its last-pushed buffer.
 //
 // due is the refresh-queue gate: a content change is only allowed to drive a
 // refresh when at least one widget is due this minute, so widgets on
@@ -307,21 +307,21 @@ func (a *App) Run(ctx context.Context) error {
 // partial-windowed force-drive settles the box inverted on real hardware. The
 // full-screen fast path reuses the proven Display sequence instead.
 func (a *App) refresh(buf, lastBuffer []byte, due bool, appliedMode *InitMode) (bool, error) {
-	kind, periodic := a.planner.next(due && !bytes.Equal(buf, lastBuffer))
+	kind, forceInit := a.planner.next(due && !bytes.Equal(buf, lastBuffer))
 	if kind == refreshSkip {
 		return false, nil
 	}
 
-	// The periodic burn-in cycle must force a genuine hardware re-init
-	// (reset + power-on/booster) even when the resulting waveform label is
-	// unchanged from *appliedMode. Gray4 has only one waveform, so its
-	// periodic tick and a routine tick both resolve to Init4Gray — the
-	// label-change check alone would never re-fire after the very first
-	// cycle, silently disabling the periodic clearing flash that's supposed
-	// to prevent the panel's electrical state (and thus contrast) from
-	// drifting over long-running operation.
+	// forceInit means the planner needs a genuine hardware re-init (reset +
+	// power-on/booster) even when the resulting waveform label is unchanged
+	// from *appliedMode — see refreshPlanner.next's doc comment. This is the
+	// BW burn-in cadence tick, and unconditionally every Gray4 push (Gray4's
+	// single waveform means the label-change check alone would never re-fire
+	// after the first cycle, and real-hardware testing showed the panel's
+	// electrical state drifts even between consecutive Gray4 pushes, not
+	// just over the long burn-in window).
 	target := initModeForKind(kind)
-	if periodic || target != *appliedMode {
+	if forceInit || target != *appliedMode {
 		if err := a.epd.Init(target); err != nil {
 			return false, fmt.Errorf("init display %q: %w", a.profile.Name, err)
 		}
