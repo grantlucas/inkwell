@@ -1,19 +1,39 @@
 package inkwell
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
 
-// defaultBusyPollInterval and defaultBusyTimeout tune waitIdle's poll loop.
-// The interval matches the Waveshare reference driver's own busy-wait
-// cadence (10ms); the timeout gives generous headroom over the panel's
-// documented worst case (~5s for a full refresh, per
-// docs/adrs/0007-poll-the-busy-pin-in-waitidle.md) so a genuinely stuck busy pin is
-// reported as an error instead of hanging the render loop forever.
+// waitIdle timing, matching the Waveshare reference driver's busy handshake:
+//
+//   - defaultTriggerSettle: sleep after issuing a waveform trigger (0x12
+//     refresh, 0x04 power on, 0x02 power off) BEFORE the first BUSY read.
+//     The UC8179 datasheet says BUSY_N "will become" low after the command —
+//     it is not low yet on the next instruction — and the vendor C driver
+//     marks its 100 ms here as "necessary, 200uS at least". Without it the
+//     first poll can see the pin still idle and the wait is a no-op.
+//   - defaultBusyPollInterval: poll cadence while BUSY is low (vendor: 10 ms).
+//   - defaultIdleSettle: sleep after BUSY releases before the next command
+//     (vendor Python: 20 ms).
+//   - defaultBusyTimeout: generous headroom over the panel's ~5 s full
+//     refresh (docs/adrs/0007-poll-the-busy-pin-in-waitidle.md) so a stuck
+//     pin is reported instead of hanging the loop.
+//   - defaultDeepSleepSettle: sleep after the deep-sleep command before the
+//     controller is touched again (a Reset to wake it, or cutting its rail).
+//     The vendor delays 2 s there and marks it "important, at least 2s".
+//
+// The vendor Python driver also sends the Get Status command (0x71) before
+// each BUSY read. That is deliberately not replicated: the UC8179 datasheet
+// lists BUSY_N as a hardware flag that asserts on the refresh command
+// itself, and the vendor C driver polls the pin without 0x71.
 const (
+	defaultTriggerSettle    = 100 * time.Millisecond
 	defaultBusyPollInterval = 10 * time.Millisecond
+	defaultIdleSettle       = 20 * time.Millisecond
 	defaultBusyTimeout      = 10 * time.Second
+	defaultDeepSleepSettle  = 2 * time.Second
 )
 
 // EPD is the generic e-ink display driver, parameterized by a DisplayProfile.
@@ -22,12 +42,15 @@ type EPD struct {
 	hw      Hardware
 	profile *DisplayProfile
 
-	// sleep, busyPollInterval and busyTimeout back waitIdle. sleep defaults
-	// to time.Sleep; tests override it (and shrink the interval/timeout) to
-	// exercise the poll loop without real delay.
+	// sleep and the durations below back waitIdle and Sleep. sleep defaults
+	// to time.Sleep; tests override it (and shrink the durations) to exercise
+	// the handshake without real delay.
 	sleep            func(time.Duration)
+	triggerSettle    time.Duration
 	busyPollInterval time.Duration
+	idleSettle       time.Duration
 	busyTimeout      time.Duration
+	deepSleepSettle  time.Duration
 }
 
 // NewEPD creates a new EPD driver for the given hardware backend and display profile.
@@ -36,24 +59,28 @@ func NewEPD(hw Hardware, profile *DisplayProfile) *EPD {
 		hw:               hw,
 		profile:          profile,
 		sleep:            time.Sleep,
+		triggerSettle:    defaultTriggerSettle,
 		busyPollInterval: defaultBusyPollInterval,
+		idleSettle:       defaultIdleSettle,
 		busyTimeout:      defaultBusyTimeout,
+		deepSleepSettle:  defaultDeepSleepSettle,
 	}
 }
 
-// waitIdle polls Hardware.ReadBusy until the panel reports idle (BUSY=HIGH)
-// or busyTimeout elapses. Hardware.ReadBusy is documented as a single,
-// instantaneous pin read — it does not block — so the panel's controller,
-// which autonomously drives its multi-flash/grayscale waveform for seconds
-// after a refresh trigger and only raises BUSY once that's done, needs
-// something on this side to actually wait for it. Every call site that
-// triggers a waveform (a refresh, or an init-sequence command with no data
-// payload, e.g. Power On) must go through waitIdle before issuing its next
-// command: sending a command — or worse, toggling Reset — while the panel
-// is still mid-waveform aborts or corrupts whatever pass is in flight,
-// which reads as a reproducible, position-dependent fade/ghost rather than
-// a clean result, not a uniform failure.
+// waitIdle performs the vendor busy handshake after a waveform trigger:
+// sleep triggerSettle so BUSY has actually asserted, poll Hardware.ReadBusy
+// until the panel reports idle (BUSY=HIGH) or busyTimeout elapses, then
+// sleep idleSettle before the caller sends its next command.
+//
+// Hardware.ReadBusy is a single, instantaneous pin read — it does not
+// block — and the controller drives its multi-flash/grayscale waveform
+// autonomously for seconds after the trigger, raising BUSY only once done.
+// Every call site that triggers a waveform (a refresh, or an init-sequence
+// command with no data payload such as Power On / Power Off) must go
+// through waitIdle before issuing its next command; a command or a Reset
+// landing mid-waveform aborts whatever pass is in flight.
 func (d *EPD) waitIdle() error {
+	d.sleep(d.triggerSettle)
 	deadline := time.Now().Add(d.busyTimeout)
 	for !d.hw.ReadBusy() {
 		if time.Now().After(deadline) {
@@ -61,6 +88,7 @@ func (d *EPD) waitIdle() error {
 		}
 		d.sleep(d.busyPollInterval)
 	}
+	d.sleep(d.idleSettle)
 	return nil
 }
 
@@ -250,17 +278,26 @@ func (d *EPD) Clear() error {
 }
 
 // Sleep puts the display into deep sleep mode by executing the profile's
-// sleep sequence (VCOM setting, power off, deep sleep command).
+// sleep sequence (VCOM setting, power off, deep sleep command), then waits
+// deepSleepSettle so the controller has finished entering deep sleep before
+// anything else happens to it — the next push's Reset, or Close cutting its
+// supply. It is called after every push (see App.refresh), so this settle is
+// the tail of every refresh cycle, not just shutdown.
 func (d *EPD) Sleep() error {
-	return d.execSequence(d.profile.SleepSequence)
-}
-
-// Close puts the display to sleep and then releases hardware resources.
-func (d *EPD) Close() error {
-	if err := d.Sleep(); err != nil {
+	if err := d.execSequence(d.profile.SleepSequence); err != nil {
 		return err
 	}
-	return d.hw.Close()
+	d.sleep(d.deepSleepSettle)
+	return nil
+}
+
+// Close puts the display to sleep and then releases hardware resources. The
+// hardware is released even if the sleep sequence fails: the render loop
+// leaves the panel in deep sleep after every push, so Close is routinely
+// talking to a controller that is already asleep, and a sleep error must not
+// leave the panel's supply on and the SPI port open. Both errors are returned.
+func (d *EPD) Close() error {
+	return errors.Join(d.Sleep(), d.hw.Close())
 }
 
 // execSequence sends a series of commands to the display. Commands with a

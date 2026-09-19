@@ -19,15 +19,26 @@ import (
 // Compile-time assertion: WebPreview satisfies HTTPServer.
 var _ HTTPServer = (*WebPreview)(nil)
 
+// mustNewApp builds an App for a test and stubs the EPD's sleep seam, so the
+// vendor settle delays (100 ms before each BUSY poll, 20 ms after, 2 s after
+// deep sleep) don't turn every pushed frame into seconds of wall-clock time.
+// The delays themselves are pinned by TestWaitIdleSettleDelays in epd_test.go.
+func mustNewApp(t *testing.T, cfg *Config, opts ...AppOption) *App {
+	t.Helper()
+	app, err := NewApp(cfg, opts...)
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	app.epd.sleep = func(time.Duration) {}
+	return app
+}
+
 func TestRun_StartsHTTPServer(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Preview.Port = 0
 	wp := NewWebPreview(&Waveshare7in5V2)
 
-	app, err := NewApp(cfg, WithHardware(wp), WithInterval(10*time.Millisecond))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(wp), WithInterval(10*time.Millisecond))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -59,10 +70,7 @@ func TestRun_StartsHTTPServer(t *testing.T) {
 func TestReady_ClosedWithoutHTTPServer(t *testing.T) {
 	cfg := DefaultConfig()
 	mock := &MockHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(10*time.Millisecond))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(mock), WithInterval(10*time.Millisecond))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -86,10 +94,7 @@ func TestRun_ServerShutdownOnCancel(t *testing.T) {
 	cfg.Preview.Port = 0
 	wp := NewWebPreview(&Waveshare7in5V2)
 
-	app, err := NewApp(cfg, WithHardware(wp), WithInterval(10*time.Millisecond))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(wp), WithInterval(10*time.Millisecond))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
@@ -104,8 +109,9 @@ func TestRun_ServerShutdownOnCancel(t *testing.T) {
 	}
 
 	// Server should be shut down — connection refused.
-	_, err = http.Get("http://" + addr + "/")
+	resp, err := http.Get("http://" + addr + "/")
 	if err == nil {
+		_ = resp.Body.Close()
 		t.Fatal("expected connection refused after shutdown")
 	}
 }
@@ -123,10 +129,7 @@ func TestRun_ListenError(t *testing.T) {
 	cfg.Preview.Port = port
 	wp := NewWebPreview(&Waveshare7in5V2)
 
-	app, err := NewApp(cfg, WithHardware(wp), WithInterval(10*time.Millisecond))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(wp), WithInterval(10*time.Millisecond))
 
 	err = app.Run(context.Background())
 	if err == nil {
@@ -142,10 +145,7 @@ func TestRun_ServerCrashAbortsLoop(t *testing.T) {
 	cfg.Preview.Port = 0
 	wp := NewWebPreview(&Waveshare7in5V2)
 
-	app, err := NewApp(cfg, WithHardware(wp), WithInterval(time.Hour))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(wp), WithInterval(time.Hour))
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- app.Run(context.Background()) }()
@@ -154,7 +154,7 @@ func TestRun_ServerCrashAbortsLoop(t *testing.T) {
 	// Force Serve to return an error by closing the listener externally.
 	app.listener.Close()
 
-	err = <-errCh
+	err := <-errCh
 	if err == nil {
 		t.Fatal("expected server error")
 	}
@@ -166,10 +166,7 @@ func TestRun_ServerCrashAbortsLoop(t *testing.T) {
 func TestNewApp_DefaultListenAddr(t *testing.T) {
 	cfg := DefaultConfig()
 	mock := &MockHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(mock), WithInterval(time.Millisecond))
 	if app.listenAddr != ":8080" {
 		t.Errorf("listenAddr = %q, want %q", app.listenAddr, ":8080")
 	}
@@ -179,10 +176,7 @@ func TestNewApp_CustomPort(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Preview.Port = 3000
 	mock := &MockHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(mock), WithInterval(time.Millisecond))
 	if app.listenAddr != ":3000" {
 		t.Errorf("listenAddr = %q, want %q", app.listenAddr, ":3000")
 	}
@@ -198,10 +192,7 @@ backend: preview
 	}
 
 	mock := &MockHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(mock), WithInterval(time.Millisecond))
 
 	if app == nil {
 		t.Fatal("expected non-nil App")
@@ -261,10 +252,7 @@ backend: preview
 	}
 
 	mock := &MockHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(10*time.Millisecond))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(mock), WithInterval(10*time.Millisecond))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -328,10 +316,7 @@ color_mode: gray4
 	}
 
 	mock := &MockHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(10*time.Millisecond))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(mock), WithInterval(10*time.Millisecond))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -432,10 +417,7 @@ color_mode: bw
 		t.Fatalf("LoadConfig: %v", err)
 	}
 	mock := &MockHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Hour))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(mock), WithInterval(time.Hour))
 	// Burn-in cadence is no longer config-driven; set a planner with a far-off
 	// full cadence directly so these dispatch tests stay deterministic (full
 	// only on the first cycle, fast on every changed cycle thereafter).
@@ -450,79 +432,108 @@ color_mode: bw
 func TestApp_RefreshGateDefersUntilDue(t *testing.T) {
 	app, _ := newBWRefreshApp(t)
 	size := app.profile.BufferSize()
-	mode := InitFull
 	frameA := make([]byte, size)
 	frameB := bytes.Repeat([]byte{0xFF}, size)
 
 	// Cycle 1: forced full refresh (tick==1) regardless of due.
-	if pushed, err := app.refresh(frameA, nil, false, &mode); err != nil || !pushed {
+	if pushed, err := app.refresh(frameA, nil, false); err != nil || !pushed {
 		t.Fatalf("cycle 1 forced full: pushed=%v err=%v, want pushed=true", pushed, err)
 	}
 	// Cycle 2: content changed but nothing is due — defer (skip).
-	if pushed, err := app.refresh(frameB, frameA, false, &mode); err != nil || pushed {
+	if pushed, err := app.refresh(frameB, frameA, false); err != nil || pushed {
 		t.Fatalf("cycle 2 not-due: pushed=%v err=%v, want pushed=false", pushed, err)
 	}
 	// Cycle 3: the same deferred change is now due — push it.
-	if pushed, err := app.refresh(frameB, frameA, true, &mode); err != nil || !pushed {
+	if pushed, err := app.refresh(frameB, frameA, true); err != nil || !pushed {
 		t.Fatalf("cycle 3 due: pushed=%v err=%v, want pushed=true", pushed, err)
 	}
 }
 
-// TestApp_RefreshBWRoutineCycleIsFullScreenFast confirms that in BW mode, once
-// an initial full refresh has run, a routine content change drives a full-screen
-// FAST refresh: the InitFast waveform (identified by its unique 0xE5 -> 0x5A
-// force-temperature load) with NO partial-window command (0x90). A windowed
-// partial refresh was abandoned because the force-drive it needs settles the box
-// inverted on real hardware (see inkwell-6jq); each change now does one
-// full-screen flash via the proven Display path instead.
-func TestApp_RefreshBWRoutineCycleIsFullScreenFast(t *testing.T) {
-	app, mock := newBWRefreshApp(t)
-	size := app.profile.BufferSize()
-	mode := InitFull // the LUT a startup full init leaves loaded
-	frameA := make([]byte, size)
-	frameB := bytes.Repeat([]byte{0xFF}, size)
-
-	if pushed, err := app.refresh(frameA, nil, true, &mode); err != nil || !pushed {
-		t.Fatalf("cycle 1 (full): pushed=%v err=%v", pushed, err)
+// cmdRegs returns the command registers of an init sequence, in order.
+func cmdRegs(seq []Command) []byte {
+	regs := make([]byte, 0, len(seq))
+	for _, c := range seq {
+		regs = append(regs, c.Reg)
 	}
-	if pushed, err := app.refresh(frameB, frameA, true, &mode); err != nil || !pushed {
-		t.Fatalf("cycle 2 (full-screen fast): pushed=%v err=%v", pushed, err)
-	}
-
-	if slices.Contains(mock.Commands(), 0x90) {
-		t.Error("routine BW cycle must NOT issue a partial-window command (0x90); it is a full-screen refresh")
-	}
-	var sawFastTemp bool
-	for i, c := range mock.Calls {
-		if c.Type == "command" && c.Data[0] == 0xE5 && i+1 < len(mock.Calls) &&
-			mock.Calls[i+1].Type == "data" && len(mock.Calls[i+1].Data) == 1 && mock.Calls[i+1].Data[0] == 0x5A {
-			sawFastTemp = true
-			break
-		}
-	}
-	if !sawFastTemp {
-		t.Error("expected the fast waveform (InitFast, 0xE5 -> 0x5A) on a routine BW cycle, got none")
-	}
+	return regs
 }
 
-// newGray4RefreshApp mirrors newBWRefreshApp for Gray4-mode dispatch tests.
-func newGray4RefreshApp(t *testing.T, fullEvery int) (*App, *MockHardware) {
+// newRefreshApp builds an App in the given color mode for driving App.refresh
+// directly, with a far-off full cadence so cycle 1 is the forced full/gray
+// refresh and every changed cycle after it is the routine waveform.
+func newRefreshApp(t *testing.T, colorMode string) (*App, *MockHardware) {
 	t.Helper()
-	cfg, err := LoadConfig(strings.NewReader(`
-display: waveshare_7in5_v2
-backend: preview
-color_mode: gray4
-`))
+	cfg, err := LoadConfig(strings.NewReader("display: waveshare_7in5_v2\nbackend: preview\ncolor_mode: " + colorMode + "\n"))
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
 	mock := &MockHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Hour))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
-	app.planner = newRefreshPlanner(Gray4, fullEvery)
+	app := mustNewApp(t, cfg, WithHardware(mock), WithInterval(time.Hour))
+	app.planner = newRefreshPlanner(app.profile.Color, 1000)
 	return app, mock
+}
+
+// TestApp_RefreshPushLifecycle pins the vendor lifecycle for every frame
+// pushed to the panel: a hardware reset and the mode's init sequence, the two
+// planes and the refresh trigger, then the sleep sequence (VCOM, power off,
+// deep sleep). The Waveshare wiki is explicit that the panel must not be left
+// in its high-voltage state between refreshes ("will damage the e-Paper and
+// cannot be repaired"), and leaving it energised is also what lets light on
+// the TFT backplane disturb a settled image. So every push, routine or
+// periodic, in either color mode, runs init → display → sleep, and a skipped
+// cycle touches the hardware not at all. No windowed partial command (0x90)
+// appears on the BW path (see ADR 0008).
+func TestApp_RefreshPushLifecycle(t *testing.T) {
+	frame := func(size int, b byte) []byte { return bytes.Repeat([]byte{b}, size) }
+	tests := []struct {
+		label       string
+		colorMode   string
+		firstInit   []Command // waveform loaded on the forced first cycle
+		routineInit []Command // waveform loaded on a routine changed cycle
+	}{
+		{"bw: full then fast", "bw", Waveshare7in5V2.InitFull, Waveshare7in5V2.InitFast},
+		{"gray4: gray every push", "gray4", Waveshare7in5V2.Init4Gray, Waveshare7in5V2.Init4Gray},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			app, mock := newRefreshApp(t, tt.colorMode)
+			size := app.profile.BufferSize()
+			push := []byte{0x10, 0x13, 0x12}
+			sleep := cmdRegs(Waveshare7in5V2.SleepSequence)
+
+			cycles := []struct {
+				name       string
+				buf, last  []byte
+				due        bool
+				wantPushed bool
+				wantInit   []Command
+			}{
+				{"forced first cycle", frame(size, 0x00), nil, true, true, tt.firstInit},
+				{"routine changed cycle", frame(size, 0xFF), frame(size, 0x00), true, true, tt.routineInit},
+				{"unchanged cycle skips", frame(size, 0xFF), frame(size, 0xFF), true, false, nil},
+			}
+			for _, c := range cycles {
+				mock.Calls = nil
+				pushed, err := app.refresh(c.buf, c.last, c.due)
+				if err != nil || pushed != c.wantPushed {
+					t.Fatalf("%s: pushed=%v err=%v, want pushed=%v", c.name, pushed, err, c.wantPushed)
+				}
+				if !c.wantPushed {
+					if len(mock.Calls) != 0 {
+						t.Errorf("%s: %d hardware calls, want none", c.name, len(mock.Calls))
+					}
+					continue
+				}
+				if got := countResets(mock); got != 1 {
+					t.Errorf("%s: resets = %d, want exactly 1 before the init sequence", c.name, got)
+				}
+				want := slices.Concat(cmdRegs(c.wantInit), push, sleep)
+				if got := mock.Commands(); !bytes.Equal(got, want) {
+					t.Errorf("%s: commands = %# x\n                     want %# x", c.name, got, want)
+				}
+			}
+		})
+	}
 }
 
 // countResets returns how many hardware Reset() calls are recorded so far.
@@ -534,55 +545,6 @@ func countResets(mock *MockHardware) int {
 		}
 	}
 	return n
-}
-
-// TestApp_RefreshGray4EveryPushForcesReInit confirms every Gray4 push — not
-// just the periodic burn-in cycle — performs a genuine hardware re-init
-// (reset + the Init4Gray power-on/booster sequence), even though the
-// resulting waveform label (Init4Gray) never changes from what's already
-// applied. An earlier version of this fix forced the re-init only on the
-// periodic cadence tick; real hardware testing showed the panel rendered
-// crisp immediately after that forced re-init and then visibly faded on
-// the very next routine push, meaning the electrical state drifts even
-// between consecutive Gray4 pushes, not just over the long burn-in window
-// (inkwell fading investigation, Sept 2026). Gray4 has no cheaper steady
-// state worth preserving — a label-change check alone would never re-fire
-// after the first cycle anyway, since Gray4 has only one waveform — so
-// every push now forces it, matching the upstream Waveshare reference
-// driver's own pattern of re-running its 4-gray init before every 4-gray
-// display call.
-func TestApp_RefreshGray4EveryPushForcesReInit(t *testing.T) {
-	app, mock := newGray4RefreshApp(t, 3)
-	size := app.profile.BufferSize()
-	mode := Init4Gray // the LUT a startup Init4Gray leaves loaded
-	frameA := make([]byte, size)
-	frameB := bytes.Repeat([]byte{0xFF}, size)
-	frameC := make([]byte, size)
-
-	// Cycle 1 (tick 1): forced periodic refresh.
-	if pushed, err := app.refresh(frameA, nil, true, &mode); err != nil || !pushed {
-		t.Fatalf("cycle 1: pushed=%v err=%v, want pushed=true", pushed, err)
-	}
-	if got := countResets(mock); got != 1 {
-		t.Fatalf("resets after cycle 1 = %d, want 1", got)
-	}
-
-	// Cycle 2 (tick 2): routine changed cycle, same waveform label as
-	// cycle 1 — must still force a re-init.
-	if pushed, err := app.refresh(frameB, frameA, true, &mode); err != nil || !pushed {
-		t.Fatalf("cycle 2: pushed=%v err=%v, want pushed=true", pushed, err)
-	}
-	if got := countResets(mock); got != 2 {
-		t.Fatalf("resets after cycle 2 (routine) = %d, want 2 — every Gray4 push must force a hardware re-init", got)
-	}
-
-	// Cycle 3 (tick 3, fullEvery=3): the periodic burn-in cycle again.
-	if pushed, err := app.refresh(frameC, frameB, true, &mode); err != nil || !pushed {
-		t.Fatalf("cycle 3: pushed=%v err=%v, want pushed=true", pushed, err)
-	}
-	if got := countResets(mock); got != 3 {
-		t.Fatalf("resets after cycle 3 (periodic) = %d, want 3", got)
-	}
 }
 
 func TestRun_WidgetRenderError(t *testing.T) {
@@ -607,10 +569,7 @@ dashboard:
 	})
 
 	mock := &MockHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond), WithRegistry(reg))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(mock), WithInterval(time.Millisecond), WithRegistry(reg))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -858,13 +817,10 @@ dashboard:
 	}
 
 	mock := &MockHardware{}
-	app, err := NewApp(cfg,
+	app := mustNewApp(t, cfg,
 		WithHardware(mock),
 		WithInterval(time.Millisecond),
 	)
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
 	if app.dashboard == nil {
 		t.Fatal("dashboard is nil")
 	}
@@ -937,10 +893,7 @@ backend: preview
 	}
 
 	mock := &MockHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(mock), WithInterval(time.Millisecond))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
@@ -977,10 +930,7 @@ backend: preview
 	}
 
 	mock := &resetFailHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(mock), WithInterval(time.Millisecond))
 
 	err = app.Run(context.Background())
 	if err == nil {
@@ -991,41 +941,50 @@ backend: preview
 	}
 }
 
-// displayErrorHardware fails on SendCommand for the refresh command (0x12),
-// simulating a display error during the Display call.
-type displayErrorHardware struct {
+// failCmdHardware fails SendCommand for one command register, simulating a
+// wire error at a specific point in the push lifecycle.
+type failCmdHardware struct {
 	MockHardware
-	failOnRefresh bool
+	failOn byte
 }
 
-func (d *displayErrorHardware) SendCommand(cmd byte) error {
-	if d.failOnRefresh && cmd == 0x12 {
-		return fmt.Errorf("display send failed")
+func (d *failCmdHardware) SendCommand(cmd byte) error {
+	if cmd == d.failOn {
+		return fmt.Errorf("send of %#02x failed", cmd)
 	}
 	return d.MockHardware.SendCommand(cmd)
 }
 
-func TestRun_DisplayError(t *testing.T) {
-	cfg, err := LoadConfig(strings.NewReader(`
+// TestRun_PushErrorsAbortTheLoop covers the error return of each hardware
+// step in App.refresh's push lifecycle: the frame's refresh trigger and the
+// sleep sequence's power-off command. Either failing must stop the loop with
+// an error naming the step (the init step has its own test, TestRun_InitError).
+func TestRun_PushErrorsAbortTheLoop(t *testing.T) {
+	tests := []struct {
+		label   string
+		failOn  byte
+		wantErr string
+	}{
+		{"display refresh trigger fails", 0x12, "display"},
+		{"sleep power-off fails", 0x02, "sleep display"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2
 backend: preview
 `))
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
+			if err != nil {
+				t.Fatalf("LoadConfig: %v", err)
+			}
 
-	mock := &displayErrorHardware{failOnRefresh: true}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+			app := mustNewApp(t, cfg, WithHardware(&failCmdHardware{failOn: tt.failOn}), WithInterval(time.Millisecond))
 
-	err = app.Run(context.Background())
-	if err == nil {
-		t.Fatal("expected display error")
-	}
-	if !strings.Contains(err.Error(), "display") {
-		t.Fatalf("unexpected error: %v", err)
+			err = app.Run(context.Background())
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("Run error = %v, want one containing %q", err, tt.wantErr)
+			}
+		})
 	}
 }
 
@@ -1067,10 +1026,7 @@ dashboard:
 	// Startup full init resets once (ok); the first fast cycle's re-init
 	// resets again and fails.
 	mock := &resetFailAfterHardware{failAfter: 1}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond), WithRegistry(changingRegistry()))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(mock), WithInterval(time.Millisecond), WithRegistry(changingRegistry()))
 
 	err = app.Run(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "init display") {
@@ -1117,10 +1073,7 @@ func TestRun_ShutdownTimeoutFallsBackToClose(t *testing.T) {
 	cfg.Preview.Port = 0
 	wp := NewWebPreview(&Waveshare7in5V2)
 
-	app, err := NewApp(cfg, WithHardware(wp), WithInterval(10*time.Millisecond))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(wp), WithInterval(10*time.Millisecond))
 	// Force shutdown to time out immediately so Close() fallback is exercised.
 	app.shutdownTimeout = time.Nanosecond
 
@@ -1156,10 +1109,7 @@ color_mode: bw
 		t.Fatalf("LoadConfig: %v", err)
 	}
 	mock := &MockHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(mock), WithInterval(time.Millisecond))
 	if app.profile.Color != BW {
 		t.Errorf("profile.Color = %v, want BW", app.profile.Color)
 	}
@@ -1179,10 +1129,7 @@ color_mode: gray4
 		t.Fatalf("LoadConfig: %v", err)
 	}
 	mock := &MockHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(mock), WithInterval(time.Millisecond))
 	if app.profile.Color != Gray4 {
 		t.Errorf("profile.Color = %v, want Gray4", app.profile.Color)
 	}
@@ -1281,10 +1228,7 @@ func TestApplyColorMode(t *testing.T) {
 func TestRun_GracefulShutdownClearsBeforeSleep(t *testing.T) {
 	cfg := DefaultConfig() // ClearOnShutdown defaults to true
 	mock := &MockHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Hour))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(mock), WithInterval(time.Hour))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -1425,10 +1369,7 @@ func TestRun_ClearOnShutdownDisabled(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.ClearOnShutdown = false
 	mock := &MockHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Hour))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(mock), WithInterval(time.Hour))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -1473,10 +1414,7 @@ dashboard:
 	})
 
 	mock := &MockHardware{}
-	app, err := NewApp(cfg, WithHardware(mock), WithInterval(time.Millisecond), WithRegistry(reg))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
+	app := mustNewApp(t, cfg, WithHardware(mock), WithInterval(time.Millisecond), WithRegistry(reg))
 
 	if err := app.Run(context.Background()); err == nil {
 		t.Fatal("expected render error")

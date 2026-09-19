@@ -63,6 +63,25 @@ func (m *MockHardware) Commands() []byte {
 	return cmds
 }
 
+// CommandsWithData rebuilds the Command sequence the mock saw: each command
+// byte paired with the data payload sent immediately after it, or nil for a
+// bare command. This is the same shape as a profile's init sequences, so a
+// test can compare what was sent against what the profile declares.
+func (m *MockHardware) CommandsWithData() []Command {
+	var out []Command
+	for i, c := range m.Calls {
+		if c.Type != "command" {
+			continue
+		}
+		cmd := Command{Reg: c.Data[0]}
+		if i+1 < len(m.Calls) && m.Calls[i+1].Type == "data" {
+			cmd.Data = m.Calls[i+1].Data
+		}
+		out = append(out, cmd)
+	}
+	return out
+}
+
 // DataCalls returns the data payloads in order, filtering out non-data calls.
 // Useful for asserting buffer contents without manually scanning the call log.
 func (m *MockHardware) DataCalls() [][]byte {
