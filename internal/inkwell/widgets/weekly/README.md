@@ -154,11 +154,43 @@ The widget-specific keys live under `config:`.
 | `temp_unit`          | string          | top-level `weather.temp_unit` | Override the displayed temperature unit: `"C"` or `"F"`.                                              |
 | `weather_model`      | string          | top-level `weather.model`     | Override the Open-Meteo forecast model: `"gfs"`, `"ecmwf"`, or `"gem"`. See [Weather models](#weather-models). Only meaningful when `show_weather` is true. |
 | `week_start`         | string          | `"monday"`| `"monday"` or `"sunday"`. **Validated but not yet applied** — the view always starts on the current day (see [inkwell-7gn](#known-gaps)). |
+| `timezone`           | string          | host system zone | IANA zone name (e.g. `"America/Toronto"`) the day columns and event clock labels render in. An unknown name fails `LoadConfig`. See [Timezone](#timezone). |
 | `highlight_hour`     | integer         | `15`      | Hour `[0, 23]` to highlight in the hourly chart. **Validated but not yet applied** — the chart always highlights the current hour (see [inkwell-7gn](#known-gaps)). |
 <!-- markdownlint-enable MD013 -->
 
 Any value of the wrong type, an empty or missing `feeds`, or an out-of-range
 number is a configuration error that fails `LoadConfig`.
+
+## Timezone
+
+A feed does not express every event the same way. Google emits most
+events as UTC instants (`DTSTART:20260920T130000Z`) and others as wall
+times qualified by a zone (`DTSTART;TZID=America/Toronto:20260919T104500`).
+The parser preserves whichever form it found, so an `Event.Start` is
+always a correct *instant* but carries the feed's zone, not the
+viewer's. Rendering it directly would print two neighbouring events on
+the same panel in two different zones.
+
+`timezone` names the single zone the widget renders in — event clock
+labels, day-column boundaries, and the weather chart's highlighted hour
+all derive from it:
+
+```yaml
+config:
+  timezone: "America/Toronto"
+```
+
+It defaults to the host's system zone. Set it explicitly for a device:
+a Pi imaged without a timezone reports UTC, and since most feed events
+are UTC instants they would render at their raw UTC clock rather than
+being converted — hours off, and a full day off near midnight. An
+unknown zone name fails `LoadConfig`. `cmd/inkwell` embeds the IANA zone
+database via `time/tzdata`, so this works on an image with no system
+`zoneinfo`.
+
+One caveat the parser cannot fix: a feed using a non-IANA `TZID` (Outlook
+emits names like `"Eastern Standard Time"`) falls back to UTC with a log
+line, because `VTIMEZONE` blocks are not yet read.
 
 ## Weather configuration
 

@@ -609,3 +609,159 @@ func TestPlanEvents_TimeLabelUsesDisplayZone(t *testing.T) {
 		t.Errorf("timeLine = %q, want %q", got, want)
 	}
 }
+
+// mustLoad is a small guard so zone-sensitive tables read as data rather than
+// error handling. tzdata is embedded by cmd/inkwell, and the test host has a
+// system zone database, so a failure here is a genuine environment problem.
+func mustLoad(t *testing.T, name string) *time.Location {
+	t.Helper()
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		t.Fatalf("load %s: %v", name, err)
+	}
+	return loc
+}
+
+// TestColumnAndLabelAgreeAcrossZones is the bucketing audit. filterEventsForDay
+// buckets timed events by true instant overlap and all-day events by bare date
+// components, both deliberately zone-independent; planEvents then labels in the
+// display zone. The invariant that matters to a viewer is that the two agree —
+// an event must never be drawn in a column whose date contradicts its own
+// printed clock. These cases pin that across both serialization styles, both
+// signs of UTC offset, midnight edges, and DST transitions.
+func TestColumnAndLabelAgreeAcrossZones(t *testing.T) {
+	toronto := mustLoad(t, "America/Toronto")
+	berlin := mustLoad(t, "Europe/Berlin")
+
+	// A timed event, expressed as the instant a feed would carry.
+	timed := func(summary string, start time.Time, mins int) ical.Event {
+		return ical.Event{Summary: summary, Start: start, End: start.Add(time.Duration(mins) * time.Minute)}
+	}
+	allDay := func(summary string, y int, m time.Month, d, days int) ical.Event {
+		s := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+		return ical.Event{Summary: summary, Start: s, End: s.AddDate(0, 0, days), AllDay: true}
+	}
+
+	cases := []struct {
+		label  string
+		loc    *time.Location
+		day    time.Time // midnight in loc, as Render builds it
+		events []ical.Event
+		want   []string // "summary@label", in column order
+	}{
+		{
+			label: "Z-serialized and TZID-serialized events at one instant agree",
+			loc:   toronto,
+			day:   time.Date(2026, 9, 20, 0, 0, 0, 0, toronto),
+			events: []ical.Event{
+				// The reported bug: 13:00Z is 09:00 EDT.
+				timed("Z form", time.Date(2026, 9, 20, 13, 0, 0, 0, time.UTC), 300),
+				timed("TZID form", time.Date(2026, 9, 20, 9, 0, 0, 0, toronto), 300),
+			},
+			want: []string{"Z form@09:00", "TZID form@09:00"},
+		},
+		{
+			label: "late local evening stays in its local column",
+			loc:   toronto,
+			// 2026-09-19 23:30 EDT is 2026-09-20 03:30Z — next day in UTC.
+			day: time.Date(2026, 9, 19, 0, 0, 0, 0, toronto),
+			events: []ical.Event{
+				timed("Nightcap", time.Date(2026, 9, 20, 3, 30, 0, 0, time.UTC), 30),
+			},
+			want: []string{"Nightcap@23:30"},
+		},
+		{
+			label: "late local evening does not leak into the next column",
+			loc:   toronto,
+			day:   time.Date(2026, 9, 20, 0, 0, 0, 0, toronto),
+			events: []ical.Event{
+				timed("Nightcap", time.Date(2026, 9, 20, 3, 30, 0, 0, time.UTC), 30),
+			},
+			want: nil,
+		},
+		{
+			label: "early local morning stays in its local column",
+			loc:   toronto,
+			day:   time.Date(2026, 9, 20, 0, 0, 0, 0, toronto),
+			events: []ical.Event{
+				timed("Airport run", time.Date(2026, 9, 20, 4, 30, 0, 0, time.UTC), 60),
+			},
+			want: []string{"Airport run@00:30"},
+		},
+		{
+			label: "positive-offset zone labels ahead of UTC",
+			loc:   berlin,
+			day:   time.Date(2026, 9, 20, 0, 0, 0, 0, berlin),
+			events: []ical.Event{
+				timed("Standup", time.Date(2026, 9, 20, 7, 0, 0, 0, time.UTC), 30),
+			},
+			want: []string{"Standup@09:00"},
+		},
+		{
+			label: "positive-offset zone pulls a late-UTC event into the next column",
+			loc:   berlin,
+			// 2026-09-19 23:00Z is 2026-09-20 01:00 CEST.
+			day: time.Date(2026, 9, 20, 0, 0, 0, 0, berlin),
+			events: []ical.Event{
+				timed("Late call", time.Date(2026, 9, 19, 23, 0, 0, 0, time.UTC), 30),
+			},
+			want: []string{"Late call@01:00"},
+		},
+		{
+			label: "spring-forward 23-hour day keeps its events",
+			loc:   toronto,
+			// 2026-03-08 is the DST jump; 14:00Z is 10:00 EDT.
+			day: time.Date(2026, 3, 8, 0, 0, 0, 0, toronto),
+			events: []ical.Event{
+				timed("Brunch", time.Date(2026, 3, 8, 14, 0, 0, 0, time.UTC), 90),
+			},
+			want: []string{"Brunch@10:00"},
+		},
+		{
+			label: "fall-back 25-hour day keeps a post-transition event",
+			loc:   toronto,
+			// 2026-11-01 falls back at 02:00; 18:00Z is 13:00 EST.
+			day: time.Date(2026, 11, 1, 0, 0, 0, 0, toronto),
+			events: []ical.Event{
+				timed("Late lunch", time.Date(2026, 11, 1, 18, 0, 0, 0, time.UTC), 60),
+			},
+			want: []string{"Late lunch@13:00"},
+		},
+		{
+			label:  "all-day span covers its dates in a negative-offset zone",
+			loc:    toronto,
+			day:    time.Date(2026, 9, 21, 0, 0, 0, 0, toronto),
+			events: []ical.Event{allDay("Visitors", 2026, 9, 19, 9)},
+			want:   []string{"Visitors@ALL DAY"},
+		},
+		{
+			label:  "all-day span covers its dates in a positive-offset zone",
+			loc:    berlin,
+			day:    time.Date(2026, 9, 21, 0, 0, 0, 0, berlin),
+			events: []ical.Event{allDay("Visitors", 2026, 9, 19, 9)},
+			want:   []string{"Visitors@ALL DAY"},
+		},
+		{
+			label:  "all-day span is exclusive of its DTEND date",
+			loc:    toronto,
+			day:    time.Date(2026, 9, 28, 0, 0, 0, 0, toronto),
+			events: []ical.Event{allDay("Visitors", 2026, 9, 19, 9)},
+			want:   nil,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			dayEvents := filterEventsForDay(tc.events, tc.day, tc.day.AddDate(0, 0, 1))
+			plan := planEvents(dayEvents, 40, 20, eventOptions{MaxEvents: 10, Location: tc.loc})
+
+			var got []string
+			for _, p := range plan {
+				got = append(got, p.summary+"@"+p.timeLine)
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("column contents = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

@@ -9,6 +9,13 @@ import (
 	"runtime"
 	"syscall"
 
+	// Embed the IANA zone database in the binary. Without it,
+	// time.LoadLocation depends on /usr/share/zoneinfo, which a minimal
+	// Raspberry Pi image does not ship — the timezone config key would fail
+	// at startup and every TZID-qualified feed event would quietly fall back
+	// to UTC (see parse.go's extractTZID). Costs a few hundred KB.
+	_ "time/tzdata"
+
 	"github.com/grantlucas/inkwell/internal/buildinfo"
 	"github.com/grantlucas/inkwell/internal/cli"
 	inkwell "github.com/grantlucas/inkwell/internal/inkwell"
