@@ -1,13 +1,8 @@
 # Execution Plan: Inkwell
 
-> **Source Documents**:
->
-> - [Hardware Overview](docs/tech-specs/01-hardware-overview.md)
-> - [Python Driver Architecture](docs/tech-specs/03-python-driver-architecture.md)
-> - [Rendering Pipeline](docs/tech-specs/04-rendering-pipeline.md)
-> - [SPI Command Reference](docs/tech-specs/05-spi-command-reference.md)
-> - [Go Implementation Guide](docs/tech-specs/06-go-implementation-guide.md)
-> - [Testing Strategy](docs/tech-specs/07-testing-strategy.md)
+> **Source Documents**: this plan was written against `docs/tech-specs/`,
+> which has since been replaced by the architecture decision records in
+> [docs/adrs/](docs/adrs/).
 
 ## Executive Summary
 

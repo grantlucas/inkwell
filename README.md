@@ -190,12 +190,12 @@ The `docs/` directory contains detailed reference material:
   - [Installation on a Raspberry Pi](docs/guides/installation.md)
   - [Building dashboards](docs/guides/building-dashboards.md)
   - [Hardware grayscale ceilings](docs/guides/hardware-grayscale.md)
-- **Tech specs** ([docs/tech-specs/](docs/tech-specs/)) — hardware,
-  protocol, and architecture references:
-  - Hardware overview, GPIO pin mapping
-  - SPI command reference
-  - Go implementation architecture
-  - Testing strategy
+- **Architecture decisions** ([docs/adrs/](docs/adrs/)) — why the driver,
+  rendering, and refresh behaviour work the way they do:
+  - Target hardware and GPIO pin mapping
+  - Data-driven display profiles, swappable backends
+  - Palette quantization and the no-dithering rule
+  - Refresh waveform strategy and the per-widget refresh queue
 - **Demos** ([docs/demos/](docs/demos/)) — feature-level walkthroughs
   (e.g. the weekly calendar dashboard and the grayscale refresh).
 

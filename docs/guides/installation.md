@@ -333,7 +333,7 @@ Inkwell is in the `spi` group (`groups` after re-login).
 **`gpio pin GPIO… not found`** — periph.io couldn't resolve a BCM pin.
 Three things to check, in order: (1) you're on a supported Raspberry
 Pi and the wiring matches the BCM pin map in
-[`docs/tech-specs/01-hardware-overview.md`](../tech-specs/01-hardware-overview.md);
+[`docs/adrs/0001`](../adrs/0001-target-waveshare-7in5-v2-on-a-pi-zero-2w.md);
 (2) `ls /dev/gpiochip*` shows at least `/dev/gpiochip0` and the
 service user can read it (group `gpio` after re-login); (3) the
 `journalctl -u inkwell` logs for `periph host init` errors that would
@@ -363,5 +363,5 @@ supported install method.
   design custom screens, build new widgets, configure dashboards.
 - [`docs/guides/hardware-grayscale.md`](hardware-grayscale.md) — what
   reads cleanly on the panel vs. what dithers to stipple.
-- [`docs/tech-specs/`](../tech-specs/) — hardware overview, SPI
-  command reference, Go architecture, and testing strategy.
+- [`docs/adrs/`](../adrs/) — the architecture decisions behind the
+  driver, rendering, and refresh behaviour.

@@ -9,7 +9,7 @@ import (
 // The interval matches the Waveshare reference driver's own busy-wait
 // cadence (10ms); the timeout gives generous headroom over the panel's
 // documented worst case (~5s for a full refresh, per
-// docs/tech-specs/08-refresh-strategy.md) so a genuinely stuck busy pin is
+// docs/adrs/0007-poll-the-busy-pin-in-waitidle.md) so a genuinely stuck busy pin is
 // reported as an error instead of hanging the render loop forever.
 const (
 	defaultBusyPollInterval = 10 * time.Millisecond

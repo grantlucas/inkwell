@@ -114,8 +114,8 @@ default (LoadConfig errors if a widget omits it). A per-screen `refreshSchedule`
 widget is *due* this minute (wall-clock aligned, so equal cadences coalesce;
 static widgets never open the gate). Don't confuse a widget's top-level
 `refresh` (render cadence) with `weekly-calendar`'s nested `config.refresh`
-(data cache TTL). See
-[`docs/tech-specs/08-refresh-strategy.md`](docs/tech-specs/08-refresh-strategy.md).
+(data cache TTL). See the
+[architecture decision records](docs/adrs/), 0008 through 0011.
 
 ## Workflow
 
