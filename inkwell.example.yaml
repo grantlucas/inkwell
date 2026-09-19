@@ -105,6 +105,11 @@ dashboard:
               #     # `exclude` drops the event entirely.
               #     - match: 'Bottle Drive'
               #       exclude: true
+            # Day columns to draw, counting from today. 1-7, default 7.
+            # Drop to 5 for a work-week view: the same 800 px split five
+            # ways gives 160 px columns instead of 114, so event titles
+            # get ~19 characters a line instead of ~13.
+            days: 7
             show_weather: true
             show_weather_label: true
             max_events: 5

@@ -24,7 +24,7 @@ type stubCalSource struct {
 	err    error
 
 	// gotStart/gotEnd record the window Render asked for, so tests can pin
-	// which zone the 7-day span was anchored in.
+	// which zone the span was anchored in and how many days long it is.
 	gotStart, gotEnd time.Time
 }
 
@@ -46,9 +46,14 @@ func (s *stubCalSource) Events(_ context.Context, start, end time.Time) ([]ical.
 type stubWeatherSource struct {
 	forecast *weather.Forecast
 	err      error
+
+	// gotDays records the forecast length Render asked for, which the shared
+	// provider also uses as part of its cache key.
+	gotDays int
 }
 
-func (s *stubWeatherSource) Forecast(_ context.Context, _ weather.Location, _ int) (*weather.Forecast, error) {
+func (s *stubWeatherSource) Forecast(_ context.Context, _ weather.Location, days int) (*weather.Forecast, error) {
+	s.gotDays = days
 	return s.forecast, s.err
 }
 
@@ -507,6 +512,54 @@ func TestParseConfig_MaxEvents(t *testing.T) {
 	}
 }
 
+func TestParseConfig_Days(t *testing.T) {
+	c, err := parseConfig(minimalConfig())
+	if err != nil {
+		t.Fatalf("parseConfig: %v", err)
+	}
+	if c.Days != 7 {
+		t.Errorf("default Days = %d, want 7", c.Days)
+	}
+
+	cfg := minimalConfig()
+	cfg["days"] = 5
+	c, err = parseConfig(cfg)
+	if err != nil {
+		t.Fatalf("parseConfig: %v", err)
+	}
+	if c.Days != 5 {
+		t.Errorf("Days = %d, want 5", c.Days)
+	}
+}
+
+func TestParseConfig_DaysRange(t *testing.T) {
+	cases := []struct {
+		label   string
+		days    any
+		wantErr bool
+	}{
+		{"lower boundary", 1, false},
+		{"upper boundary", 7, false},
+		{"zero", 0, true},
+		{"negative", -1, true},
+		{"above range", 8, true},
+		{"non-integer", "five", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			cfg := minimalConfig()
+			cfg["days"] = tc.days
+			_, err := parseConfig(cfg)
+			if tc.wantErr && err == nil {
+				t.Errorf("days=%v: want error, got nil", tc.days)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("days=%v: unexpected error: %v", tc.days, err)
+			}
+		})
+	}
+}
+
 func TestParseConfig_ShowLocation(t *testing.T) {
 	cfg := minimalConfig()
 
@@ -911,5 +964,65 @@ func TestWidget_HighlightHourUsesDisplayZone(t *testing.T) {
 
 	if slices.Equal(render(time.UTC).Pix, render(toronto).Pix) {
 		t.Error("UTC and America/Toronto rendered identically; highlight hour ignores the display zone")
+	}
+}
+
+func TestWidget_DaysNarrowsTheWindow(t *testing.T) {
+	bounds := image.Rect(0, 52, 800, 480)
+	cal := &stubCalSource{events: sampleEvents()}
+	ws := &stubWeatherSource{forecast: sampleForecast()}
+	w := New(bounds, cal, ws, fixedClock(testTime), Config{
+		Days:        5,
+		MaxEvents:   5,
+		ShowWeather: true,
+		TempUnit:    "C",
+	})
+
+	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
+	if err := w.Render(frame); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	wantEnd := cal.gotStart.AddDate(0, 0, 5)
+	if !cal.gotEnd.Equal(wantEnd) {
+		t.Errorf("calendar window end = %v, want %v", cal.gotEnd, wantEnd)
+	}
+	if ws.gotDays != 5 {
+		t.Errorf("forecast days = %d, want 5", ws.gotDays)
+	}
+
+	// Five columns tile 800 px, so the four dividers land at the 160 px
+	// boundaries and nothing is drawn at the 7-day boundary of x=113.
+	for _, x := range []int{159, 319, 479, 639} {
+		if frame.ColorIndexAt(x, 300) != widget.PaperBlack {
+			t.Errorf("no divider at x=%d", x)
+		}
+	}
+	if frame.ColorIndexAt(113, 300) == widget.PaperBlack {
+		t.Error("divider at x=113 — still laying out 7 columns")
+	}
+}
+
+func TestWidget_UnsetDaysRendersFullWeek(t *testing.T) {
+	// New is exported and callers build Config literals by hand, so a zero
+	// Days must fall back to the full week rather than drawing no columns.
+	bounds := image.Rect(0, 52, 800, 480)
+	cal := &stubCalSource{events: sampleEvents()}
+	w := New(bounds, cal, nil, fixedClock(testTime), Config{
+		MaxEvents: 5,
+		TempUnit:  "C",
+	})
+
+	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
+	if err := w.Render(frame); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	wantEnd := cal.gotStart.AddDate(0, 0, 7)
+	if !cal.gotEnd.Equal(wantEnd) {
+		t.Errorf("calendar window end = %v, want %v", cal.gotEnd, wantEnd)
+	}
+	if frame.ColorIndexAt(113, 300) != widget.PaperBlack {
+		t.Error("no divider at x=113 — not laying out 7 columns")
 	}
 }

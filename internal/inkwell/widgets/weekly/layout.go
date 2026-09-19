@@ -1,5 +1,5 @@
-// Package weekly implements a 7-day calendar+weather dashboard widget
-// for e-ink displays.
+// Package weekly implements a rolling multi-day calendar+weather dashboard
+// widget for e-ink displays, showing up to seven day columns starting today.
 package weekly
 
 import "image"
@@ -19,17 +19,19 @@ type columnLayout struct {
 	IsLast  bool
 }
 
-// computeColumns divides bounds into 7 equal-width columns and assigns
-// vertical zones for header, weather, and events within each.
-func computeColumns(bounds image.Rectangle, weatherH int) []columnLayout {
+// computeColumns divides bounds into days equal-width columns and assigns
+// vertical zones for header, weather, and events within each. Fewer days
+// means wider columns, which is the point: the event text budget in
+// renderEvents is derived from the column width.
+func computeColumns(bounds image.Rectangle, weatherH, days int) []columnLayout {
 	w := bounds.Dx()
-	colW := w / 7
-	cols := make([]columnLayout, 7)
+	colW := w / days
+	cols := make([]columnLayout, days)
 
-	for i := range 7 {
+	for i := range days {
 		x0 := bounds.Min.X + i*colW
 		x1 := x0 + colW
-		if i == 6 {
+		if i == days-1 {
 			x1 = bounds.Max.X
 		}
 
@@ -41,7 +43,7 @@ func computeColumns(bounds image.Rectangle, weatherH int) []columnLayout {
 			Header:  image.Rect(x0, bounds.Min.Y, x1, headerBottom),
 			Weather: image.Rect(x0, headerBottom, x1, weatherBottom),
 			Events:  image.Rect(x0, weatherBottom, x1, bounds.Max.Y),
-			IsLast:  i == 6,
+			IsLast:  i == days-1,
 		}
 	}
 	return cols
