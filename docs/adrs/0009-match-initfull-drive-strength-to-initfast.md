@@ -1,6 +1,6 @@
 # ADR 0009: Tune `InitFull` to drive as hard as `InitFast`
 
-- **Status:** Superseded by [ADR 0013](0013-restore-the-vendor-init-sequence.md)
+- **Status:** Accepted; rationale corrected by [ADR 0013](0013-restore-the-vendor-init-sequence.md)
 - **Recorded:** 2026-09-18
 
 ## Context

@@ -89,7 +89,7 @@ show flicker. Sign-off for any change here is on real hardware, in both modes.
 See also [ADR 0011](0011-require-a-per-widget-refresh-cadence.md), which
 decides when a change is allowed to push at all, and
 [ADR 0012](0012-sleep-the-panel-between-refreshes.md), which replaced the
-"re-init only when the waveform changes" rule above with a full init, display,
-sleep cycle on every push. The contrast problems first attributed to this
-cadence (ADRs 0009 and 0010, both superseded) were light on the panel's
+"re-init only when the waveform changes" rule above with a fresh init before
+every push. The contrast problems first attributed to this cadence (ADR 0010,
+superseded; ADR 0009, rationale corrected by 0013) were light on the panel's
 backplane; see [ADR 0014](0014-shield-the-tft-backplane-from-light.md).
