@@ -86,9 +86,10 @@ var Waveshare7in5V2 = DisplayProfile{
 	// An earlier revision dropped 0x01 and borrowed the fast booster on the
 	// theory that the reset default was crisper (ADR 0009). The datasheet
 	// says otherwise and the fading it was chasing turned out to be light on
-	// the TFT backplane (see ADR 0012), so the profile is back on the vendor
-	// sequence. If Waveshare changes init() again, change this to match; do
-	// not tune it by eye on the preview, which cannot show drive strength.
+	// the TFT backplane (ADR 0014), so the profile is back on the vendor
+	// sequence (ADR 0013). If Waveshare changes init() again, change this to
+	// match; do not tune it by eye on the preview, which cannot show drive
+	// strength.
 	InitFull: []Command{
 		{0x06, []byte{0x17, 0x17, 0x28, 0x17}}, // Booster soft start
 		{0x01, []byte{0x07, 0x07, 0x28, 0x17}}, // Power setting

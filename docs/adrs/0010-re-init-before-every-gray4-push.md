@@ -1,6 +1,6 @@
 # ADR 0010: Re-run the hardware init before every Gray4 push
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0012](0012-sleep-the-panel-between-refreshes.md)
 - **Recorded:** 2026-09-18
 
 ## Context

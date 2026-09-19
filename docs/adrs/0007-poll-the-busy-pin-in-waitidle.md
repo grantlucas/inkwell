@@ -1,6 +1,8 @@
 # ADR 0007: Block on the BUSY pin with a polling `waitIdle`, not a single read
 
 - **Status:** Accepted
+- **Amended by:** [ADR 0012](0012-sleep-the-panel-between-refreshes.md)
+  (settle delays around the poll)
 - **Recorded:** 2026-09-18
 
 ## Context
