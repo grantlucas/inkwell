@@ -32,21 +32,16 @@ type ScaledDrawer struct {
 }
 
 // Draw draws s with the pen at (x, baseline), clipping to dst, and returns
-// the pen advance in output pixels. A rune the face does not carry is skipped
-// without advancing the pen, which is the rule font.MeasureString follows and
-// so keeps Draw and Measure in step.
+// the pen advance in output pixels. A rune the face has no glyph for draws
+// nothing but still takes whatever advance the face reports for it.
 func (d ScaledDrawer) Draw(dst *image.Paletted, x, baseline int, s string) int {
-	scale := d.scale()
-	pen := x
-	for _, r := range s {
-		dr, mask, maskp, advance, ok := d.Face.Glyph(fixed.P(0, 0), r)
+	return d.walk(s, func(r rune, pen int) {
+		dr, mask, maskp, _, ok := d.Face.Glyph(fixed.P(0, 0), r)
 		if !ok {
-			continue
+			return
 		}
-		d.blitGlyph(dst, pen, baseline, dr, mask, maskp)
-		pen += advance.Ceil() * scale
-	}
-	return pen - x
+		d.blitGlyph(dst, x+pen, baseline, dr, mask, maskp)
+	})
 }
 
 // DrawCentered draws s centred between x1 and x2 on the given baseline and
@@ -65,7 +60,35 @@ func (d ScaledDrawer) DrawRight(dst *image.Paletted, xRight, baseline int, s str
 // to Grow px past the advance on either side — so the width depends only on
 // the face and the scale.
 func (d ScaledDrawer) Measure(s string) int {
-	return font.MeasureString(d.Face, s).Ceil() * d.scale()
+	return d.walk(s, nil)
+}
+
+// walk advances the pen across s, calling visit (when non-nil) with each rune
+// and the output-pixel offset its glyph starts at, and returns the total
+// advance in output pixels.
+//
+// Draw and Measure both go through here so a run can never be placed by one
+// set of rules and measured by another — that would misplace every centred
+// and right-aligned label. The accumulation matches font.MeasureString: the
+// kerning pair is added between runes, and a rune the face has no glyph for
+// still takes the advance the face reports for it. Tamzen kerns at zero and
+// reports a zero advance for a rune it lacks, so for the embedded faces this
+// is the plain sum of integer advances.
+func (d ScaledDrawer) walk(s string, visit func(r rune, penX int)) int {
+	scale := d.scale()
+	advance, prev := fixed.Int26_6(0), rune(-1)
+	for _, r := range s {
+		if prev >= 0 {
+			advance += d.Face.Kern(prev, r)
+		}
+		if visit != nil {
+			visit(r, advance.Ceil()*scale)
+		}
+		a, _ := d.Face.GlyphAdvance(r)
+		advance += a
+		prev = r
+	}
+	return advance.Ceil() * scale
 }
 
 // GrowFor returns the dilation radius that gives a display weight at the

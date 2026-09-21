@@ -307,8 +307,9 @@ func TestScaledDrawer_InkStaysWithinAdvancePlusGrow(t *testing.T) {
 	}
 }
 
-// A rune the face does not carry is skipped entirely: no ink, no advance —
-// the same rule font.MeasureString follows, so Draw and Measure stay in step.
+// A rune Tamzen does not carry draws nothing and takes no advance, because
+// the face reports a zero advance for it. The general rule — whatever advance
+// the face reports — is checked against an awkward face below.
 func TestScaledDrawer_SkipsMissingGlyphs(t *testing.T) {
 	face := testFace(t)
 	const missing = '漢'
@@ -508,4 +509,83 @@ func TestScaledDrawer_OutOfRangeSettingsFallBackToPlainText(t *testing.T) {
 			}
 		})
 	}
+}
+
+// awkwardFace is a face that kerns and reports an advance for a rune it has
+// no glyph for — the two places where walking a string per-glyph parts company
+// with font.MeasureString. Tamzen does neither, so nothing here shows up with
+// the embedded faces; it is exactly that silence that would let Draw and
+// Measure drift apart for some future face and misplace every centred label.
+type awkwardFace struct {
+	font.Face
+	kern    fixed.Int26_6
+	notdef  fixed.Int26_6
+	missing rune
+}
+
+func (f awkwardFace) Kern(r0, r1 rune) fixed.Int26_6 { return f.kern }
+
+func (f awkwardFace) GlyphAdvance(r rune) (fixed.Int26_6, bool) {
+	if r == f.missing {
+		return f.notdef, false
+	}
+	return f.Face.GlyphAdvance(r)
+}
+
+func (f awkwardFace) Glyph(dot fixed.Point26_6, r rune) (
+	image.Rectangle, image.Image, image.Point, fixed.Int26_6, bool) {
+	if r == f.missing {
+		return image.Rectangle{}, nil, image.Point{}, f.notdef, false
+	}
+	return f.Face.Glyph(dot, r)
+}
+
+// Draw and Measure must walk a string by one set of rules, whatever the face
+// does. If they diverge, DrawCentered and DrawRight place text by a width the
+// render does not have.
+func TestScaledDrawer_DrawAndMeasureAgreeOnAnAwkwardFace(t *testing.T) {
+	base := testFace(t)
+	cases := []struct {
+		label  string
+		kern   fixed.Int26_6
+		notdef fixed.Int26_6
+		text   string
+	}{
+		{"positive kern", fixed.I(2), 0, "80"},
+		{"negative kern", fixed.I(-1), 0, "80"},
+		{"advance for a rune with no glyph", 0, fixed.I(5), "8漢0"},
+		{"both at once", fixed.I(3), fixed.I(5), "8漢0"},
+	}
+	for _, c := range cases {
+		t.Run(c.label, func(t *testing.T) {
+			face := awkwardFace{Face: base, kern: c.kern, notdef: c.notdef, missing: '漢'}
+			d := ScaledDrawer{Face: face, Scale: 2, Grow: 1, Index: 1}
+
+			frame := newFrame(400, 160)
+			if got, want := d.Draw(frame, 20, 120, c.text), d.Measure(c.text); got != want {
+				t.Errorf("Draw advance = %d, Measure = %d", got, want)
+			}
+			if got, want := d.Measure(c.text), font.MeasureString(face, c.text).Ceil()*2; got != want {
+				t.Errorf("Measure = %d, want font.MeasureString-based %d", got, want)
+			}
+
+			// The kern has to reach the glyphs, not just the total, or the
+			// agreement above would be vacuous.
+			plain := ScaledDrawer{Face: base, Scale: 2, Grow: 1, Index: 1}
+			plainFrame := newFrame(400, 160)
+			plain.Draw(plainFrame, 20, 120, c.text)
+			if c.kern != 0 && rightmostInk(frame) == rightmostInk(plainFrame) {
+				t.Error("kerning did not move the glyphs")
+			}
+		})
+	}
+}
+
+// rightmostInk reports the largest x holding ink, or -1 when there is none.
+func rightmostInk(m *image.Paletted) int {
+	out := -1
+	for p := range inkedAt(m) {
+		out = max(out, p.X)
+	}
+	return out
 }
