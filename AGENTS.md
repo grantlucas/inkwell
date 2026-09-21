@@ -73,7 +73,17 @@ will show.
    size to the nearest embedded Tamzen pixel tier (12/16/20px →
    ~10/12/16 pt); pick sizes near those tiers and verify on the device
    view. Use `fonts.SemiBold`/`fonts.Bold` for *emphasis*, not legibility.
-5. **Don't add new `PaperGrayNN` entries.** The palette is pinned by
+5. **Above the 20 px tier, scale the mask — don't reach for a bigger
+   font.** `fonts.ScaledDrawer` blows a glyph's 1-bit mask up by an
+   integer factor, which is still a 1-bit mask, so both packers stay
+   safe at any size. Size and weight are separate axes: scaling leaves
+   Tamzen Bold's 20% stem ratio untouched, so a 60 px numeral has the
+   stroke weight of body text unless it is also dilated. Take the
+   radius from `fonts.GrowFor(scale)` (2 from 3x up, 1 at 2x, 0 at 1x)
+   — the counter runs out before the stem does, and the slashed zero
+   fills in first. `internal/inkwell/fonts/testdata/` has a golden per
+   scale/grow pair if you need to see one.
+6. **Don't add new `PaperGrayNN` entries.** The palette is pinned by
    `TestPaperPalette_BWBucket` which records exactly which shades
    collapse to black vs white under the BW threshold; adding a new
    entry doesn't help unless it lands in a Gray4 bucket nothing else
