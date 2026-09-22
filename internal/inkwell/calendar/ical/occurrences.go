@@ -43,6 +43,24 @@ func Occurrences(events []Event, start, end time.Time) []Event {
 
 // expand walks a recurring master event and returns concrete
 // occurrences whose [Start, End) overlap [winStart, winEnd).
+//
+// DST: every walker steps with time.Time.AddDate, which works in the
+// receiver's own location, so a recurrence inherits the anchoring of
+// whatever zone the parser attached to DTSTART. That is deliberate and
+// it is what RFC 5545 asks for in both directions:
+//
+//   - A TZID-qualified master recurs in that zone, so a 09:00 weekly
+//     meeting stays 09:00 local across a transition and the UTC
+//     instant moves. This is what a user means by "every Wednesday at
+//     nine", and Google emits TZID for any recurrence given a zone, so
+//     it is the case the dashboard actually meets.
+//   - A Z-suffixed or floating master has no zone to recur in, so it
+//     holds a fixed UTC instant (RFC 5545 3.3.5) and the local wall
+//     time moves instead.
+//
+// Normalising the walk to UTC would collapse the first case into the
+// second and shift recurring events by an hour for half the year.
+// TestOccurrences_DSTTransition pins both readings.
 func expand(master Event, winStart, winEnd time.Time) []Event {
 	r := master.Recurrence
 	interval := r.Interval

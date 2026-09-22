@@ -403,3 +403,96 @@ func TestOccurrences_AllDayPropagatesThroughExpansion(t *testing.T) {
 		}
 	}
 }
+
+// TestOccurrences_DSTTransition pins what a recurrence does across a DST
+// boundary, which is a decision rather than a discovery: the walkers step
+// with time.Time.AddDate, which operates in the receiver's own location, so
+// the answer depends entirely on which zone the parser attached to DTSTART.
+//
+// Both readings below are intended, and both are what RFC 5545 asks for:
+//
+//   - A TZID-qualified master recurs in that zone, so a 09:00 meeting stays
+//     09:00 local and the UTC instant moves. This is what a user means by
+//     "every Wednesday at nine".
+//   - A Z-suffixed (or floating) master has no zone to recur in, so it holds
+//     a fixed UTC instant and the local wall time moves instead. RFC 5545
+//     §3.3.5 makes a UTC-anchored recurrence exactly that.
+//
+// The trap is that the two look identical in the feed until a transition
+// crosses them. Google emits TZID for any recurrence the user gave a zone,
+// so the first case is what the dashboard actually sees; the second is
+// pinned so a future change to the walkers cannot quietly convert one
+// reading into the other.
+func TestOccurrences_DSTTransition(t *testing.T) {
+	toronto, err := time.LoadLocation("America/Toronto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Toronto springs forward on the second Sunday in March: 2026-03-08.
+	// A Wednesday series straddles it — 03-04 is EST (-05:00), 03-11 EDT
+	// (-04:00).
+	window := []time.Time{utc(2026, 3, 1, 0, 0), utc(2026, 3, 20, 0, 0)}
+
+	t.Run("TZID-anchored keeps the local clock time", func(t *testing.T) {
+		start := time.Date(2026, 3, 4, 9, 0, 0, 0, toronto)
+		master := Event{
+			UID:        "zoned",
+			Start:      start,
+			End:        start.Add(time.Hour),
+			Recurrence: &Recurrence{Freq: FreqWeekly},
+		}
+		got := Occurrences([]Event{master}, window[0], window[1])
+		want := []time.Time{
+			time.Date(2026, 3, 4, 9, 0, 0, 0, toronto),
+			time.Date(2026, 3, 11, 9, 0, 0, 0, toronto),
+			time.Date(2026, 3, 18, 9, 0, 0, 0, toronto),
+		}
+		assertStarts(t, got, want)
+		// The wall clock held, so the UTC instant must have moved: 14:00Z
+		// before the transition, 13:00Z after it.
+		if h := got[0].Start.UTC().Hour(); h != 14 {
+			t.Errorf("pre-transition UTC hour = %d, want 14", h)
+		}
+		if h := got[1].Start.UTC().Hour(); h != 13 {
+			t.Errorf("post-transition UTC hour = %d, want 13 (the instant moves)", h)
+		}
+	})
+
+	t.Run("Z-anchored keeps the UTC instant", func(t *testing.T) {
+		// 14:00Z is 09:00 EST on 03-04 — the same wall time the zoned
+		// case starts from, so the divergence is purely the anchoring.
+		master := Event{
+			UID:        "utc",
+			Start:      utc(2026, 3, 4, 14, 0),
+			End:        utc(2026, 3, 4, 15, 0),
+			Recurrence: &Recurrence{Freq: FreqWeekly},
+		}
+		got := Occurrences([]Event{master}, window[0], window[1])
+		want := []time.Time{
+			utc(2026, 3, 4, 14, 0),
+			utc(2026, 3, 11, 14, 0),
+			utc(2026, 3, 18, 14, 0),
+		}
+		assertStarts(t, got, want)
+		// The instant held, so the local clock time must have moved.
+		if h := got[0].Start.In(toronto).Hour(); h != 9 {
+			t.Errorf("pre-transition Toronto hour = %d, want 9", h)
+		}
+		if h := got[1].Start.In(toronto).Hour(); h != 10 {
+			t.Errorf("post-transition Toronto hour = %d, want 10 (the wall clock moves)", h)
+		}
+	})
+}
+
+// assertStarts compares occurrence start instants in order.
+func assertStarts(t *testing.T, got []Event, want []time.Time) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("got %d occurrences, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if !got[i].Start.Equal(want[i]) {
+			t.Errorf("occurrence %d = %v, want %v", i, got[i].Start, want[i])
+		}
+	}
+}
