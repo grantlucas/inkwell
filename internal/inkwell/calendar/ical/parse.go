@@ -20,6 +20,11 @@ func Parse(r io.Reader) ([]Event, error) {
 		return nil, fmt.Errorf("read iCal stream: %w", err)
 	}
 
+	// VTIMEZONE is collected in its own pass so a component declared
+	// after the VEVENT referencing it still resolves — RFC 5545 fixes no
+	// order, and the zone is needed while the VEVENT is being read.
+	zones := parseVTimezones(lines)
+
 	var events []Event
 	var cur *Event
 	var curDuration time.Duration
@@ -83,14 +88,14 @@ func Parse(r io.Reader) ([]Event, error) {
 				// CANCELLED is dropped.
 				cancelled = strings.EqualFold(value, "CANCELLED")
 			case "DTSTART":
-				t, allDay, err := parseDateTime(line)
+				t, allDay, err := parseDateTime(line, zones)
 				if err != nil {
 					return nil, fmt.Errorf("parse DTSTART: %w", err)
 				}
 				cur.Start = t
 				cur.AllDay = allDay
 			case "DTEND":
-				t, _, err := parseDateTime(line)
+				t, _, err := parseDateTime(line, zones)
 				if err != nil {
 					return nil, fmt.Errorf("parse DTEND: %w", err)
 				}
@@ -122,8 +127,14 @@ func Parse(r io.Reader) ([]Event, error) {
 				// parse as UTC and fail to match the corresponding
 				// TZID-anchored occurrence instant.
 				params, _, _ := cutProperty(line)
-				loc := extractTZID(params)
 				for v := range strings.SplitSeq(value, ",") {
+					// The zone is resolved per value: a VTIMEZONE
+					// offset depends on which side of a switchover
+					// the value falls, so it cannot be hoisted.
+					var loc *time.Location
+					if wall, ok := naiveWall(v); ok {
+						loc = extractTZID(params, zones, wall)
+					}
 					t, err := parseICSTime(v, loc)
 					if err != nil {
 						return nil, fmt.Errorf("parse EXDATE %q: %w", v, err)
@@ -259,7 +270,7 @@ func splitProperty(line string) (string, string) {
 //   - 20060102         (all-day date)
 //
 // The full property line is passed to detect VALUE=DATE parameters.
-func parseDateTime(line string) (time.Time, bool, error) {
+func parseDateTime(line string, zones map[string]*vtimezone) (time.Time, bool, error) {
 	before, after, ok := cutProperty(line)
 	if !ok {
 		return time.Time{}, false, fmt.Errorf("missing colon in %q", line)
@@ -285,12 +296,15 @@ func parseDateTime(line string) (time.Time, bool, error) {
 		return t, false, nil
 	}
 
-	if loc := extractTZID(params); loc != nil {
-		t, err := time.ParseInLocation("20060102T150405", value, loc)
-		if err != nil {
-			return time.Time{}, false, fmt.Errorf("invalid datetime %q: %w", value, err)
+	// The zone has to be chosen from the value's own wall time, because
+	// a VTIMEZONE offset depends on which side of a switchover it falls,
+	// so the naive fields are read first and re-anchored after.
+	if wall, ok := naiveWall(value); ok {
+		if loc := extractTZID(params, zones, wall); loc != nil {
+			y, mo, d := wall.Date()
+			hh, mm, ss := wall.Clock()
+			return time.Date(y, mo, d, hh, mm, ss, 0, loc), false, nil
 		}
-		return t, false, nil
 	}
 
 	t, err := time.Parse("20060102T150405", value)
@@ -305,7 +319,7 @@ func parseDateTime(line string) (time.Time, bool, error) {
 // unknown TZID gets a log line so an operator can spot timezone bugs
 // in the feed (e.g. a Toronto event suddenly rendering in UTC) instead
 // of silently mis-bucketing the event into the wrong column.
-func extractTZID(params string) *time.Location {
+func extractTZID(params string, zones map[string]*vtimezone, wall time.Time) *time.Location {
 	for _, part := range splitParams(params) {
 		if strings.HasPrefix(part, "TZID=") {
 			// RFC 5545 3.1 lets a param value be DQUOTE-wrapped, and
@@ -313,15 +327,35 @@ func extractTZID(params string) *time.Location {
 			// delimit the value and are not part of it, so they have
 			// to come off before the lookup.
 			name := strings.Trim(part[5:], `"`)
-			loc, err := time.LoadLocation(name)
-			if err != nil {
-				log.Printf("ical: unknown TZID %q, treating as UTC", name)
-				return nil
+			if loc, err := time.LoadLocation(name); err == nil {
+				return loc
 			}
-			return loc
+			// Not an IANA name. Feeds that ship one (Outlook emits
+			// Windows zone names) define it in a VTIMEZONE, so the
+			// offsets are usually right there in the file.
+			if vt := zones[name]; vt != nil {
+				return vt.locationFor(wall)
+			}
+			log.Printf("ical: unknown TZID %q, treating as UTC", name)
+			return nil
 		}
 	}
 	return nil
+}
+
+// naiveWall reads the wall-clock fields of an iCal datetime value,
+// ignoring any zone, and reports whether the value needs one at all.
+// A date-only or Z-suffixed value already carries an unambiguous
+// instant, so it returns false and no zone is resolved for it.
+func naiveWall(v string) (time.Time, bool) {
+	if len(v) == 8 || strings.HasSuffix(v, "Z") {
+		return time.Time{}, false
+	}
+	t, err := time.Parse("20060102T150405", v)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
 }
 
 // parseDuration parses an iCal DURATION value like "PT1H30M", "P1D", etc.
