@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar/ical"
+	"github.com/grantlucas/inkwell/internal/inkwell/testutil"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
@@ -1024,5 +1025,89 @@ func TestWidget_UnsetDaysRendersFullWeek(t *testing.T) {
 	}
 	if frame.ColorIndexAt(113, 300) != widget.PaperBlack {
 		t.Error("no divider at x=113 — not laying out 7 columns")
+	}
+}
+
+// TestWidget_Golden is the regression net for refactors of the shared
+// calendar + weather scaffolding (issue #92). The extraction is only
+// correct if these do not move: every constant, every wrap decision and
+// every day-bucketing rule shows up in the pixels.
+func TestWidget_Golden(t *testing.T) {
+	bounds := image.Rect(0, 52, 800, 480)
+
+	tests := []struct {
+		label string
+		cal   *stubCalSource
+		ws    *stubWeatherSource
+		cfg   func(*Config)
+	}{
+		{
+			label: "full week with weather",
+			cal:   &stubCalSource{events: sampleEvents()},
+			ws:    &stubWeatherSource{forecast: sampleForecast()},
+		},
+		{
+			label: "no weather source",
+			cal:   &stubCalSource{events: sampleEvents()},
+		},
+		{
+			label: "no events",
+			cal:   &stubCalSource{},
+			ws:    &stubWeatherSource{forecast: sampleForecast()},
+		},
+		{
+			label: "five day columns",
+			cal:   &stubCalSource{events: sampleEvents()},
+			ws:    &stubWeatherSource{forecast: sampleForecast()},
+			cfg:   func(c *Config) { c.Days = 5 },
+		},
+		{
+			label: "locations shown",
+			cal:   &stubCalSource{events: sampleEvents()},
+			ws:    &stubWeatherSource{forecast: sampleForecast()},
+			cfg:   func(c *Config) { c.ShowLocation = true },
+		},
+		{
+			// The all-day bucketing case the extraction must not lose:
+			// a VALUE=DATE event is anchored to UTC midnight while the
+			// columns are built in the viewer's zone.
+			label: "all-day event",
+			cal: &stubCalSource{events: []ical.Event{{
+				UID: "trip", Summary: "Conference", AllDay: true,
+				Start: time.Date(2026, 4, 29, 0, 0, 0, 0, time.UTC),
+				End:   time.Date(2026, 4, 30, 0, 0, 0, 0, time.UTC),
+			}}},
+			ws: &stubWeatherSource{forecast: sampleForecast()},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			cfg := Config{
+				MaxEvents:        5,
+				WeekStart:        time.Monday,
+				Days:             defaultDays,
+				TempUnit:         "C",
+				ShowWeather:      tt.ws != nil,
+				ShowWeatherLabel: true,
+				HighlightHour:    15,
+				Latitude:         45.4,
+				Longitude:        -75.7,
+			}
+			if tt.cfg != nil {
+				tt.cfg(&cfg)
+			}
+			var ws weather.Source
+			if tt.ws != nil {
+				ws = tt.ws
+			}
+			w := New(bounds, tt.cal, ws, fixedClock(testTime), cfg)
+
+			frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
+			if err := w.Render(frame); err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			testutil.AssertGoldenPNG(t, frame)
+		})
 	}
 }
