@@ -15,6 +15,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 )
 
 // testTime is a Monday mid-afternoon, so today's column has both
@@ -106,7 +107,7 @@ func newWidget(t *testing.T, cal calendar.Source, ws weather.Source) *Widget {
 	t.Helper()
 	return New(image.Rect(0, 0, 800, 480), cal, ws, fixedClock(testTime), Config{
 		MaxEvents: defaultMaxEvents,
-		TempUnit:  "C",
+		Weather:   daygrid.WeatherConfig{TempUnit: "C"},
 	})
 }
 
@@ -255,12 +256,12 @@ func TestWidget_Golden(t *testing.T) {
 			label: "fahrenheit",
 			cal:   &stubCalSource{events: sampleEvents()},
 			ws:    &stubWeatherSource{forecast: sampleForecast()},
-			cfg:   func(c *Config) { c.TempUnit = "F" },
+			cfg:   func(c *Config) { c.Weather.TempUnit = "F" },
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			cfg := Config{MaxEvents: defaultMaxEvents, TempUnit: "C"}
+			cfg := Config{MaxEvents: defaultMaxEvents, Weather: daygrid.WeatherConfig{TempUnit: "C"}}
 			if tt.cfg != nil {
 				tt.cfg(&cfg)
 			}
@@ -393,8 +394,8 @@ func TestFactory_UsesSharedProvider(t *testing.T) {
 	}
 	// The provider's defaults reach the widget, so a dashboard sets
 	// location once at the top level.
-	if bw.config.Latitude != 43.25 {
-		t.Errorf("Latitude = %v, want the provider default", bw.config.Latitude)
+	if bw.config.Weather.Latitude != 43.25 {
+		t.Errorf("Latitude = %v, want the provider default", bw.config.Weather.Latitude)
 	}
 }
 
@@ -416,7 +417,7 @@ func TestWidget_TooShortDrawsNothing(t *testing.T) {
 
 	w := New(image.Rect(0, 0, 800, 150), &stubCalSource{events: sampleEvents()},
 		&stubWeatherSource{forecast: sampleForecast()}, fixedClock(testTime),
-		Config{MaxEvents: defaultMaxEvents, TempUnit: "C"})
+		Config{MaxEvents: defaultMaxEvents, Weather: daygrid.WeatherConfig{TempUnit: "C"}})
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}

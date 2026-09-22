@@ -1,59 +1,67 @@
-package boldfive
+package daygrid
 
 import (
 	"strings"
 	"testing"
 )
 
-// These mirror weekly's feed-parsing tests, because the parser is the
-// same code with a different error prefix. Both copies go away with the
-// shared package in issue #92; until then the coverage has to live in
-// both places or the duplicate is untested.
-func TestParseConfig_FeedObjectForm(t *testing.T) {
-	cfg, err := parseConfig(map[string]any{
-		"feeds": []any{
-			"https://example.com/personal.ics",
-			map[string]any{
-				"url":  "https://team.example/cal.ics",
-				"name": "Team calendar",
-				"rules": []any{
-					map[string]any{"match": `^Jane Doe\n(Ravens\n)?`},
-					map[string]any{"match": `vs `, "replace": "v "},
-					map[string]any{"match": `Tournament`, "exclude": true},
-				},
+// testWidget stands in for a widget name; every daygrid error carries
+// one so a dashboard that fails to load says which widget rejected it.
+const testWidget = "test-widget"
+
+func TestParseFeeds_ObjectForm(t *testing.T) {
+	feeds, err := ParseFeeds(testWidget, []any{
+		"https://example.com/personal.ics",
+		map[string]any{
+			"url":  "https://team.example/cal.ics",
+			"name": "Team calendar",
+			"rules": []any{
+				map[string]any{"match": `^Jane Doe\n(Ravens\n)?`},
+				map[string]any{"match": `vs `, "replace": "v "},
+				map[string]any{"match": `Tournament`, "exclude": true},
 			},
 		},
 	})
 	if err != nil {
-		t.Fatalf("parseConfig: %v", err)
+		t.Fatalf("ParseFeeds: %v", err)
 	}
 
-	if len(cfg.Feeds) != 2 {
-		t.Fatalf("got %d feeds, want 2", len(cfg.Feeds))
+	if len(feeds) != 2 {
+		t.Fatalf("got %d feeds, want 2", len(feeds))
 	}
-	if got, want := cfg.Feeds[0].URL, "https://example.com/personal.ics"; got != want {
+	if got, want := feeds[0].URL, "https://example.com/personal.ics"; got != want {
 		t.Errorf("feeds[0].URL = %q, want %q", got, want)
 	}
-	if len(cfg.Feeds[0].Rules) != 0 {
-		t.Errorf("feeds[0].Rules = %v, want none for a bare string feed", cfg.Feeds[0].Rules)
+	if len(feeds[0].Rules) != 0 {
+		t.Errorf("feeds[0].Rules = %v, want none for a bare string feed", feeds[0].Rules)
 	}
-	if got, want := cfg.Feeds[1].URL, "https://team.example/cal.ics"; got != want {
+	if got, want := feeds[1].URL, "https://team.example/cal.ics"; got != want {
 		t.Errorf("feeds[1].URL = %q, want %q", got, want)
 	}
-	if got, want := cfg.Feeds[1].Name, "Team calendar"; got != want {
+	if got, want := feeds[1].Name, "Team calendar"; got != want {
 		t.Errorf("feeds[1].Name = %q, want %q", got, want)
 	}
-	if len(cfg.Feeds[1].Rules) != 3 {
-		t.Fatalf("got %d rules, want 3", len(cfg.Feeds[1].Rules))
+	if len(feeds[1].Rules) != 3 {
+		t.Fatalf("got %d rules, want 3", len(feeds[1].Rules))
 	}
 }
 
-func TestParseConfig_FeedErrors(t *testing.T) {
+func TestParseFeeds_Errors(t *testing.T) {
 	cases := []struct {
 		label   string
 		feeds   any
 		wantErr string
 	}{
+		{
+			label:   "feeds is not a list",
+			feeds:   "https://example.com/a.ics",
+			wantErr: "feeds must be a list",
+		},
+		{
+			label:   "feeds is empty",
+			feeds:   []any{},
+			wantErr: "feeds must not be empty",
+		},
 		{
 			label:   "entry is neither string nor object",
 			feeds:   []any{123},
@@ -118,7 +126,7 @@ func TestParseConfig_FeedErrors(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
-			_, err := parseConfig(map[string]any{"feeds": tc.feeds})
+			_, err := ParseFeeds(testWidget, tc.feeds)
 			if err == nil {
 				t.Fatal("expected an error")
 			}
@@ -131,14 +139,12 @@ func TestParseConfig_FeedErrors(t *testing.T) {
 
 // A feed's name should identify the feed in rule errors, since a bare
 // index into a list of long URLs tells an operator nothing.
-func TestParseConfig_RuleErrorNamesTheFeed(t *testing.T) {
-	_, err := parseConfig(map[string]any{
-		"feeds": []any{map[string]any{
-			"url":   "https://team.example/cal.ics",
-			"name":  "Team calendar",
-			"rules": []any{map[string]any{"match": "(unclosed"}},
-		}},
-	})
+func TestParseFeeds_RuleErrorNamesTheFeed(t *testing.T) {
+	_, err := ParseFeeds(testWidget, []any{map[string]any{
+		"url":   "https://team.example/cal.ics",
+		"name":  "Team calendar",
+		"rules": []any{map[string]any{"match": "(unclosed"}},
+	}})
 	if err == nil {
 		t.Fatal("expected an error")
 	}
@@ -148,23 +154,21 @@ func TestParseConfig_RuleErrorNamesTheFeed(t *testing.T) {
 }
 
 // The object form is usable purely to label a feed, with no rules at all.
-func TestParseConfig_FeedObjectWithoutRules(t *testing.T) {
-	cfg, err := parseConfig(map[string]any{
-		"feeds": []any{map[string]any{
-			"url":  "https://team.example/cal.ics",
-			"name": "Team calendar",
-		}},
-	})
+func TestParseFeeds_ObjectWithoutRules(t *testing.T) {
+	feeds, err := ParseFeeds(testWidget, []any{map[string]any{
+		"url":  "https://team.example/cal.ics",
+		"name": "Team calendar",
+	}})
 	if err != nil {
-		t.Fatalf("parseConfig: %v", err)
+		t.Fatalf("ParseFeeds: %v", err)
 	}
-	if len(cfg.Feeds) != 1 {
-		t.Fatalf("got %d feeds, want 1", len(cfg.Feeds))
+	if len(feeds) != 1 {
+		t.Fatalf("got %d feeds, want 1", len(feeds))
 	}
-	if cfg.Feeds[0].Name != "Team calendar" || cfg.Feeds[0].URL != "https://team.example/cal.ics" {
-		t.Errorf("feed = %+v", cfg.Feeds[0])
+	if feeds[0].Name != "Team calendar" || feeds[0].URL != "https://team.example/cal.ics" {
+		t.Errorf("feed = %+v", feeds[0])
 	}
-	if len(cfg.Feeds[0].Rules) != 0 {
-		t.Errorf("Rules = %v, want none", cfg.Feeds[0].Rules)
+	if len(feeds[0].Rules) != 0 {
+		t.Errorf("Rules = %v, want none", feeds[0].Rules)
 	}
 }

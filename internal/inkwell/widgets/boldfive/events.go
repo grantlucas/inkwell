@@ -3,7 +3,6 @@ package boldfive
 import (
 	"fmt"
 	"image"
-	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -180,47 +179,4 @@ func truncate(s string, maxChars int) string {
 		return string(r[:maxChars])
 	}
 	return string(r[:maxChars-1]) + "…"
-}
-
-// filterEventsForDay returns the events overlapping [dayStart, dayEnd),
-// all-day first and then by start time.
-//
-// All-day events are calendar date labels, not instants: an iCal
-// VALUE=DATE is anchored to UTC midnight by the parser, but the day
-// columns are built in the viewer's local zone. Comparing the two as
-// instants leaks an all-day event into the previous local day in any
-// negative-UTC zone — a Thursday trip showing up on Wednesday in
-// America/Toronto. So all-day events are bucketed by their date
-// components alone, zone-independently, and instant overlap is reserved
-// for timed events.
-func filterEventsForDay(events []calendar.Event, dayStart, dayEnd time.Time) []calendar.Event {
-	col := dateOnly(dayStart)
-	var out []calendar.Event
-	for _, e := range events {
-		var overlaps bool
-		if e.AllDay {
-			// DTEND is exclusive, so the column date must satisfy
-			// start <= col < end.
-			overlaps = !col.Before(dateOnly(e.Start)) && col.Before(dateOnly(e.End))
-		} else {
-			overlaps = e.Start.Before(dayEnd) && e.End.After(dayStart)
-		}
-		if overlaps {
-			out = append(out, e)
-		}
-	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].AllDay != out[j].AllDay {
-			return out[i].AllDay
-		}
-		return out[i].Start.Before(out[j].Start)
-	})
-	return out
-}
-
-// dateOnly strips the clock and zone from t, returning a comparable
-// midnight-UTC anchor of its calendar date.
-func dateOnly(t time.Time) time.Time {
-	y, m, d := t.Date()
-	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }

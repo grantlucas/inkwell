@@ -8,6 +8,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar/ical"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 )
 
 // inkBands counts the number of vertically separated horizontal bands that
@@ -427,91 +428,6 @@ func TestRenderEvents_HeightClipping(t *testing.T) {
 	}
 }
 
-func TestFilterEventsForDay(t *testing.T) {
-	events := []ical.Event{
-		{
-			UID:     "before",
-			Summary: "Yesterday",
-			Start:   time.Date(2026, 4, 27, 9, 0, 0, 0, time.UTC),
-			End:     time.Date(2026, 4, 27, 10, 0, 0, 0, time.UTC),
-		},
-		{
-			UID:     "during",
-			Summary: "Today event",
-			Start:   time.Date(2026, 4, 28, 14, 0, 0, 0, time.UTC),
-			End:     time.Date(2026, 4, 28, 15, 0, 0, 0, time.UTC),
-		},
-		{
-			UID:     "allday",
-			Summary: "All Day",
-			Start:   time.Date(2026, 4, 28, 0, 0, 0, 0, time.UTC),
-			End:     time.Date(2026, 4, 29, 0, 0, 0, 0, time.UTC),
-			AllDay:  true,
-		},
-		{
-			UID:     "after",
-			Summary: "Tomorrow",
-			Start:   time.Date(2026, 4, 29, 9, 0, 0, 0, time.UTC),
-			End:     time.Date(2026, 4, 29, 10, 0, 0, 0, time.UTC),
-		},
-	}
-
-	dayStart := time.Date(2026, 4, 28, 0, 0, 0, 0, time.UTC)
-	dayEnd := dayStart.AddDate(0, 0, 1)
-	filtered := filterEventsForDay(events, dayStart, dayEnd)
-
-	if len(filtered) != 2 {
-		t.Fatalf("got %d events, want 2", len(filtered))
-	}
-	if !filtered[0].AllDay {
-		t.Error("all-day event should sort first")
-	}
-	if filtered[1].Summary != "Today event" {
-		t.Errorf("second event = %q, want 'Today event'", filtered[1].Summary)
-	}
-}
-
-// All-day events are calendar date labels, not instants. A multi-day
-// all-day event (e.g. a trip starting Thursday) must land in exactly the
-// columns for the dates it spans, even when the viewer's day columns are
-// built in a negative-UTC timezone. Parsed all-day dates are anchored to
-// UTC midnight, so an instant-overlap comparison against local-zone columns
-// leaks the event into the previous local day. This reproduces inkwell-9f0:
-// the trip showed up a day early in America/Toronto (UTC-4/5).
-func TestFilterEventsForDay_AllDayMultiDayNegativeTimezone(t *testing.T) {
-	// DTSTART;VALUE=DATE:20260625 / DTEND;VALUE=DATE:20260628 (exclusive)
-	// parses to UTC midnight, matching ical.parseDateTime.
-	trip := ical.Event{
-		UID:     "trip",
-		Summary: "Winnipeg",
-		Start:   time.Date(2026, 6, 25, 0, 0, 0, 0, time.UTC),
-		End:     time.Date(2026, 6, 28, 0, 0, 0, 0, time.UTC),
-		AllDay:  true,
-	}
-	loc := time.FixedZone("UTC-5", -5*60*60)
-
-	cases := []struct {
-		label string
-		day   time.Time
-		want  bool
-	}{
-		{"day before start", time.Date(2026, 6, 24, 0, 0, 0, 0, loc), false},
-		{"first day (Thursday)", time.Date(2026, 6, 25, 0, 0, 0, 0, loc), true},
-		{"middle day", time.Date(2026, 6, 26, 0, 0, 0, 0, loc), true},
-		{"last spanned day", time.Date(2026, 6, 27, 0, 0, 0, 0, loc), true},
-		{"exclusive end day", time.Date(2026, 6, 28, 0, 0, 0, 0, loc), false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.label, func(t *testing.T) {
-			filtered := filterEventsForDay([]ical.Event{trip}, tc.day, tc.day.AddDate(0, 0, 1))
-			got := len(filtered) == 1
-			if got != tc.want {
-				t.Errorf("trip present on %s = %v, want %v", tc.label, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestRenderEvents_TitleClippedByHeight(t *testing.T) {
 	// Bounds just tall enough for time line but not title.
 	frame := newTestFrame(114, 38)
@@ -526,41 +442,6 @@ func TestRenderEvents_TitleClippedByHeight(t *testing.T) {
 	rendered := renderEvents(frame, image.Rect(0, 0, 114, 38), events, eventOptions{MaxEvents: 5, ShowLocation: false, Location: time.UTC})
 	if rendered != 1 {
 		t.Errorf("rendered %d events, want 1", rendered)
-	}
-}
-
-func TestFilterEventsForDay_SortByStart(t *testing.T) {
-	events := []ical.Event{
-		{
-			UID:     "late",
-			Summary: "Late",
-			Start:   time.Date(2026, 4, 28, 15, 0, 0, 0, time.UTC),
-			End:     time.Date(2026, 4, 28, 16, 0, 0, 0, time.UTC),
-		},
-		{
-			UID:     "early",
-			Summary: "Early",
-			Start:   time.Date(2026, 4, 28, 9, 0, 0, 0, time.UTC),
-			End:     time.Date(2026, 4, 28, 10, 0, 0, 0, time.UTC),
-		},
-	}
-	dayStart := time.Date(2026, 4, 28, 0, 0, 0, 0, time.UTC)
-	dayEnd := dayStart.AddDate(0, 0, 1)
-	filtered := filterEventsForDay(events, dayStart, dayEnd)
-	if len(filtered) != 2 {
-		t.Fatalf("got %d events, want 2", len(filtered))
-	}
-	if filtered[0].Summary != "Early" {
-		t.Errorf("first event = %q, want 'Early'", filtered[0].Summary)
-	}
-}
-
-func TestFilterEventsForDay_Empty(t *testing.T) {
-	dayStart := time.Date(2026, 4, 28, 0, 0, 0, 0, time.UTC)
-	dayEnd := dayStart.AddDate(0, 0, 1)
-	filtered := filterEventsForDay(nil, dayStart, dayEnd)
-	if len(filtered) != 0 {
-		t.Errorf("got %d events, want 0", len(filtered))
 	}
 }
 
@@ -622,7 +503,7 @@ func mustLoad(t *testing.T, name string) *time.Location {
 	return loc
 }
 
-// TestColumnAndLabelAgreeAcrossZones is the bucketing audit. filterEventsForDay
+// TestColumnAndLabelAgreeAcrossZones is the bucketing audit. daygrid.FilterEventsForDay
 // buckets timed events by true instant overlap and all-day events by bare date
 // components, both deliberately zone-independent; planEvents then labels in the
 // display zone. The invariant that matters to a viewer is that the two agree —
@@ -752,7 +633,7 @@ func TestColumnAndLabelAgreeAcrossZones(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
-			dayEvents := filterEventsForDay(tc.events, tc.day, tc.day.AddDate(0, 0, 1))
+			dayEvents := daygrid.FilterEventsForDay(tc.events, daygrid.Day{Start: tc.day, End: tc.day.AddDate(0, 0, 1)})
 			plan := planEvents(dayEvents, 40, 20, eventOptions{MaxEvents: 10, Location: tc.loc})
 
 			var got []string
