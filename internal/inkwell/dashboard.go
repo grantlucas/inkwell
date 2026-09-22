@@ -26,17 +26,20 @@ func NewDashboard(screens []*Screen, rotateInterval time.Duration, now func() ti
 	}
 }
 
-// CurrentScreen returns the screen that should be displayed, and reports
-// whether this call advanced the rotation. It advances to the next screen if
-// the rotation interval has elapsed.
+// Advance moves the rotation on if the rotation interval has elapsed, then
+// returns the screen to display and whether this call rotated.
 //
 // The rotated flag is returned rather than left for the caller to infer
 // because the refresh gate depends on it: a rotation has to reach the panel
-// on the cycle it happens, not whenever a widget next falls due. Only the
-// call that mutates d.current can report it, and only once — a second call
-// on the same rotation reports false, so the flag must be consumed where it
-// is read.
-func (d *Dashboard) CurrentScreen() (screen *Screen, rotated bool) {
+// on the cycle it happens, not whenever a widget next falls due (see
+// App.nextCycle).
+//
+// It is consume-once — a second Advance on the same rotation reports false —
+// so exactly one caller may drive it, and that caller is the render loop.
+// Anything that only wants to know what is on screen calls CurrentScreen
+// instead; were it to call Advance it would swallow the flag on whichever
+// cycle it happened to land, putting #96 back intermittently.
+func (d *Dashboard) Advance() (screen *Screen, rotated bool) {
 	if len(d.screens) == 0 {
 		return nil, false
 	}
@@ -55,4 +58,15 @@ func (d *Dashboard) CurrentScreen() (screen *Screen, rotated bool) {
 		}
 	}
 	return d.screens[d.current], rotated
+}
+
+// CurrentScreen returns the screen currently selected, without advancing the
+// rotation. It is the read-only view for anything outside the render loop —
+// a preview handler reporting the screen name, say — which must not consume
+// the rotation flag Advance carries.
+func (d *Dashboard) CurrentScreen() *Screen {
+	if len(d.screens) == 0 {
+		return nil
+	}
+	return d.screens[d.current]
 }

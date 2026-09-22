@@ -613,7 +613,7 @@ func TestBuildDashboard_EmptyConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildDashboard: %v", err)
 	}
-	screen, _ := d.CurrentScreen()
+	screen := d.CurrentScreen()
 	if screen == nil {
 		t.Fatal("expected default screen")
 	}
@@ -653,7 +653,7 @@ dashboard:
 	if err != nil {
 		t.Fatalf("buildDashboard: %v", err)
 	}
-	screen, _ := d.CurrentScreen()
+	screen := d.CurrentScreen()
 	if len(screen.Widgets()) != 1 {
 		t.Fatalf("len(Widgets) = %d, want 1", len(screen.Widgets()))
 	}
@@ -824,7 +824,7 @@ dashboard:
 	if app.dashboard == nil {
 		t.Fatal("dashboard is nil")
 	}
-	screen, _ := app.dashboard.CurrentScreen()
+	screen := app.dashboard.CurrentScreen()
 	if screen.Name != "home" {
 		t.Errorf("screen name = %q, want home", screen.Name)
 	}
@@ -1513,7 +1513,11 @@ func TestApp_NextCycleRotationIsDue(t *testing.T) {
 		return s
 	}
 
-	tests := []struct {
+	// Sequential cycles against one App, not independent cases: the
+	// rotation flag is consume-once, so a cycle only means what it means
+	// after the ones before it. Deliberately not subtests — narrowing to
+	// one with -run would replay it against the wrong history.
+	cycles := []struct {
 		label   string
 		at      time.Time // wall clock for this cycle
 		wantDue bool
@@ -1544,13 +1548,11 @@ func TestApp_NextCycleRotationIsDue(t *testing.T) {
 		clock,
 	)
 
-	for _, tt := range tests {
-		t.Run(tt.label, func(t *testing.T) {
-			now = tt.at
-			if _, due := app.nextCycle(); due != tt.wantDue {
-				t.Errorf("due = %v, want %v", due, tt.wantDue)
-			}
-		})
+	for _, c := range cycles {
+		now = c.at
+		if _, due := app.nextCycle(); due != c.wantDue {
+			t.Errorf("%s: due = %v, want %v", c.label, due, c.wantDue)
+		}
 	}
 }
 

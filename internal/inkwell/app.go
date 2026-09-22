@@ -301,7 +301,7 @@ func (a *App) Run(ctx context.Context) error {
 // rotation nobody asked for is invisible while a rotation that arrives late
 // is just wrong.
 func (a *App) nextCycle() ([]widget.Widget, bool) {
-	screen, rotated := a.dashboard.CurrentScreen()
+	screen, rotated := a.dashboard.Advance()
 	if screen == nil {
 		return nil, false
 	}
