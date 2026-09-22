@@ -721,3 +721,40 @@ func TestParse_UnescapesLocation(t *testing.T) {
 		t.Errorf("Location = %q, want %q", got, want)
 	}
 }
+
+// An unbalanced quote must not be worse than no quote handling at all.
+// Scanning for a colon "outside quotes" never finds one when a stray
+// DQUOTE leaves the scanner quoted to end of line, and splitProperty
+// then hands back the whole line as the property name — which matches
+// no case in Parse's switch, so DTSTART never lands and the event is
+// dropped at END:VEVENT with no error and no log line. Degrading to
+// UTC is recoverable; vanishing silently is not.
+//
+// Here the naive fallback cut plus the quote trim actually recovers the
+// intended zone, so the event lands at the right instant rather than
+// merely surviving.
+func TestParse_UnbalancedQuoteInParams(t *testing.T) {
+	input := `BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:unbalanced
+DTSTART;TZID=America/Toronto":20260919T104500
+SUMMARY:Stray Quote
+END:VEVENT
+END:VCALENDAR
+`
+	events, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1 (the event must not vanish)", len(events))
+	}
+	toronto, err := time.LoadLocation("America/Toronto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2026, 9, 19, 10, 45, 0, 0, toronto)
+	if !events[0].Start.Equal(want) {
+		t.Errorf("Start = %v, want %v", events[0].Start, want)
+	}
+}

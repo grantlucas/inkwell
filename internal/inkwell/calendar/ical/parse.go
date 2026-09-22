@@ -199,6 +199,18 @@ func cutProperty(line string) (params, value string, ok bool) {
 			}
 		}
 	}
+	// A stray DQUOTE — an inch mark in an unquoted value, a truncated
+	// parameter — leaves the scan quoted to end of line, so no colon
+	// was ever accepted. Reporting "no colon" would send splitProperty
+	// down its fallback, which returns the whole line as the property
+	// name; that matches no case in Parse's switch, so DTSTART never
+	// lands and the event is dropped at END:VEVENT with no error and no
+	// log line. Quotes that never closed were never really quotes, so
+	// fall back to the naive cut and let the event degrade to UTC —
+	// recoverable, and visible in the log.
+	if inQuotes {
+		return strings.Cut(line, ":")
+	}
 	return line, "", false
 }
 
