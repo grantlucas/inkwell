@@ -411,28 +411,28 @@ func TestParseDuration_Seconds(t *testing.T) {
 }
 
 func TestParseDateTime_MissingColon(t *testing.T) {
-	_, _, err := parseDateTime("DTSTART-NO-COLON")
+	_, _, err := parseDateTime("DTSTART-NO-COLON", nil)
 	if err == nil {
 		t.Fatal("expected error for missing colon")
 	}
 }
 
 func TestParseDateTime_InvalidDate(t *testing.T) {
-	_, _, err := parseDateTime("DTSTART;VALUE=DATE:notadate")
+	_, _, err := parseDateTime("DTSTART;VALUE=DATE:notadate", nil)
 	if err == nil {
 		t.Fatal("expected error for invalid date")
 	}
 }
 
 func TestParseDateTime_InvalidUTC(t *testing.T) {
-	_, _, err := parseDateTime("DTSTART:notadateZ")
+	_, _, err := parseDateTime("DTSTART:notadateZ", nil)
 	if err == nil {
 		t.Fatal("expected error for invalid UTC datetime")
 	}
 }
 
 func TestParseDateTime_TZID(t *testing.T) {
-	dt, allDay, err := parseDateTime("DTSTART;TZID=America/New_York:20260429T190000")
+	dt, allDay, err := parseDateTime("DTSTART;TZID=America/New_York:20260429T190000", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -446,11 +446,13 @@ func TestParseDateTime_TZID(t *testing.T) {
 	}
 }
 
-// An invalid datetime value paired with a recognized TZID must error
-// out via the TZID branch (rather than falling through to the
-// no-TZID parse), so this pins the TZID error wrap.
+// A TZID must not rescue an unparseable value. There is no longer a
+// separate error path for it to take: naiveWall rejects the value
+// before any zone is resolved, so the error comes from the single
+// datetime parse either way. What this pins is that the value is still
+// rejected rather than quietly becoming a zero time in the named zone.
 func TestParseDateTime_TZID_InvalidValue(t *testing.T) {
-	_, _, err := parseDateTime("DTSTART;TZID=America/New_York:notadatetime")
+	_, _, err := parseDateTime("DTSTART;TZID=America/New_York:notadatetime", nil)
 	if err == nil {
 		t.Fatal("expected error for invalid datetime under TZID")
 	}
@@ -460,7 +462,7 @@ func TestParseDateTime_TZID_InvalidValue(t *testing.T) {
 }
 
 func TestParseDateTime_TZID_Unknown(t *testing.T) {
-	dt, _, err := parseDateTime("DTSTART;TZID=Fake/Zone:20260429T190000")
+	dt, _, err := parseDateTime("DTSTART;TZID=Fake/Zone:20260429T190000", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -471,19 +473,74 @@ func TestParseDateTime_TZID_Unknown(t *testing.T) {
 }
 
 func TestExtractTZID(t *testing.T) {
-	loc := extractTZID("DTSTART;TZID=America/Toronto")
-	if loc == nil {
-		t.Fatal("expected non-nil location")
+	tests := []struct {
+		label  string
+		params string
+		want   string // "" means nil location (fall back to UTC)
+	}{
+		{"bare IANA name", "DTSTART;TZID=America/Toronto", "America/Toronto"},
+		{"no TZID parameter", "DTSTART;VALUE=DATE-TIME", ""},
+		// RFC 5545 3.1 permits a quoted param value. Handing the
+		// quotes to LoadLocation fails the lookup, so the event
+		// silently renders hours off in UTC.
+		{"quoted IANA name", `DTSTART;TZID="America/Toronto"`, "America/Toronto"},
+		{"quoted, after another param", `DTSTART;VALUE=DATE-TIME;TZID="America/Toronto"`, "America/Toronto"},
+		{"unknown name still falls back", "DTSTART;TZID=Fake/Zone", ""},
+		// A quoted value may carry its own ';' (RFC 5545 3.1). Splitting
+		// the parameter list on every semicolon tears such a value in
+		// half, and the fragments are then scanned for a TZID= prefix
+		// like any other segment — so a decoy inside the quotes wins
+		// over the real parameter that follows it.
+		{
+			"semicolon inside a quoted value does not split it",
+			`DTSTART;X-LIC-LOCATION="Foo;TZID=Fake/Zone";TZID=America/Toronto`,
+			"America/Toronto",
+		},
 	}
-	if loc.String() != "America/Toronto" {
-		t.Errorf("got %v, want America/Toronto", loc)
+
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			loc := extractTZID(tt.params, nil, time.Time{})
+			switch {
+			case tt.want == "":
+				if loc != nil {
+					t.Errorf("got %v, want nil", loc)
+				}
+			case loc == nil:
+				t.Fatalf("got nil, want %s", tt.want)
+			case loc.String() != tt.want:
+				t.Errorf("got %v, want %s", loc, tt.want)
+			}
+		})
 	}
 }
 
-func TestExtractTZID_None(t *testing.T) {
-	loc := extractTZID("DTSTART;VALUE=DATE-TIME")
-	if loc != nil {
-		t.Error("expected nil for no TZID")
+// A param value only *needs* quoting when it contains ':', ';' or ','
+// (RFC 5545 3.1). Cutting the property at its first colon therefore
+// lands inside the quoted value, leaving a value of
+// `Eastern":20260919T104500` — which fails to parse and takes the
+// whole feed down with it, rather than degrading to UTC.
+func TestParse_QuotedTZIDContainingColon(t *testing.T) {
+	input := `BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:quoted-colon
+DTSTART;TZID="Customized Time Zone: Eastern":20260919T104500
+SUMMARY:Quoted Zone
+END:VEVENT
+END:VCALENDAR
+`
+	events, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	// The zone name is not IANA, so it falls back to UTC — but the
+	// wall-clock time must survive intact.
+	want := time.Date(2026, 9, 19, 10, 45, 0, 0, time.UTC)
+	if !events[0].Start.Equal(want) {
+		t.Errorf("Start = %v, want %v", events[0].Start, want)
 	}
 }
 
@@ -674,5 +731,42 @@ func TestParse_UnescapesLocation(t *testing.T) {
 	}
 	if got, want := events[0].Location, "70 HEMPSTEAD DR, HAMILTON"; got != want {
 		t.Errorf("Location = %q, want %q", got, want)
+	}
+}
+
+// An unbalanced quote must not be worse than no quote handling at all.
+// Scanning for a colon "outside quotes" never finds one when a stray
+// DQUOTE leaves the scanner quoted to end of line, and splitProperty
+// then hands back the whole line as the property name — which matches
+// no case in Parse's switch, so DTSTART never lands and the event is
+// dropped at END:VEVENT with no error and no log line. Degrading to
+// UTC is recoverable; vanishing silently is not.
+//
+// Here the naive fallback cut plus the quote trim actually recovers the
+// intended zone, so the event lands at the right instant rather than
+// merely surviving.
+func TestParse_UnbalancedQuoteInParams(t *testing.T) {
+	input := `BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:unbalanced
+DTSTART;TZID=America/Toronto":20260919T104500
+SUMMARY:Stray Quote
+END:VEVENT
+END:VCALENDAR
+`
+	events, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1 (the event must not vanish)", len(events))
+	}
+	toronto, err := time.LoadLocation("America/Toronto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := time.Date(2026, 9, 19, 10, 45, 0, 0, toronto)
+	if !events[0].Start.Equal(want) {
+		t.Errorf("Start = %v, want %v", events[0].Start, want)
 	}
 }
