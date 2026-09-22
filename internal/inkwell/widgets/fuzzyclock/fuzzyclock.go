@@ -8,7 +8,7 @@
 // stays quiet while the time stays glanceable.
 //
 // The rendered string is a pure, deterministic function of the time and the
-// configured options (see fuzzyTime): the same minute always produces the same
+// configured options (see Phrase): the same minute always produces the same
 // string, so the widget never surprises the refresh queue with an unexpected
 // change.
 package fuzzyclock
@@ -48,13 +48,13 @@ func mustLoadFuzzyFace() font.Face {
 	return f
 }
 
-// style controls the letter casing of the rendered phrase.
-type style int
+// Style controls the letter casing of a rendered phrase.
+type Style int
 
 const (
-	styleSentence style = iota // "About half past eight" (default)
-	styleTitle                 // "About Half Past Eight"
-	styleLower                 // "about half past eight"
+	StyleSentence Style = iota // "About half past eight" (default)
+	StyleTitle                 // "About Half Past Eight"
+	StyleLower                 // "about half past eight"
 )
 
 // Align controls horizontal alignment of the phrase within the widget bounds.
@@ -66,50 +66,53 @@ const (
 	AlignRight
 )
 
-// options bundles the rendering knobs for fuzzyTime and placement. The zero
-// value aligns center, which preserves the widget's original behavior.
-type options struct {
-	style        style
-	noonMidnight bool  // substitute "noon"/"midnight" for "twelve" (12-hour only)
-	use24Hour    bool  // spell the hour as 0..23 instead of 1..12
-	align        Align // horizontal alignment within bounds
+// Options bundles the wording knobs Phrase honors. Every field changes the
+// string that comes back; placement is a separate axis (see Align), so a
+// caller that only wants the words never has to think about layout. The zero
+// value is sentence case, 12-hour, no noon/midnight substitution.
+type Options struct {
+	Style        Style
+	NoonMidnight bool // substitute "noon"/"midnight" for "twelve" (12-hour only)
+	Use24Hour    bool // spell the hour as 0..23 instead of 1..12
 }
 
 // Widget renders the current time as a natural-language English phrase.
 type Widget struct {
 	bounds image.Rectangle
 	now    func() time.Time
-	opts   options
+	opts   Options
+	align  Align
 }
 
 // New creates a fuzzy clock Widget. A nil now falls back to time.Now so the
 // widget renders something reasonable when callers wire it up without an
-// explicit clock.
-func New(bounds image.Rectangle, now func() time.Time, opts options) *Widget {
+// explicit clock. The zero Align centers the phrase, preserving the widget's
+// original behavior.
+func New(bounds image.Rectangle, now func() time.Time, opts Options, align Align) *Widget {
 	if now == nil {
 		now = time.Now
 	}
-	return &Widget{bounds: bounds, now: now, opts: opts}
+	return &Widget{bounds: bounds, now: now, opts: opts, align: align}
 }
 
 // Bounds returns the rectangle this widget occupies on the display.
 func (w *Widget) Bounds() image.Rectangle { return w.bounds }
 
 // Render draws the fuzzy time within the bounds using black text on a white
-// background, aligned per opts.align (center by default). Text sources
+// background, aligned per the widget's Align (center by default). Text sources
 // PaperBlack so the anti-aliased glyph fringe straddles the BW threshold
 // cleanly (see fonts.Face / project rendering rules). Left/right alignment
 // insets the text 4px from the matching edge, matching the clock widget.
 func (w *Widget) Render(frame *image.Paletted) error {
 	draw.Draw(frame, w.bounds, image.NewUniform(color.White), image.Point{}, draw.Src)
 
-	text := fuzzyTime(w.now(), w.opts)
+	text := Phrase(w.now(), w.opts)
 	textW := font.MeasureString(fuzzyFace, text).Ceil()
 	metrics := fuzzyFace.Metrics()
 	textH := (metrics.Ascent + metrics.Descent).Ceil()
 
 	var x int
-	switch w.opts.align {
+	switch w.align {
 	case AlignLeft:
 		x = w.bounds.Min.X + 4
 	case AlignRight:
@@ -144,7 +147,8 @@ func (w *Widget) Render(frame *image.Paletted) error {
 //     to an edge so a corner placement keeps a fixed anchor as the phrase
 //     length changes. Left/right inset 4px.
 func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
-	opts := options{style: styleSentence, noonMidnight: true}
+	opts := Options{Style: StyleSentence, NoonMidnight: true}
+	var align Align
 
 	if v, ok := config["style"]; ok {
 		s, ok := v.(string)
@@ -153,11 +157,11 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 		}
 		switch s {
 		case "sentence":
-			opts.style = styleSentence
+			opts.Style = StyleSentence
 		case "title":
-			opts.style = styleTitle
+			opts.Style = StyleTitle
 		case "lower":
-			opts.style = styleLower
+			opts.Style = StyleLower
 		default:
 			return nil, fmt.Errorf("fuzzy_clock: invalid style %q (must be sentence, title, or lower)", s)
 		}
@@ -168,7 +172,7 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 		if !ok {
 			return nil, fmt.Errorf("fuzzy_clock: use_words_for_noon_and_midnight must be a bool, got %T", v)
 		}
-		opts.noonMidnight = b
+		opts.NoonMidnight = b
 	}
 
 	if v, ok := config["use_24_hour"]; ok {
@@ -176,7 +180,7 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 		if !ok {
 			return nil, fmt.Errorf("fuzzy_clock: use_24_hour must be a bool, got %T", v)
 		}
-		opts.use24Hour = b
+		opts.Use24Hour = b
 	}
 
 	if v, ok := config["language"]; ok {
@@ -196,11 +200,11 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 		}
 		switch s {
 		case "center":
-			opts.align = AlignCenter
+			align = AlignCenter
 		case "left":
-			opts.align = AlignLeft
+			align = AlignLeft
 		case "right":
-			opts.align = AlignRight
+			align = AlignRight
 		default:
 			return nil, fmt.Errorf("fuzzy_clock: invalid align %q (must be center, left, or right)", s)
 		}
@@ -210,19 +214,25 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 	if now == nil {
 		now = time.Now
 	}
-	return New(bounds, now, opts), nil
+	return New(bounds, now, opts, align), nil
 }
 
-// fuzzyTime renders t as a natural-language English phrase. It is the pure,
+// Phrase renders t as a natural-language English phrase. It is the pure,
 // deterministic core of the widget: the same (t, opts) always yields the same
 // string.
+//
+// It is exported so a widget that cannot use the fuzzy_clock widget itself can
+// still borrow its wording. The widget fills its bounds white and draws black
+// text; a caller wanting white-on-black, or any other treatment, takes the
+// string and does its own drawing. Sharing the function rather than the
+// rounding is the point: two clocks on one panel must never disagree at :57.
 //
 // Minutes are rounded to the nearest five-minute mark and the mark alone
 // determines the phrase, so the string never changes mid-mark. The two marks
 // flanking the half hour read relative to it — :25 → "about half past", :35 →
 // "just after half past" — sidestepping the clumsy "twenty-five past/to". Every
 // other mark is precise (including the top of the hour: "five to"/"five past").
-func fuzzyTime(t time.Time, opts options) string {
+func Phrase(t time.Time, opts Options) string {
 	hour := t.Hour()
 	m := t.Minute()
 
@@ -242,13 +252,13 @@ func fuzzyTime(t time.Time, opts options) string {
 
 	switch {
 	case minutes != "":
-		return applyStyle(minutes+" "+hourWord, opts.style)
+		return applyStyle(minutes+" "+hourWord, opts.Style)
 	case hourWord == "noon" || hourWord == "midnight":
 		// "noon"/"midnight" are complete hour references; "noon o'clock"
 		// would read wrong, so the o'clock suffix is dropped.
-		return applyStyle(hourWord, opts.style)
+		return applyStyle(hourWord, opts.Style)
 	default:
-		return applyStyle(hourWord+" o'clock", opts.style)
+		return applyStyle(hourWord+" o'clock", opts.Style)
 	}
 }
 
@@ -278,13 +288,13 @@ func minutesPhrase(r int) (phrase string, nextHour bool) {
 }
 
 // hourPhrase returns the spoken hour word for the given 0..24 hour and options.
-func hourPhrase(hour int, opts options) string {
+func hourPhrase(hour int, opts Options) string {
 	hour %= 24
-	if opts.use24Hour {
+	if opts.Use24Hour {
 		return numberToWords(hour)
 	}
 	h12 := hour % 12
-	if opts.noonMidnight {
+	if opts.NoonMidnight {
 		switch hour {
 		case 0:
 			return "midnight"
@@ -299,17 +309,17 @@ func hourPhrase(hour int, opts options) string {
 }
 
 // applyStyle adjusts the casing of an all-lowercase phrase.
-func applyStyle(phrase string, s style) string {
+func applyStyle(phrase string, s Style) string {
 	switch s {
-	case styleTitle:
+	case StyleTitle:
 		words := strings.Split(phrase, " ")
 		for i, w := range words {
 			words[i] = capitalize(w)
 		}
 		return strings.Join(words, " ")
-	case styleLower:
+	case StyleLower:
 		return phrase
-	default: // styleSentence
+	default: // StyleSentence
 		return capitalize(phrase)
 	}
 }
