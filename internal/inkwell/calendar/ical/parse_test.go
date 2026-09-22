@@ -411,28 +411,28 @@ func TestParseDuration_Seconds(t *testing.T) {
 }
 
 func TestParseDateTime_MissingColon(t *testing.T) {
-	_, _, err := parseDateTime("DTSTART-NO-COLON")
+	_, _, err := parseDateTime("DTSTART-NO-COLON", nil)
 	if err == nil {
 		t.Fatal("expected error for missing colon")
 	}
 }
 
 func TestParseDateTime_InvalidDate(t *testing.T) {
-	_, _, err := parseDateTime("DTSTART;VALUE=DATE:notadate")
+	_, _, err := parseDateTime("DTSTART;VALUE=DATE:notadate", nil)
 	if err == nil {
 		t.Fatal("expected error for invalid date")
 	}
 }
 
 func TestParseDateTime_InvalidUTC(t *testing.T) {
-	_, _, err := parseDateTime("DTSTART:notadateZ")
+	_, _, err := parseDateTime("DTSTART:notadateZ", nil)
 	if err == nil {
 		t.Fatal("expected error for invalid UTC datetime")
 	}
 }
 
 func TestParseDateTime_TZID(t *testing.T) {
-	dt, allDay, err := parseDateTime("DTSTART;TZID=America/New_York:20260429T190000")
+	dt, allDay, err := parseDateTime("DTSTART;TZID=America/New_York:20260429T190000", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -446,11 +446,13 @@ func TestParseDateTime_TZID(t *testing.T) {
 	}
 }
 
-// An invalid datetime value paired with a recognized TZID must error
-// out via the TZID branch (rather than falling through to the
-// no-TZID parse), so this pins the TZID error wrap.
+// A TZID must not rescue an unparseable value. There is no longer a
+// separate error path for it to take: naiveWall rejects the value
+// before any zone is resolved, so the error comes from the single
+// datetime parse either way. What this pins is that the value is still
+// rejected rather than quietly becoming a zero time in the named zone.
 func TestParseDateTime_TZID_InvalidValue(t *testing.T) {
-	_, _, err := parseDateTime("DTSTART;TZID=America/New_York:notadatetime")
+	_, _, err := parseDateTime("DTSTART;TZID=America/New_York:notadatetime", nil)
 	if err == nil {
 		t.Fatal("expected error for invalid datetime under TZID")
 	}
@@ -460,7 +462,7 @@ func TestParseDateTime_TZID_InvalidValue(t *testing.T) {
 }
 
 func TestParseDateTime_TZID_Unknown(t *testing.T) {
-	dt, _, err := parseDateTime("DTSTART;TZID=Fake/Zone:20260429T190000")
+	dt, _, err := parseDateTime("DTSTART;TZID=Fake/Zone:20260429T190000", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -498,7 +500,7 @@ func TestExtractTZID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			loc := extractTZID(tt.params)
+			loc := extractTZID(tt.params, nil, time.Time{})
 			switch {
 			case tt.want == "":
 				if loc != nil {
