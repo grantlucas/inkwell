@@ -18,14 +18,14 @@ func fixedClock(t time.Time) func() time.Time {
 	return func() time.Time { return t }
 }
 
-// TestFuzzyTime_FullMinuteRange walks every minute of the 8 o'clock hour so the
+// TestPhrase_FullMinuteRange walks every minute of the 8 o'clock hour so the
 // nearest-five-minute rounding, the o'clock/half/quarter special phrases, the
 // half-past-relative :25/:35 marks ("about half past"/"just after half past"),
 // the past→to flip, and the hour rollover at :58/:59 are all exercised in one
 // table. Every minute reads as its nearest five-minute mark; there is no
 // per-minute "about" softener.
-func TestFuzzyTime_FullMinuteRange(t *testing.T) {
-	opts := options{style: styleSentence, noonMidnight: true}
+func TestPhrase_FullMinuteRange(t *testing.T) {
+	opts := Options{Style: StyleSentence, NoonMidnight: true}
 	cases := []struct {
 		minute int
 		want   string
@@ -92,55 +92,55 @@ func TestFuzzyTime_FullMinuteRange(t *testing.T) {
 		{59, "Nine o'clock"},
 	}
 	for _, tc := range cases {
-		if got := fuzzyTime(at(8, tc.minute), opts); got != tc.want {
-			t.Errorf("fuzzyTime(8:%02d) = %q, want %q", tc.minute, got, tc.want)
+		if got := Phrase(at(8, tc.minute), opts); got != tc.want {
+			t.Errorf("Phrase(8:%02d) = %q, want %q", tc.minute, got, tc.want)
 		}
 	}
 }
 
-// TestFuzzyTime_Determinism guards acceptance criterion (2): a fixed instant
+// TestPhrase_Determinism guards acceptance criterion (2): a fixed instant
 // always renders the same string.
-func TestFuzzyTime_Determinism(t *testing.T) {
-	opts := options{style: styleSentence, noonMidnight: true}
-	first := fuzzyTime(at(8, 9), opts)
+func TestPhrase_Determinism(t *testing.T) {
+	opts := Options{Style: StyleSentence, NoonMidnight: true}
+	first := Phrase(at(8, 9), opts)
 	for range 100 {
-		if got := fuzzyTime(at(8, 9), opts); got != first {
+		if got := Phrase(at(8, 9), opts); got != first {
 			t.Fatalf("non-deterministic: got %q, first %q", got, first)
 		}
 	}
 }
 
-// TestFuzzyTime_Options covers noon/midnight (on and off), 24-hour mode, the
+// TestPhrase_Options covers noon/midnight (on and off), 24-hour mode, the
 // midnight rollover, and the casing styles.
-func TestFuzzyTime_Options(t *testing.T) {
+func TestPhrase_Options(t *testing.T) {
 	cases := []struct {
 		label string
 		when  time.Time
-		opts  options
+		opts  Options
 		want  string
 	}{
-		{"noon on", at(12, 0), options{style: styleSentence, noonMidnight: true}, "Noon"},
-		{"midnight on", at(0, 0), options{style: styleSentence, noonMidnight: true}, "Midnight"},
-		{"about half past noon", at(12, 25), options{style: styleSentence, noonMidnight: true}, "About half past noon"},
-		{"half past noon", at(12, 30), options{style: styleSentence, noonMidnight: true}, "Half past noon"},
-		{"just after half past noon", at(12, 35), options{style: styleSentence, noonMidnight: true}, "Just after half past noon"},
-		{"noon rolls from 11:58", at(11, 58), options{style: styleSentence, noonMidnight: true}, "Noon"},
-		{"midnight rolls from 23:58", at(23, 58), options{style: styleSentence, noonMidnight: true}, "Midnight"},
-		{"noon off", at(12, 0), options{style: styleSentence, noonMidnight: false}, "Twelve o'clock"},
-		{"midnight off", at(0, 0), options{style: styleSentence, noonMidnight: false}, "Twelve o'clock"},
-		{"12-hour pm maps down", at(20, 30), options{style: styleSentence, noonMidnight: true}, "Half past eight"},
-		{"24-hour evening", at(20, 30), options{style: styleSentence, use24Hour: true}, "Half past twenty"},
-		{"24-hour ignores noon word", at(12, 0), options{style: styleSentence, noonMidnight: true, use24Hour: true}, "Twelve o'clock"},
-		{"24-hour midnight is zero", at(0, 0), options{style: styleSentence, use24Hour: true}, "Zero o'clock"},
-		{"24-hour rolls to next hour", at(8, 40), options{style: styleSentence, use24Hour: true}, "Twenty to nine"},
-		{"title style", at(8, 30), options{style: styleTitle, noonMidnight: true}, "Half Past Eight"},
-		{"lower style", at(8, 30), options{style: styleLower, noonMidnight: true}, "half past eight"},
-		{"title style hyphenated", at(21, 30), options{style: styleTitle, use24Hour: true}, "Half Past Twenty-one"},
+		{"noon on", at(12, 0), Options{Style: StyleSentence, NoonMidnight: true}, "Noon"},
+		{"midnight on", at(0, 0), Options{Style: StyleSentence, NoonMidnight: true}, "Midnight"},
+		{"about half past noon", at(12, 25), Options{Style: StyleSentence, NoonMidnight: true}, "About half past noon"},
+		{"half past noon", at(12, 30), Options{Style: StyleSentence, NoonMidnight: true}, "Half past noon"},
+		{"just after half past noon", at(12, 35), Options{Style: StyleSentence, NoonMidnight: true}, "Just after half past noon"},
+		{"noon rolls from 11:58", at(11, 58), Options{Style: StyleSentence, NoonMidnight: true}, "Noon"},
+		{"midnight rolls from 23:58", at(23, 58), Options{Style: StyleSentence, NoonMidnight: true}, "Midnight"},
+		{"noon off", at(12, 0), Options{Style: StyleSentence, NoonMidnight: false}, "Twelve o'clock"},
+		{"midnight off", at(0, 0), Options{Style: StyleSentence, NoonMidnight: false}, "Twelve o'clock"},
+		{"12-hour pm maps down", at(20, 30), Options{Style: StyleSentence, NoonMidnight: true}, "Half past eight"},
+		{"24-hour evening", at(20, 30), Options{Style: StyleSentence, Use24Hour: true}, "Half past twenty"},
+		{"24-hour ignores noon word", at(12, 0), Options{Style: StyleSentence, NoonMidnight: true, Use24Hour: true}, "Twelve o'clock"},
+		{"24-hour midnight is zero", at(0, 0), Options{Style: StyleSentence, Use24Hour: true}, "Zero o'clock"},
+		{"24-hour rolls to next hour", at(8, 40), Options{Style: StyleSentence, Use24Hour: true}, "Twenty to nine"},
+		{"title style", at(8, 30), Options{Style: StyleTitle, NoonMidnight: true}, "Half Past Eight"},
+		{"lower style", at(8, 30), Options{Style: StyleLower, NoonMidnight: true}, "half past eight"},
+		{"title style hyphenated", at(21, 30), Options{Style: StyleTitle, Use24Hour: true}, "Half Past Twenty-one"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
-			if got := fuzzyTime(tc.when, tc.opts); got != tc.want {
-				t.Errorf("fuzzyTime = %q, want %q", got, tc.want)
+			if got := Phrase(tc.when, tc.opts); got != tc.want {
+				t.Errorf("Phrase = %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -148,7 +148,7 @@ func TestFuzzyTime_Options(t *testing.T) {
 
 func TestWidget_Bounds(t *testing.T) {
 	bounds := image.Rect(0, 0, 800, 50)
-	w := New(bounds, fixedClock(at(8, 30)), options{})
+	w := New(bounds, fixedClock(at(8, 30)), Options{}, AlignCenter)
 	if got := w.Bounds(); got != bounds {
 		t.Errorf("Bounds() = %v, want %v", got, bounds)
 	}
@@ -156,7 +156,7 @@ func TestWidget_Bounds(t *testing.T) {
 
 func TestWidget_Render(t *testing.T) {
 	bounds := image.Rect(0, 0, 800, 50)
-	w := New(bounds, fixedClock(at(8, 30)), options{style: styleSentence, noonMidnight: true})
+	w := New(bounds, fixedClock(at(8, 30)), Options{Style: StyleSentence, NoonMidnight: true}, AlignCenter)
 
 	frame := image.NewPaletted(bounds, widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
@@ -176,7 +176,7 @@ func TestWidget_Render(t *testing.T) {
 }
 
 func TestNew_NilNow(t *testing.T) {
-	w := New(image.Rect(0, 0, 800, 50), nil, options{})
+	w := New(image.Rect(0, 0, 800, 50), nil, Options{}, AlignCenter)
 	frame := image.NewPaletted(image.Rect(0, 0, 800, 50), widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
@@ -192,7 +192,7 @@ func TestFactory(t *testing.T) {
 		config  map[string]any
 		wantErr bool
 		// want is the rendered string when no error is expected; checked via
-		// fuzzyTime on the constructed widget's options through a render proxy.
+		// Phrase on the constructed widget's options through a render proxy.
 		want string
 	}{
 		{label: "defaults", config: nil, want: "Half past eight"},
@@ -230,7 +230,7 @@ func TestFactory(t *testing.T) {
 			if !ok {
 				t.Fatalf("Factory returned %T, want *Widget", w)
 			}
-			if got := fuzzyTime(fw.now(), fw.opts); got != tc.want {
+			if got := Phrase(fw.now(), fw.opts); got != tc.want {
 				t.Errorf("rendered %q, want %q", got, tc.want)
 			}
 		})
