@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
@@ -71,7 +72,11 @@ func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calend
 		return 0
 	}
 
-	limit := min(opts.MaxEvents, len(events))
+	// Clamped rather than trusted: parseConfig rejects a non-positive
+	// max_events, but New takes a hand-built Config verbatim, and a
+	// zero value there would blank the agenda while a negative one
+	// would panic on the slice bound.
+	limit := min(max(opts.MaxEvents, 0), len(events))
 	drawn := 0
 	for _, e := range events[:limit] {
 		p := planEvent(e, maxChars, opts)
@@ -92,7 +97,10 @@ func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calend
 	}
 
 	if remaining := len(events) - drawn; remaining > 0 && y <= bounds.Max.Y {
-		drawText(frame, x, y, fmt.Sprintf("+%d MORE", remaining), bodyBoldFace)
+		// Fitted to the column like every other row: on a narrow
+		// column "+12 MORE" is wider than the cell and would overhang
+		// the divider into the next day's agenda.
+		drawText(frame, x, y, truncate(fmt.Sprintf("+%d MORE", remaining), maxChars), bodyBoldFace)
 	}
 	return drawn
 }
@@ -115,6 +123,11 @@ func planEvent(e calendar.Event, maxChars int, opts eventOptions) eventPlan {
 
 // wrapText breaks text into at most maxLines lines of at most maxChars,
 // preferring word boundaries and ellipsing whatever will not fit.
+//
+// The budget is in characters, so every measurement and every cut is in
+// runes. Byte arithmetic would wrap an accented title a character or two
+// early and, worse, slice a multi-byte glyph in half — the panel then
+// paints replacement glyphs for a Japanese or emoji title.
 func wrapText(text string, maxChars, maxLines int) []string {
 	fields := strings.Fields(text)
 	if len(fields) == 0 {
@@ -124,7 +137,7 @@ func wrapText(text string, maxChars, maxLines int) []string {
 	var lines []string
 	cur := fields[0]
 	for _, w := range fields[1:] {
-		if len(cur)+1+len(w) <= maxChars {
+		if runeLen(cur)+1+runeLen(w) <= maxChars {
 			cur += " " + w
 			continue
 		}
@@ -137,9 +150,10 @@ func wrapText(text string, maxChars, maxLines int) []string {
 	// overhang the column divider.
 	var split []string
 	for _, l := range lines {
-		for len(l) > maxChars {
-			split = append(split, l[:maxChars])
-			l = l[maxChars:]
+		for runeLen(l) > maxChars {
+			r := []rune(l)
+			split = append(split, string(r[:maxChars]))
+			l = string(r[maxChars:])
 		}
 		split = append(split, l)
 	}
@@ -150,6 +164,10 @@ func wrapText(text string, maxChars, maxLines int) []string {
 	}
 	return split
 }
+
+// runeLen counts characters, which is the unit every text budget here
+// is expressed in.
+func runeLen(s string) int { return utf8.RuneCountInString(s) }
 
 // truncate shortens s to maxChars, marking the cut with an ellipsis when
 // there is room for one.

@@ -185,3 +185,26 @@ func TestResolveWeatherDefaults(t *testing.T) {
 		}
 	})
 }
+
+// The docs promise the config is swappable with weekly-calendar, so a
+// leftover key is a reasonable thing to find in a pasted config.
+// Silently dropping show_weather: false would draw a weather band the
+// operator explicitly turned off, which reads as a bug in the widget
+// rather than a key that did not carry over — so every weekly key with
+// no bold-five meaning is rejected, with the reason.
+func TestParseConfig_RejectsWeeklyOnlyKeys(t *testing.T) {
+	for key := range unsupportedKeys {
+		t.Run(key, func(t *testing.T) {
+			_, err := parseConfig(withKey(key, true))
+			if err == nil {
+				t.Fatalf("%s was accepted silently", key)
+			}
+			if !strings.Contains(err.Error(), key) {
+				t.Errorf("error = %q, want it to name the key", err)
+			}
+			if !strings.Contains(err.Error(), "not supported") {
+				t.Errorf("error = %q, want it to say the key is unsupported", err)
+			}
+		})
+	}
+}

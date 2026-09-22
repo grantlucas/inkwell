@@ -29,6 +29,16 @@ const (
 	weatherH = 104
 )
 
+// minHeight is the shortest widget this screen can be drawn into. Every
+// renderer places its content at a fixed offset from its band's top —
+// the date numeral's descent lands at +112, the low temperature's at
+// about +168 — and the draw helpers clip to the *frame*, not to the
+// widget's bounds. On a shared 800x480 frame that means a widget given
+// less room than its bands need would paint over whichever widget sits
+// below it, which is the hazard newPrecipLayout documents. Clamping the
+// rects is not enough on its own, so a widget this short draws nothing.
+const minHeight = headerH + weatherH
+
 // columnLayout describes the vertical zones of one day column.
 type columnLayout struct {
 	Bounds  image.Rectangle

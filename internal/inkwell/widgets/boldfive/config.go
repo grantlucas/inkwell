@@ -119,5 +119,29 @@ func parseConfig(config map[string]any) (Config, error) {
 		cfg.WeatherModel, cfg.modelSet = m, true
 	}
 
+	// weekly-calendar keys this screen has no equivalent for are
+	// rejected rather than ignored. The docs promise the config is
+	// swappable between the two, so a leftover key is a reasonable
+	// thing to find in a pasted config — and silently dropping
+	// show_weather: false would draw a weather band the operator
+	// explicitly turned off, which looks like a bug in the widget
+	// rather than a key that did not carry over.
+	for key, why := range unsupportedKeys {
+		if _, ok := config[key]; ok {
+			return cfg, fmt.Errorf("bold-five: %s is not supported: %s", key, why)
+		}
+	}
+
 	return cfg, nil
+}
+
+// unsupportedKeys are weekly-calendar keys with no bold-five meaning,
+// each with the reason, so the error says what to do rather than just
+// refusing.
+var unsupportedKeys = map[string]string{
+	"days":               "bold-five is always five columns; every type size is derived from a 160 px column",
+	"week_start":         "columns always start from today, so there is no week to start",
+	"show_weather":       "the weather band is part of the layout; a day with no forecast already draws nothing",
+	"show_weather_label": "there is no condition label to show — the icon carries the condition",
+	"highlight_hour":     "the now-marker follows the clock, on today's column only",
 }

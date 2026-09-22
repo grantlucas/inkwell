@@ -47,7 +47,19 @@ type weatherOptions struct {
 
 // renderWeatherBand draws one column's weather: condition icon, the
 // hi/lo pair, and the precipitation chart beneath them.
+//
+// A day the forecast never covered draws nothing at all. The zero
+// DailyForecast is indistinguishable from a real reading — a clear sky
+// at 0°C is entirely plausible in Hamilton in January — so drawing it
+// would state a temperature nobody forecast, and an operator could not
+// tell an outage from the weather. An empty band is unmistakably an
+// empty band. weekly-calendar collapses its whole weather zone for the
+// same reason.
 func renderWeatherBand(frame *image.Paletted, bounds image.Rectangle, day weather.DailyForecast, opts weatherOptions) {
+	if day.Date.IsZero() {
+		return
+	}
+
 	top := bounds.Min.Y
 
 	if err := drawIcon(frame, bounds.Min.X+iconX, top+iconY, iconSize, day.Condition); err != nil {

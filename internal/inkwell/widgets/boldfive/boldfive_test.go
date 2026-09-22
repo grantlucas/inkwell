@@ -397,3 +397,39 @@ func TestFactory_UsesSharedProvider(t *testing.T) {
 		t.Errorf("Latitude = %v, want the provider default", bw.config.Latitude)
 	}
 }
+
+// Every renderer places content at a fixed offset from its band's top,
+// and the draw helpers clip to the frame rather than to the widget's
+// bounds. A widget given less room than the bands need would therefore
+// paint over its neighbour on the shared frame — so it draws nothing
+// instead. A blank region is a misconfiguration you can see; ink on top
+// of another widget looks like a fault somewhere else entirely.
+func TestWidget_TooShortDrawsNothing(t *testing.T) {
+	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
+
+	// A neighbour already on the frame, below where this widget sits.
+	for y := 200; y < 480; y++ {
+		for x := range 800 {
+			frame.SetColorIndex(x, y, widget.PaperBlack)
+		}
+	}
+
+	w := New(image.Rect(0, 0, 800, 150), &stubCalSource{events: sampleEvents()},
+		&stubWeatherSource{forecast: sampleForecast()}, fixedClock(testTime),
+		Config{MaxEvents: defaultMaxEvents, TempUnit: "C"})
+	if err := w.Render(frame); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	// Its own region is blank, and the neighbour below is untouched.
+	if got := countIndexIn(frame, image.Rect(0, 0, 800, 150), widget.PaperBlack); got != 0 {
+		t.Errorf("drew %d px into a widget too short to draw into", got)
+	}
+	for y := 200; y < 480; y++ {
+		for x := range 800 {
+			if frame.ColorIndexAt(x, y) != widget.PaperBlack {
+				t.Fatalf("painted over the neighbouring widget at (%d,%d)", x, y)
+			}
+		}
+	}
+}

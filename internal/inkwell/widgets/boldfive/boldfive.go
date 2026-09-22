@@ -61,6 +61,16 @@ func (w *Widget) Bounds() image.Rectangle { return w.bounds }
 func (w *Widget) Render(frame *image.Paletted) error {
 	fillWhite(frame, w.bounds)
 
+	// Too short to draw into without spilling past the widget's bounds
+	// and over its neighbour on the shared frame. A blank region is a
+	// misconfiguration an operator can see; ink on top of another
+	// widget looks like a rendering fault somewhere else entirely.
+	if w.bounds.Dy() < minHeight {
+		log.Printf("boldfive: bounds are %d px tall, need at least %d — drawing nothing",
+			w.bounds.Dy(), minHeight)
+		return nil
+	}
+
 	// The clock arrives already in the dashboard's display zone, so
 	// everything day- and hour-derived reads from it rather than
 	// re-resolving a zone here. Events carry whatever zone their feed

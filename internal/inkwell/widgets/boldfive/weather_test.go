@@ -146,16 +146,33 @@ func TestRenderWeatherBand_StaysInsideTheBand(t *testing.T) {
 	}
 }
 
-// A day the forecast never reached is a zero value, not a dry day with
-// a 0° high. It must not panic or draw a bogus temperature chart.
-func TestRenderWeatherBand_MissingForecast(t *testing.T) {
+// A day the forecast never reached is a zero DailyForecast, and a zero
+// DailyForecast is indistinguishable from a real reading — clear sky at
+// 0°C is entirely plausible in a Hamilton January. Drawing it would
+// state a temperature nobody forecast and leave an operator unable to
+// tell an outage from the weather, so the whole band stays empty.
+func TestRenderWeatherBand_MissingForecastDrawsNothing(t *testing.T) {
 	frame := newTestFrame(160, 480)
 	renderWeatherBand(frame, weatherRect(), weather.DailyForecast{}, weatherOptions{TempUnit: "C"})
 
-	// No hourly points at all means absent data, so the chart draws
-	// nothing — but the icon and the 0° pair still render.
-	if got := countIndexIn(frame, chartRect(), widget.PaperGray70); got != 0 {
-		t.Errorf("drew %d px of bars for a forecast that does not exist", got)
+	for y := range 480 {
+		for x := range 160 {
+			if frame.ColorIndexAt(x, y) != widget.PaperWhite {
+				t.Fatalf("ink at (%d,%d) for a forecast that does not exist", x, y)
+			}
+		}
+	}
+}
+
+// The guard keys off the forecast's date, not its values: a genuine
+// forecast of 0°C on a clear day must still be drawn.
+func TestRenderWeatherBand_RealZeroDegreesIsDrawn(t *testing.T) {
+	day := dryDay(0, 0)
+	frame := newTestFrame(160, 480)
+	renderWeatherBand(frame, weatherRect(), day, weatherOptions{TempUnit: "C"})
+
+	if countIndexIn(frame, weatherRect(), widget.PaperBlack) == 0 {
+		t.Error("a real 0°C forecast drew nothing")
 	}
 }
 
