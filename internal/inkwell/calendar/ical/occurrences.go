@@ -54,13 +54,23 @@ func Occurrences(events []Event, start, end time.Time) []Event {
 //     instant moves. This is what a user means by "every Wednesday at
 //     nine", and Google emits TZID for any recurrence given a zone, so
 //     it is the case the dashboard actually meets.
-//   - A Z-suffixed or floating master has no zone to recur in, so it
-//     holds a fixed UTC instant (RFC 5545 3.3.5) and the local wall
-//     time moves instead.
+//   - A Z-suffixed master (RFC 5545 3.3.5 form 2) is an instant, so it
+//     recurs at a fixed UTC offset and the local wall time moves
+//     instead.
 //
 // Normalising the walk to UTC would collapse the first case into the
-// second and shift recurring events by an hour for half the year.
-// TestOccurrences_DSTTransition pins both readings.
+// second and shift every zoned recurring event by an hour for half the
+// year. TestOccurrences_DSTTransition pins both readings, across all
+// three walkers.
+//
+// A floating master (form 1 — no Z, no TZID) is a third case, and the
+// one place this deviates from the RFC. Form 1 is local time that
+// tracks the observer's zone; parseDateTime instead reads it as UTC
+// (see its "local datetime, treated as UTC" note), so a floating 09:00
+// renders at 09:00 UTC rather than 09:00 wherever the panel is. An
+// unresolvable TZID lands in the same bucket. That is a deliberate
+// simplification, not conformance — worth knowing before treating the
+// behaviour as a specification.
 func expand(master Event, winStart, winEnd time.Time) []Event {
 	r := master.Recurrence
 	interval := r.Interval
@@ -126,14 +136,17 @@ func expand(master Event, winStart, winEnd time.Time) []Event {
 // filtered candidates do NOT count toward COUNT, matching common
 // rrule semantics.
 func walkDaily(dtstart time.Time, r *Recurrence, interval int, handle func(time.Time) bool) {
-	cur := dtstart
-	for range occurrenceSafetyCap {
+	for i := range occurrenceSafetyCap {
+		// Recomputed from DTSTART rather than stepped from the previous
+		// candidate: a candidate landing in the hour spring-forward
+		// skips gets normalised by time.Date, and stepping from it
+		// would carry that hour into every occurrence after it.
+		cur := dtstart.AddDate(0, 0, i*interval)
 		if len(r.ByDay) == 0 || weekdayIn(r.ByDay, cur.Weekday()) {
 			if !handle(cur) {
 				return
 			}
 		}
-		cur = cur.AddDate(0, 0, interval)
 	}
 }
 
@@ -143,12 +156,11 @@ func walkDaily(dtstart time.Time, r *Recurrence, interval int, handle func(time.
 // date falls in [DTSTART, …), preserving DTSTART's clock time.
 func walkWeekly(dtstart time.Time, r *Recurrence, interval int, handle func(time.Time) bool) {
 	if len(r.ByDay) == 0 {
-		cur := dtstart
-		for range occurrenceSafetyCap {
-			if !handle(cur) {
+		for i := range occurrenceSafetyCap {
+			// Anchored on DTSTART, not stepped — see walkDaily.
+			if !handle(dtstart.AddDate(0, 0, 7*interval*i)) {
 				return
 			}
-			cur = cur.AddDate(0, 0, 7*interval)
 		}
 		return
 	}
@@ -158,7 +170,7 @@ func walkWeekly(dtstart time.Time, r *Recurrence, interval int, handle func(time
 	// start (WKST default per RFC 5545). The first period's
 	// candidates before DTSTART are skipped explicitly.
 	weekdayOffset := int(dtstart.Weekday()-time.Monday+7) % 7
-	weekAnchor := dtstart.AddDate(0, 0, -weekdayOffset)
+	firstAnchor := dtstart.AddDate(0, 0, -weekdayOffset)
 
 	sorted := make([]time.Weekday, len(r.ByDay))
 	copy(sorted, r.ByDay)
@@ -168,7 +180,11 @@ func walkWeekly(dtstart time.Time, r *Recurrence, interval int, handle func(time
 		return oi < oj
 	})
 
-	for range occurrenceSafetyCap {
+	for week := range occurrenceSafetyCap {
+		// Each week's anchor is recomputed from the first one, so a
+		// candidate normalised across a DST transition cannot shift
+		// the weeks that follow — see walkDaily.
+		weekAnchor := firstAnchor.AddDate(0, 0, 7*interval*week)
 		for _, wd := range sorted {
 			offset := int(wd-time.Monday+7) % 7
 			occ := weekAnchor.AddDate(0, 0, offset)
@@ -179,7 +195,6 @@ func walkWeekly(dtstart time.Time, r *Recurrence, interval int, handle func(time
 				return
 			}
 		}
-		weekAnchor = weekAnchor.AddDate(0, 0, 7*interval)
 	}
 }
 

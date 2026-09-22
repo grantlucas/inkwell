@@ -414,9 +414,12 @@ func TestOccurrences_AllDayPropagatesThroughExpansion(t *testing.T) {
 //   - A TZID-qualified master recurs in that zone, so a 09:00 meeting stays
 //     09:00 local and the UTC instant moves. This is what a user means by
 //     "every Wednesday at nine".
-//   - A Z-suffixed (or floating) master has no zone to recur in, so it holds
-//     a fixed UTC instant and the local wall time moves instead. RFC 5545
-//     §3.3.5 makes a UTC-anchored recurrence exactly that.
+//   - A Z-suffixed master (RFC 5545 §3.3.5 form 2) is an instant, so it
+//     recurs at a fixed UTC offset and the local wall time moves instead.
+//
+// A floating master (form 1 — no Z, no TZID) is a third case, not covered
+// here: the parser reads it as UTC rather than as observer-local time,
+// which is a deliberate deviation from the RFC documented on expand.
 //
 // The trap is that the two look identical in the feed until a transition
 // crosses them. Google emits TZID for any recurrence the user gave a zone,
@@ -458,6 +461,64 @@ func TestOccurrences_DSTTransition(t *testing.T) {
 		}
 	})
 
+	// walkWeekly's BYDAY branch is a separate code path from the one
+	// above, and it is the shape Google actually emits
+	// (FREQ=WEEKLY;BYDAY=WE), so leaving it unpinned would let a
+	// refactor shift every real zoned weekly event by an hour while the
+	// suite stayed green.
+	t.Run("TZID-anchored weekly with BYDAY", func(t *testing.T) {
+		start := time.Date(2026, 3, 4, 9, 0, 0, 0, toronto)
+		master := Event{
+			UID:   "byday",
+			Start: start,
+			End:   start.Add(time.Hour),
+			Recurrence: &Recurrence{
+				Freq:  FreqWeekly,
+				ByDay: []time.Weekday{time.Wednesday},
+			},
+		}
+		got := Occurrences([]Event{master}, window[0], window[1])
+		assertStarts(t, got, []time.Time{
+			time.Date(2026, 3, 4, 9, 0, 0, 0, toronto),
+			time.Date(2026, 3, 11, 9, 0, 0, 0, toronto),
+			time.Date(2026, 3, 18, 9, 0, 0, 0, toronto),
+		})
+	})
+
+	t.Run("TZID-anchored daily", func(t *testing.T) {
+		start := time.Date(2026, 3, 6, 9, 0, 0, 0, toronto)
+		master := Event{
+			UID:        "daily",
+			Start:      start,
+			End:        start.Add(time.Hour),
+			Recurrence: &Recurrence{Freq: FreqDaily, Count: 5},
+		}
+		got := Occurrences([]Event{master}, window[0], window[1])
+		assertStarts(t, got, []time.Time{
+			time.Date(2026, 3, 6, 9, 0, 0, 0, toronto),
+			time.Date(2026, 3, 7, 9, 0, 0, 0, toronto),
+			time.Date(2026, 3, 8, 9, 0, 0, 0, toronto), // transition day
+			time.Date(2026, 3, 9, 9, 0, 0, 0, toronto),
+			time.Date(2026, 3, 10, 9, 0, 0, 0, toronto),
+		})
+	})
+
+	t.Run("TZID-anchored monthly", func(t *testing.T) {
+		start := time.Date(2026, 2, 15, 9, 0, 0, 0, toronto)
+		master := Event{
+			UID:        "monthly",
+			Start:      start,
+			End:        start.Add(time.Hour),
+			Recurrence: &Recurrence{Freq: FreqMonthly, Count: 3},
+		}
+		got := Occurrences([]Event{master}, utc(2026, 2, 1, 0, 0), utc(2026, 5, 1, 0, 0))
+		assertStarts(t, got, []time.Time{
+			time.Date(2026, 2, 15, 9, 0, 0, 0, toronto),
+			time.Date(2026, 3, 15, 9, 0, 0, 0, toronto), // after the transition
+			time.Date(2026, 4, 15, 9, 0, 0, 0, toronto),
+		})
+	})
+
 	t.Run("Z-anchored keeps the UTC instant", func(t *testing.T) {
 		// 14:00Z is 09:00 EST on 03-04 — the same wall time the zoned
 		// case starts from, so the divergence is purely the anchoring.
@@ -493,6 +554,46 @@ func assertStarts(t *testing.T, got []Event, want []time.Time) {
 	for i := range want {
 		if !got[i].Start.Equal(want[i]) {
 			t.Errorf("occurrence %d = %v, want %v", i, got[i].Start, want[i])
+		}
+	}
+}
+
+// TestOccurrences_NoDriftPastNonexistentTime guards the accumulating
+// walk. A recurrence landing in the hour spring-forward skips has no
+// valid local time, and Go's time.Date normalises it — 02:30 on the
+// transition day becomes 01:30. That is a reasonable answer for that
+// one day. The bug is what came next: walkDaily and walkWeekly stepped
+// from the previous result, so the normalised time was carried forward
+// and every later occurrence stayed an hour early, for good. An
+// early-morning recurring event would read an hour wrong on the panel
+// from each spring-forward until the series ended.
+//
+// walkMonthly never had this, because it recomputes from DTSTART each
+// iteration. The other walkers now do the same.
+func TestOccurrences_NoDriftPastNonexistentTime(t *testing.T) {
+	toronto, err := time.LoadLocation("America/Toronto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 02:30 does not exist on 2026-03-08: the clocks go 02:00 → 03:00.
+	start := time.Date(2026, 3, 6, 2, 30, 0, 0, toronto)
+	master := Event{
+		UID:        "early",
+		Start:      start,
+		End:        start.Add(30 * time.Minute),
+		Recurrence: &Recurrence{Freq: FreqDaily},
+	}
+	got := Occurrences([]Event{master}, utc(2026, 3, 1, 0, 0), utc(2026, 3, 13, 0, 0))
+
+	// Every occurrence except the impossible one keeps its 02:30 slot.
+	for _, occ := range got {
+		day := occ.Start.In(toronto)
+		if day.Month() == time.March && day.Day() == 8 {
+			continue // the skipped hour; normalisation is expected here
+		}
+		if h, m := day.Hour(), day.Minute(); h != 2 || m != 30 {
+			t.Errorf("%s: local time = %02d:%02d, want 02:30 — the series drifted",
+				day.Format("2006-01-02"), h, m)
 		}
 	}
 }
