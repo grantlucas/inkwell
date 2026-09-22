@@ -121,7 +121,7 @@ func Parse(r io.Reader) ([]Event, error) {
 				// this, a "EXDATE;TZID=America/Los_Angeles:..." would
 				// parse as UTC and fail to match the corresponding
 				// TZID-anchored occurrence instant.
-				params, _, _ := strings.Cut(line, ":")
+				params, _, _ := cutProperty(line)
 				loc := extractTZID(params)
 				for v := range strings.SplitSeq(value, ",") {
 					t, err := parseICSTime(v, loc)
@@ -180,10 +180,66 @@ func unescapeText(s string) string {
 	return b.String()
 }
 
+// cutProperty splits a content line into its "NAME;params" prefix and
+// its value at the first colon lying outside a quoted parameter value.
+// RFC 5545 3.1 requires a param value containing ':', ';' or ',' to be
+// DQUOTE-wrapped, so cutting at the first colon outright lands inside
+// such a value — `TZID="Customized Time Zone: Eastern"` would yield a
+// value of ` Eastern":...`, which fails to parse and errors the whole
+// feed out rather than degrading that one event to UTC.
+func cutProperty(line string) (params, value string, ok bool) {
+	inQuotes := false
+	for i := range len(line) {
+		switch line[i] {
+		case '"':
+			inQuotes = !inQuotes
+		case ':':
+			if !inQuotes {
+				return line[:i], line[i+1:], true
+			}
+		}
+	}
+	// A stray DQUOTE — an inch mark in an unquoted value, a truncated
+	// parameter — leaves the scan quoted to end of line, so no colon
+	// was ever accepted. Reporting "no colon" would send splitProperty
+	// down its fallback, which returns the whole line as the property
+	// name; that matches no case in Parse's switch, so DTSTART never
+	// lands and the event is dropped at END:VEVENT with no error and no
+	// log line. Quotes that never closed were never really quotes, so
+	// fall back to the naive cut and let the event degrade to UTC —
+	// recoverable, and visible in the log.
+	if inQuotes {
+		return strings.Cut(line, ":")
+	}
+	return line, "", false
+}
+
+// splitParams splits a "NAME;a=1;b=2" prefix on the semicolons lying
+// outside quoted values, so a quoted param value carrying its own ';'
+// survives as one segment.
+func splitParams(params string) []string {
+	var parts []string
+	inQuotes := false
+	start := 0
+	for i := range len(params) {
+		switch params[i] {
+		case '"':
+			inQuotes = !inQuotes
+		case ';':
+			if !inQuotes {
+				parts = append(parts, params[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(parts, params[start:])
+}
+
 // splitProperty splits "NAME;params:value" into (NAME, value).
 func splitProperty(line string) (string, string) {
-	// Find the first colon to split name (with params) from value.
-	before, after, ok := strings.Cut(line, ":")
+	// Find the value-delimiting colon to split name (with params)
+	// from value.
+	before, after, ok := cutProperty(line)
 	if !ok {
 		return line, ""
 	}
@@ -204,7 +260,7 @@ func splitProperty(line string) (string, string) {
 //
 // The full property line is passed to detect VALUE=DATE parameters.
 func parseDateTime(line string) (time.Time, bool, error) {
-	before, after, ok := strings.Cut(line, ":")
+	before, after, ok := cutProperty(line)
 	if !ok {
 		return time.Time{}, false, fmt.Errorf("missing colon in %q", line)
 	}
@@ -250,9 +306,13 @@ func parseDateTime(line string) (time.Time, bool, error) {
 // in the feed (e.g. a Toronto event suddenly rendering in UTC) instead
 // of silently mis-bucketing the event into the wrong column.
 func extractTZID(params string) *time.Location {
-	for part := range strings.SplitSeq(params, ";") {
+	for _, part := range splitParams(params) {
 		if strings.HasPrefix(part, "TZID=") {
-			name := part[5:]
+			// RFC 5545 3.1 lets a param value be DQUOTE-wrapped, and
+			// a value containing ':', ';' or ',' must be. The quotes
+			// delimit the value and are not part of it, so they have
+			// to come off before the lookup.
+			name := strings.Trim(part[5:], `"`)
 			loc, err := time.LoadLocation(name)
 			if err != nil {
 				log.Printf("ical: unknown TZID %q, treating as UTC", name)

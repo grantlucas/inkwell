@@ -137,7 +137,13 @@ into `WidgetConfig.Refresh`; there is no widget-code cadence interface and no
 default (LoadConfig errors if a widget omits it). A per-screen `refreshSchedule`
 (`refresh_queue.go`) gates the planner — a frame change only pushes when a
 widget is *due* this minute (wall-clock aligned, so equal cadences coalesce;
-static widgets never open the gate). Don't confuse a widget's top-level
+static widgets never open the gate). A screen **rotation** is the one thing
+that opens the gate on its own: `Dashboard.Advance` reports when it rotated
+and `App.nextCycle` ORs that into *due*, so a rotation reaches the panel on
+the cycle it happens rather than waiting for the new screen's next due
+widget. That flag is consume-once, so only the render loop may call
+`Advance`; anything else wanting the current screen calls the read-only
+`CurrentScreen`. Don't confuse a widget's top-level
 `refresh` (render cadence) with `weekly-calendar`'s nested `config.refresh`
 (data cache TTL). See the
 [architecture decision records](docs/adrs/), 0008 through 0014.
