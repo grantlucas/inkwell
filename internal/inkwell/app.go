@@ -245,12 +245,7 @@ func (a *App) Run(ctx context.Context) error {
 	var lastBuffer []byte
 
 	for {
-		var ws []widget.Widget
-		due := false
-		if screen := a.dashboard.CurrentScreen(); screen != nil {
-			ws = screen.Widgets()
-			due = screen.AnyDue(a.now())
-		}
+		ws, due := a.nextCycle()
 
 		frame, err := a.comp.Render(ws)
 		if err != nil {
@@ -286,6 +281,31 @@ func (a *App) Run(ctx context.Context) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+// nextCycle picks the widgets to render this cycle and reports whether the
+// cycle is allowed to push a changed frame to the panel.
+//
+// The refresh queue normally holds a changed frame back until one of the
+// screen's widgets is due this minute, so widgets on independent cadences
+// coalesce into a single flash (ADR 0011). A screen rotation is not an
+// ordinary content change though: it is a deliberate, user-visible switch,
+// and Dashboard advances it on its own interval with no relation to any
+// widget cadence. Gating it on the same queue quantises the rotation to the
+// new screen's cadences, so a 20m rotation against 15m widgets lands up to
+// ten minutes late and the lateness varies per cycle. A rotation is
+// therefore inherently due.
+//
+// This does mean a rotation adds a flash the queue would otherwise have
+// suppressed — a real cost against the low-flash goal, accepted because a
+// rotation nobody asked for is invisible while a rotation that arrives late
+// is just wrong.
+func (a *App) nextCycle() ([]widget.Widget, bool) {
+	screen, rotated := a.dashboard.CurrentScreen()
+	if screen == nil {
+		return nil, false
+	}
+	return screen.Widgets(), rotated || screen.AnyDue(a.now())
 }
 
 // refresh applies the planner's decision for one cycle: it picks a refresh
