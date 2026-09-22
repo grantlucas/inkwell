@@ -1495,3 +1495,153 @@ func TestNewApp_InvalidTimezone(t *testing.T) {
 		t.Errorf("error = %q, want mention of timezone", err.Error())
 	}
 }
+
+// TestApp_NextCycleRotationIsDue pins the refresh gate's treatment of a
+// screen rotation. The rotation runs on Dashboard's own interval, which has
+// no relation to any widget cadence, so gating it on the refresh queue
+// quantised it to those cadences: with 15m widgets and a 20m rotation the
+// new screen first reached the panel at :30, ten minutes late. A rotation is
+// inherently due — but an ordinary unchanged cycle must still stay quiet, or
+// the coalescing the queue exists for is gone.
+func TestApp_NextCycleRotationIsDue(t *testing.T) {
+	// Two screens, one 15m widget each, rotating every 20m — the repro
+	// from the issue. Minute-of-day 20 is not divisible by 15, so nothing
+	// is due on the minute the rotation lands.
+	newSchedScreen := func(name string) *Screen {
+		s := NewScreen(name, nil)
+		s.schedule = refreshSchedule{cadences: []time.Duration{15 * time.Minute}}
+		return s
+	}
+
+	// Sequential cycles against one App, not independent cases: the
+	// rotation flag is consume-once, so a cycle only means what it means
+	// after the ones before it. Deliberately not subtests — narrowing to
+	// one with -run would replay it against the wrong history.
+	cycles := []struct {
+		label   string
+		at      time.Time // wall clock for this cycle
+		wantDue bool
+	}{
+		// Baseline: no rotation yet, and :05 divides no cadence.
+		{"no rotation, nothing due", time.Date(2024, 1, 1, 12, 5, 0, 0, time.UTC), false},
+		// :15 — the widget is due on its own, still no rotation.
+		{"no rotation, widget due", time.Date(2024, 1, 1, 12, 15, 0, 0, time.UTC), true},
+		// :20 — the rotation fires on a minute no widget is due.
+		{"rotation on a non-due minute", time.Date(2024, 1, 1, 12, 20, 0, 0, time.UTC), true},
+		// :25 — the rotation already happened and was consumed at :20.
+		{"the cycle after a rotation is quiet again", time.Date(2024, 1, 1, 12, 25, 0, 0, time.UTC), false},
+		// :40 — the next rotation, again off-cadence (760 % 15 = 10).
+		{"the next rotation, also off-cadence", time.Date(2024, 1, 1, 12, 40, 0, 0, time.UTC), true},
+		// 13:00 — 60m is three rotation intervals and 780 % 15 == 0, so
+		// a rotation and a due widget coincide. Still one due cycle.
+		{"rotation coinciding with a due widget", time.Date(2024, 1, 1, 13, 0, 0, 0, time.UTC), true},
+		{"and the one after it is quiet", time.Date(2024, 1, 1, 13, 1, 0, 0, time.UTC), false},
+	}
+
+	now := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	clock := func() time.Time { return now }
+	app := mustNewApp(t, DefaultConfig(), WithHardware(&MockHardware{}), WithInterval(time.Hour))
+	app.now = clock
+	app.dashboard = NewDashboard(
+		[]*Screen{newSchedScreen("a"), newSchedScreen("b")},
+		20*time.Minute,
+		clock,
+	)
+
+	for _, c := range cycles {
+		now = c.at
+		if _, due := app.nextCycle(); due != c.wantDue {
+			t.Errorf("%s: due = %v, want %v", c.label, due, c.wantDue)
+		}
+	}
+}
+
+// A rotation must not be able to conjure a screen out of an empty dashboard.
+func TestApp_NextCycleNoScreens(t *testing.T) {
+	app := mustNewApp(t, DefaultConfig(), WithHardware(&MockHardware{}), WithInterval(time.Hour))
+	app.dashboard = NewDashboard(nil, 0, app.now)
+
+	ws, due := app.nextCycle()
+	if ws != nil {
+		t.Errorf("widgets = %v, want nil", ws)
+	}
+	if due {
+		t.Error("due = true, want false for an empty dashboard")
+	}
+}
+
+// TestApp_RotationPushCount drives the render loop's per-cycle decision —
+// nextCycle feeding App.refresh, exactly as Run does — and counts what
+// actually reaches the panel. The bool table above says a rotation is due;
+// this says what that costs in flashes, which is the half of the trade the
+// low-flash goal cares about.
+func TestApp_RotationPushCount(t *testing.T) {
+	// Each screen carries its own widget so the cycle's widget list
+	// identifies which screen nextCycle selected — the test has to read
+	// that through nextCycle rather than calling CurrentScreen itself,
+	// both because the rotation flag is consumed by whoever reads it and
+	// so the gating logic under test is not quietly reimplemented here.
+	newSchedScreen := func(name string, w widget.Widget) *Screen {
+		s := NewScreen(name, []widget.Widget{w})
+		s.schedule = refreshSchedule{cadences: []time.Duration{15 * time.Minute}}
+		return s
+	}
+	widgetA := &stubWidget{bounds: image.Rect(0, 0, 10, 10)}
+	widgetB := &stubWidget{bounds: image.Rect(0, 0, 20, 20)}
+	screenA := newSchedScreen("a", widgetA)
+	screenB := newSchedScreen("b", widgetB)
+
+	now := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	clock := func() time.Time { return now }
+	app, _ := newBWRefreshApp(t)
+	app.now = clock
+	app.dashboard = NewDashboard([]*Screen{screenA, screenB}, 20*time.Minute, clock)
+
+	size := app.profile.BufferSize()
+	// The frame stands in for what each screen renders: it changes if and
+	// only if the selected screen changes.
+	frames := map[widget.Widget][]byte{
+		widgetA: bytes.Repeat([]byte{0x00}, size),
+		widgetB: bytes.Repeat([]byte{0xFF}, size),
+	}
+
+	cycles := []struct {
+		label      string
+		at         time.Time
+		wantPushed bool
+	}{
+		{"12:00 forced first cycle", time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC), true},
+		{"12:05 quiet, frame unchanged", time.Date(2024, 1, 1, 12, 5, 0, 0, time.UTC), false},
+		{"12:15 widget due but frame unchanged", time.Date(2024, 1, 1, 12, 15, 0, 0, time.UTC), false},
+		{"12:20 rotation on a non-due minute", time.Date(2024, 1, 1, 12, 20, 0, 0, time.UTC), true},
+		{"12:21 nothing left to say", time.Date(2024, 1, 1, 12, 21, 0, 0, time.UTC), false},
+		{"12:40 rotation back", time.Date(2024, 1, 1, 12, 40, 0, 0, time.UTC), true},
+		{"13:00 rotation coinciding with a due widget", time.Date(2024, 1, 1, 13, 0, 0, 0, time.UTC), true},
+		{"13:01 the rotation is spent", time.Date(2024, 1, 1, 13, 1, 0, 0, time.UTC), false},
+	}
+
+	var last []byte
+	pushes := 0
+	for _, c := range cycles {
+		now = c.at
+		ws, due := app.nextCycle()
+		frame := frames[ws[0]]
+		pushed, err := app.refresh(frame, last, due)
+		if err != nil {
+			t.Fatalf("%s: refresh: %v", c.label, err)
+		}
+		if pushed != c.wantPushed {
+			t.Errorf("%s: pushed = %v, want %v", c.label, pushed, c.wantPushed)
+		}
+		if pushed {
+			last = frame
+			pushes++
+		}
+	}
+
+	// Four flashes across the hour: the forced first cycle and one per
+	// rotation. The coinciding rotation at 13:00 contributes one, not two.
+	if pushes != 4 {
+		t.Errorf("pushes = %d, want 4", pushes)
+	}
+}
