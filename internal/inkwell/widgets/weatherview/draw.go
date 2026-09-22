@@ -150,3 +150,12 @@ func truncateText(text string, maxChars int) string {
 	}
 	return string(runes[:maxChars-3]) + "..."
 }
+
+// drawTextCenteredWithFace centers text between x1 and x2 using the given
+// face. drawTextCentered measures with the package default face, which
+// misplaces text whenever the caller supplies its own.
+func drawTextCenteredWithFace(frame *image.Paletted, x1, x2, y int, text string, f font.Face) {
+	tw := textWidth(f, text)
+	x := x1 + (x2-x1-tw)/2
+	drawTextWithFace(frame, x, y, text, f)
+}
