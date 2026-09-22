@@ -54,6 +54,10 @@ const (
 	precipMinW = 10
 	precipMinH = 10
 
+	// precipTraceH is the stub height a trace chance floors to, so a 1%
+	// hour is visibly different from a 0% one.
+	precipTraceH = 2
+
 	// precipMarkerW is the now-marker's width. One pixel disappears at a
 	// metre; three starts competing with the bars it sits behind.
 	precipMarkerW = 2
@@ -96,7 +100,10 @@ func RenderPrecipChart(frame *image.Paletted, bounds image.Rectangle, hourly []w
 		return
 	}
 
-	l := newPrecipLayout(bounds, opts.LabelHeight)
+	l, ok := newPrecipLayout(bounds, opts.LabelHeight)
+	if !ok {
+		return
+	}
 
 	// Baseline: a solid PaperBlack rule the bars sit on. Solid rather
 	// than a gray hairline because a PaperGrayNN rule snaps to white
@@ -135,20 +142,35 @@ type precipLayout struct {
 	barW      int
 }
 
-func newPrecipLayout(bounds image.Rectangle, labelH int) precipLayout {
+// newPrecipLayout resolves the geometry, reporting false when the cell
+// cannot carry a chart at all. A label band that eats the cell would put
+// baselineY above bounds.Min.Y, and every bar, tick and label would then
+// be drawn outside the rect the caller gave us. The draw helpers clip to
+// the frame rather than to bounds, so on a real panel — where every
+// widget shares one 800x480 frame — that means painting over whichever
+// widget sits above this one.
+func newPrecipLayout(bounds image.Rectangle, labelH int) (precipLayout, bool) {
+	if labelH < 0 {
+		return precipLayout{}, false
+	}
 	baselineY := bounds.Max.Y - labelH - precipTickH - 1
+	barMaxH := baselineY - bounds.Min.Y
+	if barMaxH <= 0 {
+		return precipLayout{}, false
+	}
+
 	step := float64(bounds.Dx()) / float64(precipHours)
 	return precipLayout{
 		bounds:    bounds,
 		baselineY: baselineY,
-		barMaxH:   baselineY - bounds.Min.Y,
+		barMaxH:   barMaxH,
 		step:      step,
 		// One pixel of gutter between bars rather than the live chart's
 		// two: the whole point of this mode is bars that read at
 		// distance, and at a 110 px column width every pixel of bar is
 		// worth having.
 		barW: max(int(step)-1, 2),
-	}
+	}, true
 }
 
 // slotX is the left edge of an hour's column.
@@ -159,10 +181,16 @@ func (l precipLayout) slotX(hour int) int {
 // barHeight scales a probability to pixels, flooring a trace chance at a
 // visible stub — "1%" and "0%" are different claims, and the gap in the
 // bar shape is what says which.
+//
+// The probability is clamped to [0,1] rather than trusted: it reaches us
+// as whatever the forecast API returned divided by 100, so a malformed
+// response would otherwise scale a bar clean off the top of the cell and
+// over the widget above. The stub is capped at the plot height for the
+// same reason — a 1 px plot cannot carry a 2 px stub.
 func (l precipLayout) barHeight(prob float64) int {
-	h := int(math.Round(prob * float64(l.barMaxH)))
+	h := int(math.Round(min(max(prob, 0), 1) * float64(l.barMaxH)))
 	if h < 1 && prob > 0 {
-		return 2
+		return min(precipTraceH, l.barMaxH)
 	}
 	return h
 }

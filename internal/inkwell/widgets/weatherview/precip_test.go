@@ -588,3 +588,46 @@ func TestRenderPrecipChart_TraceHourDrawsAStub(t *testing.T) {
 		t.Errorf("trace hour drew %d px, none-hour drew %d px; want the trace taller", trace, none)
 	}
 }
+
+// Nothing the caller passes may put ink outside the rect it asked for.
+// The draw helpers clip to the frame rather than to bounds, and on a real
+// panel every widget shares one 800x480 frame, so a chart that overruns
+// its cell paints over its neighbour rather than being harmlessly
+// cropped.
+func TestRenderPrecipChart_NeverDrawsOutsideBounds(t *testing.T) {
+	cases := []struct {
+		label string
+		opts  PrecipChartOptions
+		prob  float64
+	}{
+		{"label band taller than the cell", PrecipChartOptions{LabelHeight: 10}, 0.9},
+		{"label band exactly fills the cell", PrecipChartOptions{LabelHeight: 7}, 0.9},
+		{"negative label height", PrecipChartOptions{LabelHeight: -20}, 0.9},
+		{"probability above 1.0", PrecipChartOptions{}, 3.0},
+		{"negative probability", PrecipChartOptions{}, -1.0},
+		{"trace chance in a very short plot", PrecipChartOptions{LabelHeight: 6}, 0.001},
+		{"healthy cell", PrecipChartOptions{LabelHeight: 16}, 0.9},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			// A cell deliberately smaller than the frame, so anything
+			// drawn outside it is visible rather than clipped away.
+			frame := newTestFrame(200, 200)
+			bounds := image.Rect(40, 40, 190, 50)
+			RenderPrecipChart(frame, bounds,
+				wetHourly(map[int]float64{12: tc.prob}), tc.opts)
+
+			for y := range 200 {
+				for x := range 200 {
+					if frame.ColorIndexAt(x, y) == widget.PaperWhite {
+						continue
+					}
+					if !image.Pt(x, y).In(bounds) {
+						t.Fatalf("ink at (%d,%d) is outside bounds %v", x, y, bounds)
+					}
+				}
+			}
+		})
+	}
+}
