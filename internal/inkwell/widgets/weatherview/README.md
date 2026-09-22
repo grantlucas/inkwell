@@ -36,6 +36,39 @@ black under the `bw` threshold:
 
 ![Weatherview in the weekly dashboard](docs/in-context.png)
 
+### Precipitation-only chart
+
+`RenderPrecipChart` is a second rendering mode beside `RenderHourlyChart`,
+added for the redesigned screens. It drops the temperature polyline and gives
+the precipitation bars the **whole cell**, which roughly doubles their height
+— in a 114 px day column the split chart leaves the bars about 20 px tall,
+which reads as a grey smudge at any distance.
+
+It is deliberately **not** used by `weekly-calendar`: the live weekly view
+keeps `RenderHourlyChart` exactly as it is, so it stays usable as a control.
+
+- **Hours 06:00–21:00 inclusive**, one hour wider than the live chart so an
+  evening shower lands on the chart rather than off the end of it.
+- **Hour axis `6 12 18`** — 24-hour marks matching the `format: "15:04"` the
+  rest of the panel is set in, rather than the live chart's `6 9 12 3 8`,
+  which mixes morning and afternoon on one axis.
+- **A dry day draws nothing at all.** Below a 15% peak across the window the
+  cell is left blank, or carries `DryText` centred. A flat row of stubs reads
+  as a broken widget from across the room; silence does not.
+
+The caller supplies the rect, the label face and the label band height, so one
+renderer serves a 312 px hero cell and a 110 px row badge.
+
+<!-- markdownlint-disable MD013 -->
+| `PrecipChartOptions` field | Description                                                                  |
+|----------------------------|------------------------------------------------------------------------------|
+| `LabelFace`                | Face for the hour labels; `nil` falls back to the package default.            |
+| `LabelHeight`              | Height of the label band. `0` draws no labels and gives the bars the band.    |
+| `NowHour` / `ShowNowMarker`| Draws a 2 px solid `PaperBlack` stroke at the current hour.                   |
+| `ShowGuide`                | Dashed 50% reference line. Off by default; only the wide hero cell wants it.  |
+| `DryText`                  | Drawn centred on a dry day. Empty draws nothing.                             |
+<!-- markdownlint-enable MD013 -->
+
 ## Configuration
 
 Weatherview has **no YAML config of its own**. Its behavior is driven
@@ -61,5 +94,7 @@ widget are the user-facing controls for this component.
 
 - `RenderDayWeather(frame, bounds, day, opts)` — draw a full day cell.
 - `RenderHourlyChart(frame, bounds, hourly, chartOpts)` — just the chart.
+- `RenderPrecipChart(frame, bounds, hourly, precipOpts)` — precipitation-only
+  bars taking the whole cell (see above).
 - `DrawIcon(frame, x, y, size, condition)` — just the condition glyph.
 - `GlobalTempRange(days)` — compute the shared min/max for chart normalization.
