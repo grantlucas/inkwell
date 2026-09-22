@@ -576,24 +576,88 @@ func TestOccurrences_NoDriftPastNonexistentTime(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 02:30 does not exist on 2026-03-08: the clocks go 02:00 → 03:00.
-	start := time.Date(2026, 3, 6, 2, 30, 0, 0, toronto)
-	master := Event{
-		UID:        "early",
-		Start:      start,
-		End:        start.Add(30 * time.Minute),
-		Recurrence: &Recurrence{Freq: FreqDaily},
-	}
-	got := Occurrences([]Event{master}, utc(2026, 3, 1, 0, 0), utc(2026, 3, 13, 0, 0))
+	// Go normalises it backwards to 01:30, which is expected for that
+	// day alone — every later occurrence must be back at 02:30.
+	const normalised = "2026-03-08 01:30"
 
-	// Every occurrence except the impossible one keeps its 02:30 slot.
-	for _, occ := range got {
-		day := occ.Start.In(toronto)
-		if day.Month() == time.March && day.Day() == 8 {
-			continue // the skipped hour; normalisation is expected here
-		}
-		if h, m := day.Hour(), day.Minute(); h != 2 || m != 30 {
-			t.Errorf("%s: local time = %02d:%02d, want 02:30 — the series drifted",
-				day.Format("2006-01-02"), h, m)
-		}
+	tests := []struct {
+		label  string
+		start  time.Time
+		rec    Recurrence
+		winEnd time.Time
+		want   []string // local "2006-01-02 15:04", in order
+	}{
+		{
+			label:  "daily",
+			start:  time.Date(2026, 3, 6, 2, 30, 0, 0, toronto),
+			rec:    Recurrence{Freq: FreqDaily},
+			winEnd: utc(2026, 3, 13, 0, 0),
+			want: []string{
+				"2026-03-06 02:30",
+				"2026-03-07 02:30",
+				normalised,
+				"2026-03-09 02:30",
+				"2026-03-10 02:30",
+				"2026-03-11 02:30",
+				"2026-03-12 02:30",
+			},
+		},
+		{
+			// walkWeekly's no-BYDAY branch. 2026-03-01 is a Sunday, so
+			// the series lands squarely on the transition a week later.
+			label:  "weekly without BYDAY",
+			start:  time.Date(2026, 3, 1, 2, 30, 0, 0, toronto),
+			rec:    Recurrence{Freq: FreqWeekly},
+			winEnd: utc(2026, 3, 26, 0, 0),
+			want: []string{
+				"2026-03-01 02:30",
+				normalised,
+				"2026-03-15 02:30",
+				"2026-03-22 02:30",
+			},
+		},
+		{
+			// walkWeekly's BYDAY branch is separate code with its own
+			// week anchor, and it is the shape Google emits. It never
+			// drifted — its anchor is the Monday of the week, and the
+			// transition falls on a Sunday — so this case passes
+			// against the old accumulating walk too. It is here to keep
+			// the branch pinned, not because it was broken.
+			label:  "weekly with BYDAY",
+			start:  time.Date(2026, 3, 1, 2, 30, 0, 0, toronto),
+			rec:    Recurrence{Freq: FreqWeekly, ByDay: []time.Weekday{time.Sunday}},
+			winEnd: utc(2026, 3, 26, 0, 0),
+			want: []string{
+				"2026-03-01 02:30",
+				normalised,
+				"2026-03-15 02:30",
+				"2026-03-22 02:30",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			rec := tt.rec
+			master := Event{
+				UID:        "early",
+				Start:      tt.start,
+				End:        tt.start.Add(30 * time.Minute),
+				Recurrence: &rec,
+			}
+			got := Occurrences([]Event{master}, utc(2026, 3, 1, 0, 0), tt.winEnd)
+
+			// The full sequence is asserted, not just the clock times:
+			// checking only the times would pass on an empty slice, or
+			// on a walk that dropped or duplicated occurrences.
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d occurrences, want %d", len(got), len(tt.want))
+			}
+			for i, occ := range got {
+				if g := occ.Start.In(toronto).Format("2006-01-02 15:04"); g != tt.want[i] {
+					t.Errorf("occurrence %d = %s, want %s", i, g, tt.want[i])
+				}
+			}
+		})
 	}
 }

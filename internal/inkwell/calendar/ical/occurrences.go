@@ -181,9 +181,12 @@ func walkWeekly(dtstart time.Time, r *Recurrence, interval int, handle func(time
 	})
 
 	for week := range occurrenceSafetyCap {
-		// Each week's anchor is recomputed from the first one, so a
-		// candidate normalised across a DST transition cannot shift
-		// the weeks that follow — see walkDaily.
+		// Each week's anchor is recomputed from the first one rather
+		// than stepped, for the same reason as walkDaily — though this
+		// branch was not observably affected: the anchor is the Monday
+		// of the week and the transitions that matter fall on Sundays,
+		// so it never landed in a skipped hour. Consistency, and the
+		// latent case of a zone that switches midweek.
 		weekAnchor := firstAnchor.AddDate(0, 0, 7*interval*week)
 		for _, wd := range sorted {
 			offset := int(wd-time.Monday+7) % 7
