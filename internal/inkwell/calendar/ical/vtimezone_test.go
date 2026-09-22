@@ -123,6 +123,8 @@ func TestParseUTCOffset(t *testing.T) {
 		{"with seconds", "-000030", -30, true},
 		{"UTC", "+0000", 0, true},
 		{"no sign", "0500", 0, false},
+		// Right length, wrong shape: the sign is mandatory.
+		{"right length but unsigned", "05000", 0, false},
 		{"too short", "-050", 0, false},
 		{"too long", "-05000000", 0, false},
 		{"non-numeric hours", "-ab00", 0, false},
@@ -131,6 +133,12 @@ func TestParseUTCOffset(t *testing.T) {
 		// Atoi accepts a sign, so a nested one would otherwise slip a
 		// negative component into an already-signed offset.
 		{"signed field", "+-50300", 0, false},
+		// Atoi would read each of these as a plausible offset.
+		{"doubled sign", "++530", 0, false},
+		{"sign inside a field", "+05+0", 0, false},
+		{"minutes out of range", "+0099", 0, false},
+		{"hours out of range", "+2400", 0, false},
+		{"seconds out of range", "+010060", 0, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -221,6 +229,10 @@ func TestNthWeekdayOf(t *testing.T) {
 		// The 1st falling on the target weekday must not skip a week.
 		{"first Thursday in January 2026", 2026, time.January, time.Thursday, 1, "2026-01-01"},
 		{"fifth Monday in March 2026", 2026, time.March, time.Monday, 5, "2026-03-30"},
+		// October 2026 has only four Sundays. Producers write 5SU to
+		// mean "the last one", and letting it run on would compute the
+		// fall-back transition a week late.
+		{"fifth Sunday in a month with four", 2026, time.October, time.Sunday, 5, "2026-10-25"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -391,6 +403,131 @@ func TestParse_VTimezoneUnusable(t *testing.T) {
 			want := time.Date(2026, 1, 19, 9, 0, 0, 0, time.UTC)
 			if !events[0].Start.Equal(want) {
 				t.Errorf("Start = %v, want %v (UTC fallback)", events[0].Start, want)
+			}
+		})
+	}
+}
+
+// When one half of the pair is missing or carries a rule this parser
+// cannot read, the zone collapses to a single offset — and it has to be
+// the standard one. A feed listing DAYLIGHT first would otherwise hand
+// back the daylight offset all year, which is an hour wrong for the
+// whole winter rather than for none of it.
+func TestParse_VTimezoneIncompletePairPrefersStandard(t *testing.T) {
+	input := `BEGIN:VCALENDAR
+BEGIN:VTIMEZONE
+TZID:Half Known Zone
+BEGIN:DAYLIGHT
+DTSTART:16010311T020000
+TZOFFSETFROM:-0500
+TZOFFSETTO:-0400
+TZNAME:XDT
+RRULE:FREQ=YEARLY;BYDAY=2SU;BYMONTH=3
+END:DAYLIGHT
+BEGIN:STANDARD
+DTSTART:16011104T020000
+TZOFFSETFROM:-0400
+TZOFFSETTO:-0500
+TZNAME:XST
+RRULE:FREQ=YEARLY;BYDAY=SU;BYSETPOS=-1;BYMONTH=11
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:midsummer
+DTSTART;TZID=Half Known Zone:20260715T090000
+SUMMARY:Midsummer
+END:VEVENT
+END:VCALENDAR
+`
+	events, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	// Standard (-05:00), so 09:00 local is 14:00Z. Taking the first
+	// subcomponent instead would give -04:00 and 13:00Z.
+	want := time.Date(2026, 7, 15, 14, 0, 0, 0, time.UTC)
+	if !events[0].Start.Equal(want) {
+		t.Errorf("Start = %v, want %v", events[0].Start.UTC(), want)
+	}
+}
+
+// A zone defining only DAYLIGHT has no standard half to fall back on,
+// so its single offset is all there is.
+func TestParse_VTimezoneDaylightOnly(t *testing.T) {
+	input := `BEGIN:VCALENDAR
+BEGIN:VTIMEZONE
+TZID:Daylight Only Zone
+BEGIN:DAYLIGHT
+DTSTART:16010311T020000
+TZOFFSETFROM:-0500
+TZOFFSETTO:-0400
+TZNAME:XDT
+END:DAYLIGHT
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:only
+DTSTART;TZID=Daylight Only Zone:20260715T090000
+SUMMARY:Only Daylight
+END:VEVENT
+END:VCALENDAR
+`
+	events, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	want := time.Date(2026, 7, 15, 13, 0, 0, 0, time.UTC) // 09:00 at -04:00
+	if !events[0].Start.Equal(want) {
+		t.Errorf("Start = %v, want %v", events[0].Start.UTC(), want)
+	}
+}
+
+// An EXDATE line carries every value under one TZID, so the zone is
+// resolved once for the line. These pin both halves of that: a list of
+// datetimes reuses the first resolution, and a date-only list never
+// resolves a zone at all (a date needs none).
+func TestParse_EXDATEZoneResolvedOncePerLine(t *testing.T) {
+	tests := []struct {
+		label     string
+		exdate    string
+		wantCount int
+	}{
+		{
+			"several datetimes share one zone",
+			"EXDATE;TZID=Eastern Standard Time:20260120T090000,20260121T090000,20260122T090000",
+			2, // three of five weekdays excluded
+		},
+		{
+			"date-only values need no zone",
+			"EXDATE;VALUE=DATE;TZID=Eastern Standard Time:20260120,20260121",
+			5, // dates never match the datetime instants, so none drop
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			input := "BEGIN:VCALENDAR\n" + windowsEastern +
+				"BEGIN:VEVENT\nUID:recurring\n" +
+				"DTSTART;TZID=Eastern Standard Time:20260119T090000\n" +
+				"DTEND;TZID=Eastern Standard Time:20260119T100000\n" +
+				"RRULE:FREQ=DAILY;COUNT=5\n" +
+				tt.exdate + "\n" +
+				"SUMMARY:Daily\nEND:VEVENT\nEND:VCALENDAR\n"
+
+			events, err := Parse(strings.NewReader(input))
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if len(events) != 1 {
+				t.Fatalf("got %d master events, want 1", len(events))
+			}
+			occ := Occurrences(events, utc(2026, 1, 1, 0, 0), utc(2026, 2, 1, 0, 0))
+			if len(occ) != tt.wantCount {
+				t.Errorf("got %d occurrences, want %d", len(occ), tt.wantCount)
 			}
 		})
 	}

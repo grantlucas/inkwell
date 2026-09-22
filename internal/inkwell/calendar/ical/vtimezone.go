@@ -201,13 +201,16 @@ func parseUTCOffset(s string) (int, bool) {
 	}
 	var total int
 	for _, field := range []struct {
-		from, to, scale int
-	}{{1, 3, 3600}, {3, 5, 60}, {5, 7, 1}} {
+		from, to, scale, limit int
+	}{{1, 3, 3600, 24}, {3, 5, 60, 60}, {5, 7, 1, 60}} {
 		if field.to > len(s) {
 			break
 		}
-		n, err := strconv.Atoi(s[field.from:field.to])
-		if err != nil || n < 0 {
+		// Parsed digit by digit rather than with Atoi: Atoi accepts a
+		// sign inside the field, so "++530" and "+05+0" would come back
+		// as plausible offsets rather than as rejects.
+		n, ok := twoDigits(s[field.from:field.to])
+		if !ok || n >= field.limit {
 			return 0, false
 		}
 		total += n * field.scale
@@ -215,16 +218,42 @@ func parseUTCOffset(s string) (int, bool) {
 	return sign * total, true
 }
 
+// twoDigits reads exactly two ASCII digits.
+func twoDigits(s string) (int, bool) {
+	if len(s) != 2 || s[0] < '0' || s[0] > '9' || s[1] < '0' || s[1] > '9' {
+		return 0, false
+	}
+	return int(s[0]-'0')*10 + int(s[1]-'0'), true
+}
+
 // locationFor returns the zone in effect at the given naive wall time.
 // The returned location is a fixed offset chosen for that instant, not
 // a DST-aware Location — see the note at the top of this file.
+//
+// That has a consequence worth knowing: a *recurring* event resolves
+// its zone once, from DTSTART, and the walkers in occurrences.go then
+// step in whatever fixed offset that produced. A weekly event starting
+// in January therefore keeps January's offset all year, and renders an
+// hour out once the zone switches. Single events, and recurrences that
+// do not cross a switchover, are unaffected. An IANA TZID is unaffected
+// either way, because LoadLocation is tried first and returns a real
+// DST-aware Location — so this only bites a recurring event in a feed
+// that names its zone the Windows way. Closing it properly means
+// synthesising TZif data for time.LoadLocationFromTZData (issue #105).
 func (v *vtimezone) locationFor(wall time.Time) *time.Location {
 	std, dst := v.pair()
 
 	// Without both halves, or without the rules that say when they
-	// swap, the best available answer is the single offset on hand.
+	// swap, the best available answer is a single offset. Standard time
+	// is the one to fall back on: it is what the zone is for most of the
+	// year, and taking the first subcomponent instead would hand a feed
+	// that lists DAYLIGHT first — with a STANDARD rule in a form this
+	// parser does not read — the daylight offset all winter.
 	if std == nil || dst == nil || !std.hasRule || !dst.hasRule {
-		return v.fixedZone(v.rules[0])
+		if std != nil {
+			return v.fixedZone(*std)
+		}
+		return v.fixedZone(*dst)
 	}
 
 	year := wall.Year()
@@ -288,5 +317,14 @@ func nthWeekdayOf(year int, m time.Month, wd time.Weekday, nth, hour, min, sec i
 	}
 	first := time.Date(year, m, 1, hour, min, sec, 0, time.UTC)
 	fwd := int(wd-first.Weekday()+7) % 7
-	return first.AddDate(0, 0, fwd+7*(nth-1))
+	day := first.AddDate(0, 0, fwd+7*(nth-1))
+	// Producers emit BYDAY=5SU for "the last Sunday", and a month with
+	// only four of them would otherwise push the transition into the
+	// next month — computing the fall-back a week late and giving every
+	// event in that week the wrong offset. Clamping matches both that
+	// intent and RFC 5545, which yields no occurrence at all.
+	if day.Month() != m {
+		day = day.AddDate(0, 0, -7)
+	}
+	return day
 }

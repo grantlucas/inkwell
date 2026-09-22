@@ -127,15 +127,15 @@ func Parse(r io.Reader) ([]Event, error) {
 				// parse as UTC and fail to match the corresponding
 				// TZID-anchored occurrence instant.
 				params, _, _ := cutProperty(line)
+				// The zone is resolved per value, because a VTIMEZONE
+				// offset depends on which side of a switchover the
+				// value falls. Resolution is memoised per line so an
+				// unknown TZID logs once rather than once per value —
+				// a 50-date EXDATE line would otherwise emit fifty
+				// identical lines on every refresh cycle.
+				resolve := memoiseZone(params, zones)
 				for v := range strings.SplitSeq(value, ",") {
-					// The zone is resolved per value: a VTIMEZONE
-					// offset depends on which side of a switchover
-					// the value falls, so it cannot be hoisted.
-					var loc *time.Location
-					if wall, ok := naiveWall(v); ok {
-						loc = extractTZID(params, zones, wall)
-					}
-					t, err := parseICSTime(v, loc)
+					t, err := parseICSTime(v, resolve(v))
 					if err != nil {
 						return nil, fmt.Errorf("parse EXDATE %q: %w", v, err)
 					}
@@ -341,6 +341,36 @@ func extractTZID(params string, zones map[string]*vtimezone, wall time.Time) *ti
 		}
 	}
 	return nil
+}
+
+// memoiseZone returns a per-value zone resolver for one property line
+// that resolves at most once. Every value on the line shares the same
+// TZID, so a second lookup can only repeat the first one's work — and,
+// when the zone is unknown, its log line.
+//
+// The offset can still differ per value across a switchover; the first
+// resolved location is reused deliberately, because an EXDATE list
+// spanning a transition is not worth a log line per entry. DTSTART and
+// DTEND, which is where the offset actually matters, resolve on their
+// own lines.
+func memoiseZone(params string, zones map[string]*vtimezone) func(string) *time.Location {
+	var (
+		loc  *time.Location
+		done bool
+	)
+	return func(v string) *time.Location {
+		if done {
+			return loc
+		}
+		wall, ok := naiveWall(v)
+		if !ok {
+			// Date-only or Z-suffixed: unambiguous already, and no
+			// reason to burn the single resolution on it.
+			return nil
+		}
+		loc, done = extractTZID(params, zones, wall), true
+		return loc
+	}
 }
 
 // naiveWall reads the wall-clock fields of an iCal datetime value,
