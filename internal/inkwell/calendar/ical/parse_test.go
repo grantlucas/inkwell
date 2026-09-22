@@ -484,6 +484,16 @@ func TestExtractTZID(t *testing.T) {
 		{"quoted IANA name", `DTSTART;TZID="America/Toronto"`, "America/Toronto"},
 		{"quoted, after another param", `DTSTART;VALUE=DATE-TIME;TZID="America/Toronto"`, "America/Toronto"},
 		{"unknown name still falls back", "DTSTART;TZID=Fake/Zone", ""},
+		// A quoted value may carry its own ';' (RFC 5545 3.1). Splitting
+		// the parameter list on every semicolon tears such a value in
+		// half, and the fragments are then scanned for a TZID= prefix
+		// like any other segment — so a decoy inside the quotes wins
+		// over the real parameter that follows it.
+		{
+			"semicolon inside a quoted value does not split it",
+			`DTSTART;X-LIC-LOCATION="Foo;TZID=Fake/Zone";TZID=America/Toronto`,
+			"America/Toronto",
+		},
 	}
 
 	for _, tt := range tests {
