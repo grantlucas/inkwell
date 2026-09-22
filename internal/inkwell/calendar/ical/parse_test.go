@@ -471,19 +471,64 @@ func TestParseDateTime_TZID_Unknown(t *testing.T) {
 }
 
 func TestExtractTZID(t *testing.T) {
-	loc := extractTZID("DTSTART;TZID=America/Toronto")
-	if loc == nil {
-		t.Fatal("expected non-nil location")
+	tests := []struct {
+		label  string
+		params string
+		want   string // "" means nil location (fall back to UTC)
+	}{
+		{"bare IANA name", "DTSTART;TZID=America/Toronto", "America/Toronto"},
+		{"no TZID parameter", "DTSTART;VALUE=DATE-TIME", ""},
+		// RFC 5545 3.1 permits a quoted param value. Handing the
+		// quotes to LoadLocation fails the lookup, so the event
+		// silently renders hours off in UTC.
+		{"quoted IANA name", `DTSTART;TZID="America/Toronto"`, "America/Toronto"},
+		{"quoted, after another param", `DTSTART;VALUE=DATE-TIME;TZID="America/Toronto"`, "America/Toronto"},
+		{"unknown name still falls back", "DTSTART;TZID=Fake/Zone", ""},
 	}
-	if loc.String() != "America/Toronto" {
-		t.Errorf("got %v, want America/Toronto", loc)
+
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			loc := extractTZID(tt.params)
+			switch {
+			case tt.want == "":
+				if loc != nil {
+					t.Errorf("got %v, want nil", loc)
+				}
+			case loc == nil:
+				t.Fatalf("got nil, want %s", tt.want)
+			case loc.String() != tt.want:
+				t.Errorf("got %v, want %s", loc, tt.want)
+			}
+		})
 	}
 }
 
-func TestExtractTZID_None(t *testing.T) {
-	loc := extractTZID("DTSTART;VALUE=DATE-TIME")
-	if loc != nil {
-		t.Error("expected nil for no TZID")
+// A param value only *needs* quoting when it contains ':', ';' or ','
+// (RFC 5545 3.1). Cutting the property at its first colon therefore
+// lands inside the quoted value, leaving a value of
+// `Eastern":20260919T104500` — which fails to parse and takes the
+// whole feed down with it, rather than degrading to UTC.
+func TestParse_QuotedTZIDContainingColon(t *testing.T) {
+	input := `BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:quoted-colon
+DTSTART;TZID="Customized Time Zone: Eastern":20260919T104500
+SUMMARY:Quoted Zone
+END:VEVENT
+END:VCALENDAR
+`
+	events, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	// The zone name is not IANA, so it falls back to UTC — but the
+	// wall-clock time must survive intact.
+	want := time.Date(2026, 9, 19, 10, 45, 0, 0, time.UTC)
+	if !events[0].Start.Equal(want) {
+		t.Errorf("Start = %v, want %v", events[0].Start, want)
 	}
 }
 
