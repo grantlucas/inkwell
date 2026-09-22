@@ -1,0 +1,208 @@
+package boldfive
+
+import (
+	"fmt"
+	"image"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+)
+
+const (
+	// eventsPadX keeps text off the column divider on both sides.
+	eventsPadX = 6
+	// eventsTopPad puts the first baseline 26 px below the rule.
+	eventsTopPad = 12
+	// eventsGap separates one event from the next. Events are variable
+	// height — a one-line title costs two rows, a wrapped one costs
+	// three — so a fixed grid would either waste the short ones or
+	// clip the long ones.
+	eventsGap = 8
+	// maxTitleLines caps a single title so one long summary cannot eat
+	// the whole column.
+	maxTitleLines = 2
+)
+
+// eventOptions carries the per-render knobs from widget config.
+//
+// Location is the zone event clock labels are rendered in. A parsed
+// Event.Start is a correct instant but carries whatever zone its feed
+// serialized it with, so formatting it directly would leak that zone
+// onto the panel. It must never be nil; parseConfig defaults it.
+type eventOptions struct {
+	MaxEvents    int
+	ShowLocation bool
+	Location     *time.Location
+}
+
+// eventPlan is one event resolved to the exact rows that will be drawn,
+// so the draw pass never re-wraps and cannot disagree with the
+// measurement that decided the event fit.
+type eventPlan struct {
+	timeLine   string
+	titleLines []string
+}
+
+// rows is how many text rows the plan occupies.
+func (p eventPlan) rows() int { return 1 + len(p.titleLines) }
+
+// renderEvents draws a day's agenda into bounds and returns how many
+// events were drawn. A rule is drawn along the top of the cell to
+// separate the agenda from the weather band above it.
+func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calendar.Event, opts eventOptions) int {
+	drawHLine(frame, bounds.Min.X, bounds.Max.X, bounds.Min.Y, widget.PaperBlack)
+
+	maxChars := (bounds.Dx() - 2*eventsPadX) / bodyAdvance()
+	if maxChars < 3 {
+		// Narrower than this and a title is punctuation; drawing a
+		// column of ellipses reads as a fault rather than as content.
+		return 0
+	}
+
+	lineH := bodyLineH()
+	x := bounds.Min.X + eventsPadX
+	y := bounds.Min.Y + eventsTopPad + bodyAscent()
+
+	if len(events) == 0 {
+		drawTextCentered(frame, bounds.Min.X, bounds.Max.X, y, "--", bodyFace)
+		return 0
+	}
+
+	limit := min(opts.MaxEvents, len(events))
+	drawn := 0
+	for _, e := range events[:limit] {
+		p := planEvent(e, maxChars, opts)
+		// The whole event has to fit, title included: a time line with
+		// its title clipped off below is worse than not showing the
+		// event, because it reads as an event with no name.
+		if y+(p.rows()-1)*lineH > bounds.Max.Y {
+			break
+		}
+		drawText(frame, x, y, p.timeLine, bodyBoldFace)
+		y += lineH
+		for _, line := range p.titleLines {
+			drawText(frame, x, y, line, bodyFace)
+			y += lineH
+		}
+		y += eventsGap
+		drawn++
+	}
+
+	if remaining := len(events) - drawn; remaining > 0 && y <= bounds.Max.Y {
+		drawText(frame, x, y, fmt.Sprintf("+%d MORE", remaining), bodyBoldFace)
+	}
+	return drawn
+}
+
+// planEvent resolves one event to its drawn rows.
+func planEvent(e calendar.Event, maxChars int, opts eventOptions) eventPlan {
+	timeLine := "ALL DAY"
+	if !e.AllDay {
+		timeLine = e.Start.In(opts.Location).Format("15:04")
+	}
+	title := e.Summary
+	if opts.ShowLocation && e.Location != "" {
+		title += " @ " + e.Location
+	}
+	return eventPlan{
+		timeLine:   truncate(timeLine, maxChars),
+		titleLines: wrapText(title, maxChars, maxTitleLines),
+	}
+}
+
+// wrapText breaks text into at most maxLines lines of at most maxChars,
+// preferring word boundaries and ellipsing whatever will not fit.
+func wrapText(text string, maxChars, maxLines int) []string {
+	fields := strings.Fields(text)
+	if len(fields) == 0 {
+		return nil
+	}
+
+	var lines []string
+	cur := fields[0]
+	for _, w := range fields[1:] {
+		if len(cur)+1+len(w) <= maxChars {
+			cur += " " + w
+			continue
+		}
+		lines = append(lines, cur)
+		cur = w
+	}
+	lines = append(lines, cur)
+
+	// A single word longer than the line is broken rather than left to
+	// overhang the column divider.
+	var split []string
+	for _, l := range lines {
+		for len(l) > maxChars {
+			split = append(split, l[:maxChars])
+			l = l[maxChars:]
+		}
+		split = append(split, l)
+	}
+
+	if len(split) > maxLines {
+		split = split[:maxLines]
+		split[maxLines-1] = truncate(split[maxLines-1]+"…", maxChars)
+	}
+	return split
+}
+
+// truncate shortens s to maxChars, marking the cut with an ellipsis when
+// there is room for one.
+func truncate(s string, maxChars int) string {
+	r := []rune(s)
+	if len(r) <= maxChars {
+		return s
+	}
+	if maxChars <= 1 {
+		return string(r[:maxChars])
+	}
+	return string(r[:maxChars-1]) + "…"
+}
+
+// filterEventsForDay returns the events overlapping [dayStart, dayEnd),
+// all-day first and then by start time.
+//
+// All-day events are calendar date labels, not instants: an iCal
+// VALUE=DATE is anchored to UTC midnight by the parser, but the day
+// columns are built in the viewer's local zone. Comparing the two as
+// instants leaks an all-day event into the previous local day in any
+// negative-UTC zone — a Thursday trip showing up on Wednesday in
+// America/Toronto. So all-day events are bucketed by their date
+// components alone, zone-independently, and instant overlap is reserved
+// for timed events.
+func filterEventsForDay(events []calendar.Event, dayStart, dayEnd time.Time) []calendar.Event {
+	col := dateOnly(dayStart)
+	var out []calendar.Event
+	for _, e := range events {
+		var overlaps bool
+		if e.AllDay {
+			// DTEND is exclusive, so the column date must satisfy
+			// start <= col < end.
+			overlaps = !col.Before(dateOnly(e.Start)) && col.Before(dateOnly(e.End))
+		} else {
+			overlaps = e.Start.Before(dayEnd) && e.End.After(dayStart)
+		}
+		if overlaps {
+			out = append(out, e)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].AllDay != out[j].AllDay {
+			return out[i].AllDay
+		}
+		return out[i].Start.Before(out[j].Start)
+	})
+	return out
+}
+
+// dateOnly strips the clock and zone from t, returning a comparable
+// midnight-UTC anchor of its calendar date.
+func dateOnly(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
