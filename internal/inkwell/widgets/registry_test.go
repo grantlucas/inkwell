@@ -105,3 +105,20 @@ func TestDefaultRegistry_ContainsTodayHero(t *testing.T) {
 		t.Fatal("expected non-nil widget")
 	}
 }
+
+func TestDefaultRegistry_ContainsRowAgenda(t *testing.T) {
+	r := widgets.NewDefaultRegistry()
+	deps := widget.Deps{Now: func() time.Time {
+		return time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
+	}}
+
+	w, err := r.Create("row-agenda", image.Rect(0, 0, 800, 480), map[string]any{
+		"feeds": []any{"https://example.com/a.ics"},
+	}, deps)
+	if err != nil {
+		t.Fatalf("Create row-agenda: %v", err)
+	}
+	if w == nil {
+		t.Fatal("expected non-nil widget")
+	}
+}
