@@ -11,7 +11,6 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar/ical"
-	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
@@ -349,25 +348,6 @@ type stubHTTPClient struct{ called bool }
 func (s *stubHTTPClient) Do(_ *nethttp.Request) (*nethttp.Response, error) {
 	s.called = true
 	return nil, context.DeadlineExceeded
-}
-
-// mustLoadFace runs at package init with valid embedded fonts. Pin its
-// failure branch by swapping in data that will not parse.
-func TestMustLoadFace_PanicsOnFontError(t *testing.T) {
-	restore := fonts.SwapDataForTest([]byte("bad"), []byte("bad"))
-	defer restore()
-
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Fatal("expected a panic")
-		}
-		msg, ok := r.(string)
-		if !ok || !strings.Contains(msg, "boldfive: load smoke font") {
-			t.Errorf("panic = %v, want a string naming the failed face", r)
-		}
-	}()
-	_ = mustLoadFace(fonts.Regular, 16, "smoke")
 }
 
 // With no weather_source injected, the widget draws from the shared

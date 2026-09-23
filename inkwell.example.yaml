@@ -153,3 +153,42 @@ dashboard:
     #         # top-level weather: block; override per widget if needed.
     #         #   temp_unit: F
     #         #   weather_model: ecmwf
+
+    # A third screen: today-hero. Today at reading distance down the
+    # left of the panel, the rest of the week as one-line rows down the
+    # right. The bet is that from across the room you only ever want
+    # today, and the week is a glance you take once you have walked up
+    # to it — so the panel is spent unevenly rather than evenly.
+    #
+    # It has the best precipitation chart of the three new screens (15 px
+    # bars with a marker at the current hour, wide enough that an
+    # afternoon band reads as a band), and today's agenda shows only
+    # what is left of the day — "DONE FOR TODAY" once nothing is.
+    #
+    # What it gives up: there is no precipitation chart in the day rows.
+    # A 462 px row cannot carry a legible bar chart and a legible title
+    # at the same time. Future-day rain is the condition icon and
+    # nothing more, so this is the one screen where the week's rain
+    # timing is genuinely missing — if that matters, bold-five is the
+    # screen that keeps it.
+    #
+    # - name: today-hero
+    #   widgets:
+    #     - type: today-hero
+    #       bounds: [0, 0, 800, 480]
+    #       refresh: "15m"   # how often it may refresh the panel
+    #       config:
+    #         # The shared calendar keys, same as weekly-calendar and
+    #         # bold-five. The weekly-calendar keys this screen has no
+    #         # equivalent for — days, week_start, show_weather,
+    #         # show_weather_label, highlight_hour — are rejected with
+    #         # an explanation rather than silently ignored.
+    #         feeds:
+    #           - "https://example.com/my-calendar.ics"
+    #         max_events: 3        # today's agenda; the scaled time and
+    #                              # wrapped title make each one tall
+    #         show_location: false
+    #         refresh: "15m"       # calendar cache TTL, NOT the panel
+    #                              # refresh cadence above
+    #         # Location, model and temp_unit are inherited from the
+    #         # top-level weather: block; override per widget if needed.

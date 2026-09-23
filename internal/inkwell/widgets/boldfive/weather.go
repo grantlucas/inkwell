@@ -7,6 +7,8 @@ import (
 	"math"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
@@ -76,11 +78,11 @@ func renderWeatherBand(frame *image.Paletted, bounds image.Rectangle, day weathe
 		unit = "F"
 	}
 	rightEdge := bounds.Max.X - tempPadX
-	scaled(bodyBoldFace, hiScale).DrawRight(
+	daygrid.Scaled(daygrid.BodyBoldFace, hiScale, widget.PaperBlack).DrawRight(
 		frame, rightEdge, top+hiBaseline,
 		fmt.Sprintf("%d°%s", int(math.Round(hi)), unit),
 	)
-	drawTextRight(frame, rightEdge, top+loBaseline, fmt.Sprintf("%d°", int(math.Round(lo))), bodyFace)
+	daygrid.DrawTextRight(frame, rightEdge, top+loBaseline, fmt.Sprintf("%d°", int(math.Round(lo))), daygrid.BodyFace, widget.PaperBlack)
 
 	chart := image.Rect(
 		bounds.Min.X+chartPadX, top+chartTop,

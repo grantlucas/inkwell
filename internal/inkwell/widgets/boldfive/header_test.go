@@ -7,11 +7,12 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 )
 
 func newTestFrame(w, h int) *image.Paletted {
 	frame := image.NewPaletted(image.Rect(0, 0, w, h), widget.PaperPalette)
-	fillWhite(frame, frame.Bounds())
+	daygrid.FillWhite(frame, frame.Bounds())
 	return frame
 }
 

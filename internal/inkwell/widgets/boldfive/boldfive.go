@@ -54,7 +54,7 @@ func (w *Widget) Bounds() image.Rectangle { return w.bounds }
 
 // Render draws five day columns starting with today.
 func (w *Widget) Render(frame *image.Paletted) error {
-	fillWhite(frame, w.bounds)
+	daygrid.FillWhite(frame, w.bounds)
 
 	// Too short to draw into without spilling past the widget's bounds
 	// and over its neighbour on the shared frame. A blank region is a
@@ -121,7 +121,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 			// Solid PaperBlack: a PaperGrayNN hairline snaps to white
 			// under the BW threshold and vanishes into Gray4's light
 			// bucket, so it would read as a divider on neither mode.
-			drawVLine(frame, col.Bounds.Max.X-1, w.bounds.Min.Y, w.bounds.Max.Y, widget.PaperBlack)
+			daygrid.DrawVLine(frame, col.Bounds.Max.X-1, w.bounds.Min.Y, w.bounds.Max.Y, widget.PaperBlack)
 		}
 	}
 	return nil

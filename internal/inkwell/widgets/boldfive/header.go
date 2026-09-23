@@ -5,6 +5,9 @@ import (
 	"image"
 	"strings"
 	"time"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 )
 
 const (
@@ -31,16 +34,16 @@ const (
 // half-finished.) TestRenderDayHeader_TodayIsNotHighlighted pins this,
 // because it is a decision rather than an omission.
 func renderDayHeader(frame *image.Paletted, bounds image.Rectangle, day time.Time) {
-	ascent := bodyAscent()
+	ascent := daygrid.BodyAscent()
 
 	weekday := strings.ToUpper(day.Format("Mon"))
-	scaled(bodyBoldFace, weekdayScale).DrawCentered(
+	daygrid.Scaled(daygrid.BodyBoldFace, weekdayScale, widget.PaperBlack).DrawCentered(
 		frame, bounds.Min.X, bounds.Max.X,
 		bounds.Min.Y+weekdayTop+ascent*weekdayScale,
 		weekday,
 	)
 
-	scaled(bodyBoldFace, dateScale).DrawCentered(
+	daygrid.Scaled(daygrid.BodyBoldFace, dateScale, widget.PaperBlack).DrawCentered(
 		frame, bounds.Min.X, bounds.Max.X,
 		bounds.Min.Y+dateTop+ascent*dateScale,
 		fmt.Sprintf("%d", day.Day()),
