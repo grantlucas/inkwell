@@ -7,6 +7,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 )
 
 func eventsRect() image.Rectangle {
@@ -196,7 +197,7 @@ func TestRenderEvents_TooNarrow(t *testing.T) {
 func TestRenderEvents_DoesNotClipAnEventInHalf(t *testing.T) {
 	events := []calendar.Event{timedEvent("One", 9), timedEvent("Two", 10)}
 	// Room for one event's three rows but not two.
-	short := image.Rect(0, 216, 160, 216+eventsTopPad+3*bodyLineH())
+	short := image.Rect(0, 216, 160, 216+eventsTopPad+3*daygrid.BodyLineH())
 	frame := newTestFrame(160, 480)
 	if got := renderEvents(frame, short, events, defaultEventOpts()); got != 1 {
 		t.Errorf("drawn = %d, want 1", got)

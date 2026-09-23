@@ -9,6 +9,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 )
 
 const (
@@ -53,21 +54,21 @@ func (p eventPlan) rows() int { return 1 + len(p.titleLines) }
 // events were drawn. A rule is drawn along the top of the cell to
 // separate the agenda from the weather band above it.
 func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calendar.Event, opts eventOptions) int {
-	drawHLine(frame, bounds.Min.X, bounds.Max.X, bounds.Min.Y, widget.PaperBlack)
+	daygrid.DrawHLine(frame, bounds.Min.X, bounds.Max.X, bounds.Min.Y, widget.PaperBlack)
 
-	maxChars := (bounds.Dx() - 2*eventsPadX) / bodyAdvance()
+	maxChars := (bounds.Dx() - 2*eventsPadX) / daygrid.BodyAdvance()
 	if maxChars < 3 {
 		// Narrower than this and a title is punctuation; drawing a
 		// column of ellipses reads as a fault rather than as content.
 		return 0
 	}
 
-	lineH := bodyLineH()
+	lineH := daygrid.BodyLineH()
 	x := bounds.Min.X + eventsPadX
-	y := bounds.Min.Y + eventsTopPad + bodyAscent()
+	y := bounds.Min.Y + eventsTopPad + daygrid.BodyAscent()
 
 	if len(events) == 0 {
-		drawTextCentered(frame, bounds.Min.X, bounds.Max.X, y, "--", bodyFace)
+		daygrid.DrawTextCentered(frame, bounds.Min.X, bounds.Max.X, y, "--", daygrid.BodyFace, widget.PaperBlack)
 		return 0
 	}
 
@@ -85,10 +86,10 @@ func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calend
 		if y+(p.rows()-1)*lineH > bounds.Max.Y {
 			break
 		}
-		drawText(frame, x, y, p.timeLine, bodyBoldFace)
+		daygrid.DrawText(frame, x, y, p.timeLine, daygrid.BodyBoldFace, widget.PaperBlack)
 		y += lineH
 		for _, line := range p.titleLines {
-			drawText(frame, x, y, line, bodyFace)
+			daygrid.DrawText(frame, x, y, line, daygrid.BodyFace, widget.PaperBlack)
 			y += lineH
 		}
 		y += eventsGap
@@ -99,7 +100,7 @@ func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calend
 		// Fitted to the column like every other row: on a narrow
 		// column "+12 MORE" is wider than the cell and would overhang
 		// the divider into the next day's agenda.
-		drawText(frame, x, y, truncate(fmt.Sprintf("+%d MORE", remaining), maxChars), bodyBoldFace)
+		daygrid.DrawText(frame, x, y, truncate(fmt.Sprintf("+%d MORE", remaining), maxChars), daygrid.BodyBoldFace, widget.PaperBlack)
 	}
 	return drawn
 }
