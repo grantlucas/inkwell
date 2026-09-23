@@ -33,13 +33,12 @@ const FetchTimeout = 10 * time.Second
 // which screen — and the caller renders with whatever arrived. A nil
 // weather source is not a failure: it means the screen was configured
 // without weather.
-func Fetch(ctx context.Context, widgetName string, cal calendar.Source, ws weather.Source, days []Day, loc weather.Location) ([]calendar.Event, []weather.DailyForecast) {
+func Fetch(ctx context.Context, widgetName string, cal calendar.Source, ws weather.Source, days []Day, loc weather.Location) Result {
 	start, end := Window(days)
 
 	var (
-		wg       sync.WaitGroup
-		events   []calendar.Event
-		forecast []weather.DailyForecast
+		wg  sync.WaitGroup
+		out Result
 	)
 
 	wg.Go(func() {
@@ -49,7 +48,7 @@ func Fetch(ctx context.Context, widgetName string, cal calendar.Source, ws weath
 		}
 		// Kept even alongside an error: a partial result is still
 		// worth drawing, and the sources return what they managed.
-		events = got
+		out.Events = got
 	})
 
 	if ws != nil {
@@ -58,15 +57,39 @@ func Fetch(ctx context.Context, widgetName string, cal calendar.Source, ws weath
 			if err != nil {
 				log.Printf("%s: fetch weather forecast: %v", widgetName, err)
 			}
-			if f != nil {
-				forecast = f.Days
-			}
+			out.Forecast = f
 		})
 	}
 
 	wg.Wait()
-	return events, forecast
+	return out
 }
+
+// Result is what one render's fetch produced.
+//
+// Forecast is kept as the pointer the source returned rather than
+// flattened to its days, because "no forecast arrived" and "a forecast
+// arrived carrying no days" are different states and at least one
+// screen distinguishes them: weekly-calendar gives its weather band
+// height to whether a forecast came back at all. A 200 response with
+// no daily data yields a non-nil Forecast with no Days, and flattening
+// would collapse the band for that cycle.
+type Result struct {
+	Events   []calendar.Event
+	Forecast *weather.Forecast
+}
+
+// Days is the forecast's days, or nil when no forecast arrived.
+func (r Result) Days() []weather.DailyForecast {
+	if r.Forecast == nil {
+		return nil
+	}
+	return r.Forecast.Days
+}
+
+// HasForecast reports whether a forecast came back, regardless of
+// whether it carried any days.
+func (r Result) HasForecast() bool { return r.Forecast != nil }
 
 // FetchContext returns the render-scope context the screens share, and
 // its cancel. Split out so every screen spells the budget the same way.

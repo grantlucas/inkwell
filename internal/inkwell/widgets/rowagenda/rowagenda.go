@@ -70,7 +70,8 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	ctx, cancel := daygrid.FetchContext()
 	defer cancel()
 
-	events, forecastDays := daygrid.Fetch(ctx, widgetName, w.cal, w.weather, days, w.config.Weather.Location())
+	fetched := daygrid.Fetch(ctx, widgetName, w.cal, w.weather, days, w.config.Weather.Location())
+	events, forecastDays := fetched.Events, fetched.Days()
 
 	eventOpts := eventOptions{ShowLocation: w.config.ShowLocation, Location: loc}
 

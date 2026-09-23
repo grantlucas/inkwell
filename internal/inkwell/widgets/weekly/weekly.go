@@ -96,12 +96,15 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	if !w.config.ShowWeather {
 		ws = nil
 	}
-	events, forecastDays := daygrid.Fetch(ctx, widgetName, w.cal, ws, days, w.config.Weather.Location())
+	fetched := daygrid.Fetch(ctx, widgetName, w.cal, ws, days, w.config.Weather.Location())
+	events, forecastDays := fetched.Events, fetched.Days()
 
-	// The weather band only takes space when there is a forecast to
-	// put in it; otherwise the height goes back to the events.
+	// The band's height follows from whether a forecast came back at
+	// all, not from whether it carried any days: a 200 response with
+	// no daily data is a non-nil Forecast with none, and collapsing
+	// the band for that would reflow the whole screen for one cycle.
 	weatherH := 0
-	if len(forecastDays) > 0 {
+	if fetched.HasForecast() {
 		weatherH = defaultWeatherH
 	}
 
