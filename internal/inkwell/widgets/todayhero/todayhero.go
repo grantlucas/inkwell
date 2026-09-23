@@ -15,8 +15,20 @@ import (
 
 var _ widget.Widget = (*Widget)(nil)
 
-// fetchTimeout bounds the calendar and weather fetches together, so a
-// slow upstream on either side cannot stall the render loop.
+// fetchTimeout bounds the calendar and weather fetches *together*, so a
+// slow upstream on either side cannot stall the render loop for longer
+// than this in total. The render loop is what the budget protects, and
+// it does not care which of the two was slow.
+//
+// The cost is that a calendar fetch which eats the whole budget leaves
+// the weather call with an expired context, and that render falls back
+// to the weather cache or draws no weather at all. That is a visible
+// degradation for one cycle, recovered on the next, and it is the
+// trade weekly-calendar already makes for the same reason. Fetching
+// the two concurrently under the shared deadline would remove the
+// starvation without widening the bound — worth doing for all four
+// screens at once in daygrid rather than for this one in isolation
+// (issue #111).
 const fetchTimeout = 10 * time.Second
 
 // Config holds parsed today-hero configuration. The keys match

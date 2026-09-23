@@ -178,7 +178,11 @@ dashboard:
     #       bounds: [0, 0, 800, 480]
     #       refresh: "15m"   # how often it may refresh the panel
     #       config:
-    #         # Same keys as weekly-calendar and bold-five.
+    #         # The shared calendar keys, same as weekly-calendar and
+    #         # bold-five. The weekly-calendar keys this screen has no
+    #         # equivalent for — days, week_start, show_weather,
+    #         # show_weather_label, highlight_hour — are rejected with
+    #         # an explanation rather than silently ignored.
     #         feeds:
     #           - "https://example.com/my-calendar.ics"
     #         max_events: 3        # today's agenda; the scaled time and
