@@ -1,7 +1,6 @@
 package rowagenda
 
 import (
-	"context"
 	"image"
 	"log"
 	"net/http"
@@ -14,10 +13,6 @@ import (
 )
 
 var _ widget.Widget = (*Widget)(nil)
-
-// fetchTimeout bounds the calendar and weather fetches together, so a
-// slow upstream on either side cannot stall the render loop.
-const fetchTimeout = 10 * time.Second
 
 // Config holds parsed row-agenda configuration. The keys match
 // weekly-calendar's, so a screen can be swapped between them in the
@@ -71,28 +66,11 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	now := w.now()
 	loc := now.Location()
 	days := daygrid.Days(now, rows)
-	winStart, winEnd := daygrid.Window(days)
 
-	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+	ctx, cancel := daygrid.FetchContext()
 	defer cancel()
 
-	// A fetch failure must not blank the panel: render with whatever
-	// arrived and log so it reaches the operator's terminal.
-	events, err := w.cal.Events(ctx, winStart, winEnd)
-	if err != nil {
-		log.Printf("rowagenda: fetch calendar events: %v", err)
-	}
-
-	var forecastDays []weather.DailyForecast
-	if w.weather != nil {
-		f, err := w.weather.Forecast(ctx, w.config.Weather.Location(), rows)
-		if err != nil {
-			log.Printf("rowagenda: fetch weather forecast: %v", err)
-		}
-		if f != nil {
-			forecastDays = f.Days
-		}
-	}
+	events, forecastDays := daygrid.Fetch(ctx, widgetName, w.cal, w.weather, days, w.config.Weather.Location())
 
 	eventOpts := eventOptions{ShowLocation: w.config.ShowLocation, Location: loc}
 

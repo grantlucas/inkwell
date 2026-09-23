@@ -1,7 +1,6 @@
 package todayhero
 
 import (
-	"context"
 	"image"
 	"log"
 	"net/http"
@@ -14,22 +13,6 @@ import (
 )
 
 var _ widget.Widget = (*Widget)(nil)
-
-// fetchTimeout bounds the calendar and weather fetches *together*, so a
-// slow upstream on either side cannot stall the render loop for longer
-// than this in total. The render loop is what the budget protects, and
-// it does not care which of the two was slow.
-//
-// The cost is that a calendar fetch which eats the whole budget leaves
-// the weather call with an expired context, and that render falls back
-// to the weather cache or draws no weather at all. That is a visible
-// degradation for one cycle, recovered on the next, and it is the
-// trade weekly-calendar already makes for the same reason. Fetching
-// the two concurrently under the shared deadline would remove the
-// starvation without widening the bound — worth doing for all four
-// screens at once in daygrid rather than for this one in isolation
-// (issue #111).
-const fetchTimeout = 10 * time.Second
 
 // Config holds parsed today-hero configuration. The keys match
 // weekly-calendar's, so a screen can be swapped between them in the
@@ -85,28 +68,11 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	now := w.now()
 	loc := now.Location()
 	days := daygrid.Days(now, totalDays)
-	winStart, winEnd := daygrid.Window(days)
 
-	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+	ctx, cancel := daygrid.FetchContext()
 	defer cancel()
 
-	// A fetch failure must not blank the panel: render with whatever
-	// arrived and log so it reaches the operator's terminal.
-	events, err := w.cal.Events(ctx, winStart, winEnd)
-	if err != nil {
-		log.Printf("todayhero: fetch calendar events: %v", err)
-	}
-
-	var forecastDays []weather.DailyForecast
-	if w.weather != nil {
-		f, err := w.weather.Forecast(ctx, w.config.Weather.Location(), totalDays)
-		if err != nil {
-			log.Printf("todayhero: fetch weather forecast: %v", err)
-		}
-		if f != nil {
-			forecastDays = f.Days
-		}
-	}
+	events, forecastDays := daygrid.Fetch(ctx, widgetName, w.cal, w.weather, days, w.config.Weather.Location())
 
 	eventOpts := eventOptions{
 		MaxEvents:    w.config.MaxEvents,
