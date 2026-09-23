@@ -9,12 +9,22 @@ import (
 )
 
 // Day is one column or row of the grid: the local midnight it starts
-// at, the local midnight it ends at, and whether it is today.
+// at, and whether it is today.
+//
+// The end is a method rather than a field so it cannot be left out. A
+// Day literal missing its end would make the timed-event branch of
+// FilterEventsForDay compare against the zero time, which is never
+// after anything — the column would come back with its all-day events
+// and none of its timed ones, which looks like a quiet day rather than
+// a bug. Days is the intended producer, but the type is exported and
+// tests build literals, so the trap is worth closing in the type.
 type Day struct {
 	Start   time.Time
-	End     time.Time
 	IsToday bool
 }
+
+// End is the local midnight the day runs to, exclusive.
+func (d Day) End() time.Time { return d.Start.AddDate(0, 0, 1) }
 
 // Days builds n consecutive days starting from the local midnight of
 // now, in now's own location.
@@ -30,10 +40,8 @@ func Days(now time.Time, n int) []Day {
 
 	days := make([]Day, 0, max(n, 0))
 	for i := range n {
-		start := today.AddDate(0, 0, i)
 		days = append(days, Day{
-			Start:   start,
-			End:     start.AddDate(0, 0, 1),
+			Start:   today.AddDate(0, 0, i),
 			IsToday: i == 0,
 		})
 	}
@@ -46,7 +54,7 @@ func Window(days []Day) (start, end time.Time) {
 	if len(days) == 0 {
 		return time.Time{}, time.Time{}
 	}
-	return days[0].Start, days[len(days)-1].End
+	return days[0].Start, days[len(days)-1].End()
 }
 
 // FilterEventsForDay returns the events overlapping the day, all-day
@@ -73,7 +81,7 @@ func FilterEventsForDay(events []calendar.Event, day Day) []calendar.Event {
 			// start <= col < end.
 			overlaps = !col.Before(dateOnly(e.Start)) && col.Before(dateOnly(e.End))
 		} else {
-			overlaps = e.Start.Before(day.End) && e.End.After(day.Start)
+			overlaps = e.Start.Before(day.End()) && e.End.After(day.Start)
 		}
 		if overlaps {
 			out = append(out, e)

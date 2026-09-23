@@ -633,7 +633,7 @@ func TestColumnAndLabelAgreeAcrossZones(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
-			dayEvents := daygrid.FilterEventsForDay(tc.events, daygrid.Day{Start: tc.day, End: tc.day.AddDate(0, 0, 1)})
+			dayEvents := daygrid.FilterEventsForDay(tc.events, daygrid.Day{Start: tc.day})
 			plan := planEvents(dayEvents, 40, 20, eventOptions{MaxEvents: 10, Location: tc.loc})
 
 			var got []string

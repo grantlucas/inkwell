@@ -9,8 +9,7 @@ import (
 )
 
 func day(y int, m time.Month, d int, loc *time.Location) Day {
-	start := time.Date(y, m, d, 0, 0, 0, 0, loc)
-	return Day{Start: start, End: start.AddDate(0, 0, 1)}
+	return Day{Start: time.Date(y, m, d, 0, 0, 0, 0, loc)}
 }
 
 // Days are built from the clock's own zone, because the dashboard hands
@@ -43,7 +42,7 @@ func TestDays(t *testing.T) {
 		if h, m, sec := d.Start.Clock(); h != 0 || m != 0 || sec != 0 {
 			t.Errorf("day %d starts at %02d:%02d:%02d, want local midnight", i, h, m, sec)
 		}
-		if !d.End.Equal(d.Start.AddDate(0, 0, 1)) {
+		if !d.End().Equal(d.Start.AddDate(0, 0, 1)) {
 			t.Errorf("day %d does not end one day after it starts", i)
 		}
 	}

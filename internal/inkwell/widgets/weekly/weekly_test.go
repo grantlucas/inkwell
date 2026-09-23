@@ -1014,6 +1014,7 @@ func TestWidget_Golden(t *testing.T) {
 		cal   *stubCalSource
 		ws    *stubWeatherSource
 		cfg   func(*Config)
+		clock time.Time // zero means testTime in UTC
 	}{
 		{
 			label: "full week with weather",
@@ -1045,7 +1046,16 @@ func TestWidget_Golden(t *testing.T) {
 			// The all-day bucketing case the extraction must not lose:
 			// a VALUE=DATE event is anchored to UTC midnight while the
 			// columns are built in the viewer's zone.
-			label: "all-day event",
+			//
+			// The clock is Toronto, not UTC, and that is the whole
+			// point. In UTC, date-bucketing and plain instant-overlap
+			// produce identical pixels, so the golden would pass
+			// against the bug it exists to catch. At UTC-4 the
+			// Wednesday column starts hours after the event's UTC
+			// midnight, so an instant comparison drags the Wednesday
+			// event into Tuesday and the pixels move.
+			label: "all-day event in a negative-UTC zone",
+			clock: testTime.In(mustLoad(t, "America/Toronto")),
 			cal: &stubCalSource{events: []ical.Event{{
 				UID: "trip", Summary: "Conference", AllDay: true,
 				Start: time.Date(2026, 4, 29, 0, 0, 0, 0, time.UTC),
@@ -1074,7 +1084,11 @@ func TestWidget_Golden(t *testing.T) {
 			if tt.ws != nil {
 				ws = tt.ws
 			}
-			w := New(bounds, tt.cal, ws, fixedClock(testTime), cfg)
+			clock := tt.clock
+			if clock.IsZero() {
+				clock = testTime
+			}
+			w := New(bounds, tt.cal, ws, fixedClock(clock), cfg)
 
 			frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
 			if err := w.Render(frame); err != nil {
