@@ -28,7 +28,15 @@ type tzRule struct {
 	// from is TZOFFSETFROM: the offset in force *before* this rule
 	// takes effect. A switchover is written in the outgoing zone's
 	// wall time, so this is what converts it to a UTC instant.
+	//
+	// hasFrom matters because zero is a legal offset: without it, an
+	// absent or unparseable TZOFFSETFROM is indistinguishable from
+	// +0000 and every switchover lands the zone's whole offset early —
+	// five hours, for Eastern. buildLocation defaults it to the other
+	// rule's TZOFFSETTO instead, which is what it must be in a
+	// two-rule component.
 	from     int
+	hasFrom  bool
 	daylight bool // from BEGIN:DAYLIGHT rather than BEGIN:STANDARD
 
 	// The switchover, from DTSTART's clock time plus the RRULE. A
@@ -121,7 +129,7 @@ func applyTZProperty(zone *vtimezone, rule *tzRule, line string) {
 		}
 	case "TZOFFSETFROM":
 		if off, ok := parseUTCOffset(value); ok {
-			rule.from = off
+			rule.from, rule.hasFrom = off, true
 		}
 	case "TZNAME":
 		rule.name = value
