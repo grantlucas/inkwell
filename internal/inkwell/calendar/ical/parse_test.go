@@ -446,11 +446,12 @@ func TestParseDateTime_TZID(t *testing.T) {
 	}
 }
 
-// A TZID must not rescue an unparseable value. There is no longer a
-// separate error path for it to take: naiveWall rejects the value
-// before any zone is resolved, so the error comes from the single
-// datetime parse either way. What this pins is that the value is still
-// rejected rather than quietly becoming a zero time in the named zone.
+// A TZID must not rescue an unparseable value. The zone resolves fine
+// here — America/New_York is IANA — so the error comes out of the
+// TZID branch's own ParseInLocation rather than the no-TZID parse
+// below it. Both wrap with the same message, so what this pins is that
+// the value is rejected at all, instead of quietly becoming a zero
+// time in the named zone.
 func TestParseDateTime_TZID_InvalidValue(t *testing.T) {
 	_, _, err := parseDateTime("DTSTART;TZID=America/New_York:notadatetime", nil)
 	if err == nil {
@@ -500,7 +501,7 @@ func TestExtractTZID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			loc := extractTZID(tt.params, nil, time.Time{})
+			loc := extractTZID(tt.params, nil)
 			switch {
 			case tt.want == "":
 				if loc != nil {

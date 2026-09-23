@@ -1,6 +1,7 @@
 package ical
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -488,9 +489,10 @@ END:VCALENDAR
 }
 
 // An EXDATE line carries every value under one TZID, so the zone is
-// resolved once for the line. These pin both halves of that: a list of
-// datetimes reuses the first resolution, and a date-only list never
-// resolves a zone at all (a date needs none).
+// resolved once for the line rather than once per value. A date-only
+// list resolves it too and then ignores it — parseICSTime never
+// consults a location for a value that already carries an unambiguous
+// instant — which is why both shapes land where they should.
 func TestParse_EXDATEZoneResolvedOncePerLine(t *testing.T) {
 	tests := []struct {
 		label     string
@@ -503,7 +505,7 @@ func TestParse_EXDATEZoneResolvedOncePerLine(t *testing.T) {
 			2, // three of five weekdays excluded
 		},
 		{
-			"date-only values need no zone",
+			"date-only values ignore the zone",
 			"EXDATE;VALUE=DATE;TZID=Eastern Standard Time:20260120,20260121",
 			5, // dates never match the datetime instants, so none drop
 		},
@@ -528,6 +530,206 @@ func TestParse_EXDATEZoneResolvedOncePerLine(t *testing.T) {
 			occ := Occurrences(events, utc(2026, 1, 1, 0, 0), utc(2026, 2, 1, 0, 0))
 			if len(occ) != tt.wantCount {
 				t.Errorf("got %d occurrences, want %d", len(occ), tt.wantCount)
+			}
+		})
+	}
+}
+
+// A recurring event in a VTIMEZONE zone has to keep its local clock
+// time across a switchover, the same way an IANA-named one does.
+//
+// Resolving the zone to a fixed offset chosen at DTSTART could not do
+// that: the walkers step in whatever offset DTSTART landed in, so a
+// weekly event starting in January kept January's offset all year and
+// rendered an hour out from March onward — permanently, not just
+// across the transition.
+func TestOccurrences_VTimezoneRecurrenceKeepsLocalTime(t *testing.T) {
+	input := "BEGIN:VCALENDAR\n" + windowsEastern +
+		"BEGIN:VEVENT\nUID:weekly\n" +
+		"DTSTART;TZID=Eastern Standard Time:20260105T190000\n" +
+		"DTEND;TZID=Eastern Standard Time:20260105T200000\n" +
+		"RRULE:FREQ=WEEKLY\n" +
+		"SUMMARY:Monday Practice\nEND:VEVENT\nEND:VCALENDAR\n"
+
+	events, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+
+	occ := Occurrences(events, utc(2026, 1, 1, 0, 0), utc(2026, 8, 1, 0, 0))
+	if len(occ) < 26 {
+		t.Fatalf("got %d occurrences, want at least 26", len(occ))
+	}
+
+	// Every occurrence is 19:00 in the feed's own zone, on both sides
+	// of the March switchover.
+	for _, o := range occ {
+		if h, m := o.Start.Hour(), o.Start.Minute(); h != 19 || m != 0 {
+			t.Fatalf("%s: local time = %02d:%02d, want 19:00", o.Start.Format("2006-01-02"), h, m)
+		}
+	}
+
+	// And the UTC instant moves, which is what proves the zone is
+	// DST-aware rather than a fixed offset: 00:00Z in winter, 23:00Z
+	// the previous day in summer.
+	if got := occ[0].Start.UTC().Hour(); got != 0 {
+		t.Errorf("first occurrence UTC hour = %d, want 0 (EST)", got)
+	}
+	last := occ[len(occ)-1]
+	if got := last.Start.UTC().Hour(); got != 23 {
+		t.Errorf("%s: UTC hour = %d, want 23 (EDT)", last.Start.Format("2006-01-02"), got)
+	}
+}
+
+// If the synthesised zone data were ever rejected, the component has to
+// fall back to a fixed offset rather than failing the parse: a zone an
+// hour out beats a feed that will not load at all.
+func TestParse_VTimezoneFallsBackWhenZoneDataIsRejected(t *testing.T) {
+	orig := loadTZData
+	defer func() { loadTZData = orig }()
+	loadTZData = func(string, []byte) (*time.Location, error) {
+		return nil, errIconLike{}
+	}
+
+	input := "BEGIN:VCALENDAR\n" + windowsEastern +
+		"BEGIN:VEVENT\nUID:winter\n" +
+		"DTSTART;TZID=Eastern Standard Time:20260119T090000\n" +
+		"SUMMARY:Winter\nEND:VEVENT\nEND:VCALENDAR\n"
+
+	events, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	// Standard time, the fallback offset: 09:00 at -05:00 is 14:00Z.
+	want := time.Date(2026, 1, 19, 14, 0, 0, 0, time.UTC)
+	if !events[0].Start.Equal(want) {
+		t.Errorf("Start = %v, want %v", events[0].Start.UTC(), want)
+	}
+}
+
+type errIconLike struct{}
+
+func (errIconLike) Error() string { return "rejected" }
+
+// TZif version 1 transition times are signed 32-bit, so a table
+// running past 2038-01-19 wraps negative and stops being ascending.
+// Go's loader accepts that blob without complaint — it simply resolves
+// the wrong offset from then on, so the fallback never fires and the
+// breakage is silent. The 64-bit v2 block is what makes the declared
+// year range mean anything.
+func TestParse_VTimezoneResolvesPast2038(t *testing.T) {
+	zones := parseVTimezones(contentLines(t, windowsEastern))
+	loc := zones["Eastern Standard Time"].locationFor()
+
+	for _, year := range []int{2026, 2035, 2036, 2040, 2090} {
+		t.Run(fmt.Sprint(year), func(t *testing.T) {
+			// Mid-July is daylight time in every one of these years.
+			if _, off := time.Date(year, 7, 15, 12, 0, 0, 0, loc).Zone(); off != -4*3600 {
+				t.Errorf("July offset = %d, want -14400 (EDT)", off)
+			}
+			// Mid-January is standard time in every one of them.
+			if _, off := time.Date(year, 1, 15, 12, 0, 0, 0, loc).Zone(); off != -5*3600 {
+				t.Errorf("January offset = %d, want -18000 (EST)", off)
+			}
+		})
+	}
+}
+
+// A switchover is written in the outgoing zone's wall time, so a rule
+// with no readable TZOFFSETFROM has to take the other half's
+// TZOFFSETTO. Zero is a legal offset, so treating "absent" as +0000
+// would place every transition the zone's whole offset early — five
+// hours, for Eastern — and nothing would say so.
+func TestParse_VTimezoneWithoutOffsetFrom(t *testing.T) {
+	var stripped []string
+	for _, line := range contentLines(t, windowsEastern) {
+		if !strings.HasPrefix(line, "TZOFFSETFROM") {
+			stripped = append(stripped, line)
+		}
+	}
+	zones := parseVTimezones(stripped)
+	loc := zones["Eastern Standard Time"].locationFor()
+
+	// 2026-03-07 23:00 is the evening before the spring switchover, so
+	// it is still standard time. With the transition placed five hours
+	// early it would resolve as daylight.
+	if _, off := time.Date(2026, 3, 7, 23, 0, 0, 0, loc).Zone(); off != -5*3600 {
+		t.Errorf("the evening before the switchover = %d, want -18000 (EST)", off)
+	}
+	// And the day after it really is daylight time.
+	if _, off := time.Date(2026, 3, 9, 12, 0, 0, 0, loc).Zone(); off != -4*3600 {
+		t.Errorf("the day after the switchover = %d, want -14400 (EDT)", off)
+	}
+}
+
+// TZNAME is optional on a switching zone too, not just on a fixed one.
+// The compiled zone falls back to the component's TZID for both halves.
+func TestParse_VTimezoneSwitchingWithoutTZName(t *testing.T) {
+	zone := `BEGIN:VTIMEZONE
+TZID:Nameless Eastern
+BEGIN:STANDARD
+DTSTART:16011104T020000
+TZOFFSETFROM:-0400
+TZOFFSETTO:-0500
+RRULE:FREQ=YEARLY;BYDAY=1SU;BYMONTH=11
+END:STANDARD
+BEGIN:DAYLIGHT
+DTSTART:16010311T020000
+TZOFFSETFROM:-0500
+TZOFFSETTO:-0400
+RRULE:FREQ=YEARLY;BYDAY=2SU;BYMONTH=3
+END:DAYLIGHT
+END:VTIMEZONE
+`
+	zones := parseVTimezones(contentLines(t, zone))
+	loc := zones["Nameless Eastern"].locationFor()
+
+	name, off := time.Date(2026, 7, 15, 12, 0, 0, 0, loc).Zone()
+	if off != -4*3600 {
+		t.Errorf("July offset = %d, want -14400", off)
+	}
+	if name != "Nameless Eastern" {
+		t.Errorf("zone name = %q, want the TZID as fallback", name)
+	}
+}
+
+// contentLines unfolds a fixture the way Parse does, so these tests
+// drive parseVTimezones on the same input shape it sees in production.
+func contentLines(t *testing.T, s string) []string {
+	t.Helper()
+	lines, err := unfold(strings.NewReader(s))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return lines
+}
+
+// transitionsBefore is what keeps the 32-bit block from wrapping. The
+// whole-slice case does not arise from the shipped year range — 1970
+// to 2100 always overflows — so it is exercised directly rather than
+// left to round off the coverage total.
+func TestTransitionsBefore(t *testing.T) {
+	all := []tzTransition{{at: 10}, {at: 20}, {at: 30}}
+	tests := []struct {
+		label string
+		limit int64
+		want  int
+	}{
+		{"all of them fit", 100, 3},
+		{"the last one is exactly the limit", 30, 3},
+		{"one over the limit", 25, 2},
+		{"none fit", 5, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			if got := len(transitionsBefore(all, tt.limit)); got != tt.want {
+				t.Errorf("kept %d transitions, want %d", got, tt.want)
 			}
 		})
 	}
