@@ -118,3 +118,38 @@ dashboard:
             #   longitude: -123.1   # show a different city in this widget
             #   weather_model: ecmwf
             #   temp_unit: F
+
+    # A second screen: bold-five. The same five-column shape as the
+    # weekly view above, with every element sized to be read from across
+    # the room rather than from arm's length — the day numeral goes from
+    # a 2.1 mm cap (readable to ~0.35 m) to 6.2 mm (~1.06 m). Uncomment
+    # it, and set `rotate_interval` on the dashboard, to put it into the
+    # rotation alongside the weekly view and compare them over time.
+    #
+    # It takes the whole panel: the header band carries its own date, so
+    # there is no separate `date` widget above it. What it trades away is
+    # the hourly temperature curve — that is the height the precipitation
+    # bars borrowed to become legible. Event titles get ~14 characters a
+    # line, the ceiling for a 160 px column; if titles are the problem,
+    # row-agenda is the screen that fixes them.
+    #
+    # - name: bold-five
+    #   widgets:
+    #     - type: bold-five
+    #       bounds: [0, 0, 800, 480]
+    #       refresh: "15m"   # how often it may refresh the panel
+    #       config:
+    #         # Same keys as weekly-calendar, so a screen can be swapped
+    #         # between the two without rewriting its config.
+    #         feeds:
+    #           - "https://example.com/my-calendar.ics"
+    #         max_events: 4        # four events a column; the taller
+    #                              # line height costs one against
+    #                              # weekly-calendar's five
+    #         show_location: false
+    #         refresh: "15m"       # calendar cache TTL, NOT the panel
+    #                              # refresh cadence above
+    #         # Location, model and temp_unit are inherited from the
+    #         # top-level weather: block; override per widget if needed.
+    #         #   temp_unit: F
+    #         #   weather_model: ecmwf

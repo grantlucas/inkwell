@@ -404,6 +404,49 @@ weekly-calendar showing another city. If every widget wants the same
 values, set them once under top-level [`weather`](#weather--shared-forecast-defaults)
 and leave these out; overriding here defeats the shared cache.
 
+### `bold-five`
+
+The same five-column calendar-and-weather shape as `weekly-calendar`,
+with every element sized to be read from across the room rather than
+from arm's length: the day numeral goes from a 2.1 mm cap (readable to
+about 0.35 m) to 6.2 mm (about 1.06 m). It takes the whole panel — the
+header band carries its own date, so it needs no separate `date` widget
+above it.
+
+What it trades away is the hourly temperature curve. That is the height
+the precipitation bars borrowed to become legible, and it is the real
+cost of this screen: if you read that curve, this is the one that costs
+you most. Event titles get about 14 characters a line, the ceiling for a
+160 px column, so it makes text bigger without making it fit better.
+
+There is no today highlight. Today is always the leftmost column, so an
+inverted header would spend ink restating what position already says.
+
+<!-- markdownlint-disable MD013 -->
+| Key | Type | Default | Accepted values | Impact |
+|-----|------|---------|-----------------|--------|
+| `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Same form as `weekly-calendar`, including [feed rules](#feed-rules). |
+| `refresh` | duration | `"15m"` | `>= 1m` | **Calendar data cache TTL** — how often feeds are re-fetched. Not the render cadence. |
+| `max_events` | integer | `4` | Positive | Cap on events shown per column. One fewer than `weekly-calendar`: the taller line height costs an event. |
+| `show_location` | bool | `false` | `true`, `false` | Appends the event's location to its title, when it has one and the line has room. |
+| `latitude` | number | inherits `weather.latitude` | `[-90, 90]` | Per-widget forecast location override. |
+| `longitude` | number | inherits `weather.longitude` | `[-180, 180]` | Per-widget forecast location override. |
+| `temp_unit` | string | inherits `weather.temp_unit` | `C`, `F` | Per-widget unit override. |
+| `weather_model` | string | inherits `weather.model` | `gfs`, `ecmwf`, `gem` | Per-widget model override. |
+<!-- markdownlint-enable MD013 -->
+
+The config is otherwise swappable with `weekly-calendar`, so the keys
+that screen has and this one does not — `days`, `week_start`,
+`show_weather`, `show_weather_label`, `highlight_hour` — are **rejected
+with an explanation** rather than ignored. Silently dropping
+`show_weather: false` would draw a weather band you had turned off,
+which reads as a bug in the widget rather than a key that did not carry
+over.
+
+A day the forecast does not cover draws an empty weather band rather
+than a zero. A clear sky at 0°C is a plausible reading, so drawing one
+would leave you unable to tell an outage from the weather.
+
 #### Feed rules
 
 A feed entry may be an object instead of a URL string, carrying rules

@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/boldfive"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/clock"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/date"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/fuzzyclock"
@@ -12,6 +13,7 @@ import (
 // NewDefaultRegistry creates a Registry pre-loaded with all built-in widgets.
 func NewDefaultRegistry() *widget.Registry {
 	r := widget.NewRegistry()
+	r.Register("bold-five", boldfive.Factory)
 	r.Register("clock", clock.Factory)
 	r.Register("date", date.Factory)
 	r.Register("fuzzy_clock", fuzzyclock.Factory)
