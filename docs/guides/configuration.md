@@ -447,6 +447,57 @@ A day the forecast does not cover draws an empty weather band rather
 than a zero. A clear sky at 0°C is a plausible reading, so drawing one
 would leave you unable to tell an outage from the weather.
 
+### `today-hero`
+
+Today at reading distance down the left of the panel, the rest of the
+week as one-line rows down the right. The bet is that from across the
+room you only ever want today, and the week is a glance you take once
+you have walked up to it — so the panel is spent unevenly rather than
+evenly. Today gets 42% of the width; four more days share the rest.
+
+It has the best precipitation chart of the three screens — 15 px bars
+with a marker at the current hour, wide enough that an afternoon band
+reads as a band rather than a texture, and the only one with room for
+the 50% guide and for saying "NO RAIN TODAY" when there is none.
+
+Today's agenda shows only what is left of the day. An event that
+finished two hours ago is history, and this is the screen that spends
+real estate on today; "DONE FOR TODAY" appears once nothing remains.
+Event times stay precise (16:15, not "quarter past four") — they are
+data, not a clock. Only the clock in the identity block is fuzzy,
+because a precise one would change every minute against a panel that
+refreshes every fifteen.
+
+<!-- markdownlint-disable MD013 -->
+| Key | Type | Default | Accepted values | Impact |
+|-----|------|---------|-----------------|--------|
+| `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Same form as `weekly-calendar`, including [feed rules](#feed-rules). |
+| `refresh` | duration | `"15m"` | `>= 1m` | **Calendar data cache TTL** — how often feeds are re-fetched. Not the render cadence. |
+| `max_events` | integer | `3` | Positive | Cap on today's agenda. The scaled time and wrapped title make each event tall, so three is what fits before the overflow marker. |
+| `show_location` | bool | `false` | `true`, `false` | Appends the event's location to its title, when it has one and the line has room. |
+| `latitude` | number | inherits `weather.latitude` | `[-90, 90]` | Per-widget forecast location override. |
+| `longitude` | number | inherits `weather.longitude` | `[-180, 180]` | Per-widget forecast location override. |
+| `temp_unit` | string | inherits `weather.temp_unit` | `C`, `F` | Per-widget unit override. |
+| `weather_model` | string | inherits `weather.model` | `gfs`, `ecmwf`, `gem` | Per-widget model override. |
+<!-- markdownlint-enable MD013 -->
+
+As with `bold-five`, the `weekly-calendar` keys this screen has no
+equivalent for — `days`, `week_start`, `show_weather`,
+`show_weather_label`, `highlight_hour` — are rejected with an
+explanation rather than ignored.
+
+**What it gives up:** there is no precipitation chart in the day rows.
+A 462 px row cannot carry a legible bar chart *and* a legible title —
+titles dropped to about 12 characters when it was tried. Future-day
+rain is the condition icon and nothing more, so this is the one screen
+where the week's rain timing is genuinely missing. If that matters, it
+is an argument for `bold-five`.
+
+Tomorrow's row is *tagged* "TOMORROW" rather than promoted into the
+hero column. An earlier draft promoted it and started the rows at +2,
+which quietly dropped a day; the panel keeps its full five-day span and
+nothing appears twice.
+
 #### Feed rules
 
 A feed entry may be an object instead of a URL string, carrying rules
