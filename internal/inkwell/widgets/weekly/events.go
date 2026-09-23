@@ -2,7 +2,6 @@ package weekly
 
 import (
 	"image"
-	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -296,47 +295,4 @@ func capLines(lines []string, maxLines, maxChars int) []string {
 // preferring word boundaries.
 func wrapText(text string, maxChars, maxLines int) []string {
 	return capLines(wrapLines(text, maxChars), maxLines, maxChars)
-}
-
-// dateOnly strips the clock and zone from t, returning a comparable
-// midnight-UTC anchor of t's calendar date. It lets all-day events
-// (date labels) be bucketed by date regardless of the zone each side
-// carries.
-func dateOnly(t time.Time) time.Time {
-	y, m, d := t.Date()
-	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
-}
-
-// filterEventsForDay returns events overlapping [dayStart, dayEnd), sorted by start.
-//
-// All-day events are calendar date labels, not instants: an iCal VALUE=DATE
-// is anchored to UTC midnight by the parser, but the day columns are built in
-// the viewer's local zone (now.Location()). Comparing the two as instants
-// leaks an all-day event into the previous local day in any negative-UTC zone
-// (e.g. a Thursday trip showing up on Wednesday in America/Toronto). So we
-// bucket all-day events by their date components alone — zone-independently —
-// and reserve instant overlap for timed events.
-func filterEventsForDay(events []calendar.Event, dayStart, dayEnd time.Time) []calendar.Event {
-	col := dateOnly(dayStart)
-	var filtered []calendar.Event
-	for _, e := range events {
-		var overlaps bool
-		if e.AllDay {
-			// DTEND is exclusive, so the column date must fall in
-			// [startDate, endDate): col >= start and col < end.
-			overlaps = !col.Before(dateOnly(e.Start)) && col.Before(dateOnly(e.End))
-		} else {
-			overlaps = e.Start.Before(dayEnd) && e.End.After(dayStart)
-		}
-		if overlaps {
-			filtered = append(filtered, e)
-		}
-	}
-	sort.Slice(filtered, func(i, j int) bool {
-		if filtered[i].AllDay != filtered[j].AllDay {
-			return filtered[i].AllDay
-		}
-		return filtered[i].Start.Before(filtered[j].Start)
-	})
-	return filtered
 }

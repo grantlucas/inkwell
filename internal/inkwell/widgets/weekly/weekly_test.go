@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar/ical"
+	"github.com/grantlucas/inkwell/internal/inkwell/testutil"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 )
 
 func fixedClock(t time.Time) func() time.Time {
@@ -114,7 +116,7 @@ func TestWidget_Bounds(t *testing.T) {
 	w := New(bounds, &stubCalSource{}, nil, fixedClock(testTime), Config{
 		MaxEvents: 5,
 		WeekStart: time.Monday,
-		TempUnit:  "C",
+		Weather:   daygrid.WeatherConfig{TempUnit: "C"},
 	})
 	if got := w.Bounds(); got != bounds {
 		t.Errorf("Bounds() = %v, want %v", got, bounds)
@@ -127,7 +129,7 @@ func TestWidget_RenderNoWeather(t *testing.T) {
 	w := New(bounds, cal, nil, fixedClock(testTime), Config{
 		MaxEvents: 5,
 		WeekStart: time.Monday,
-		TempUnit:  "C",
+		Weather:   daygrid.WeatherConfig{TempUnit: "C"},
 	})
 
 	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
@@ -154,12 +156,10 @@ func TestWidget_RenderWithWeather(t *testing.T) {
 	w := New(bounds, cal, ws, fixedClock(testTime), Config{
 		MaxEvents:        5,
 		WeekStart:        time.Monday,
-		TempUnit:         "C",
+		Weather:          daygrid.WeatherConfig{TempUnit: "C"},
 		ShowWeather:      true,
 		ShowWeatherLabel: true,
 		HighlightHour:    15,
-		Latitude:         45.4,
-		Longitude:        -75.7,
 	})
 
 	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
@@ -184,12 +184,11 @@ func TestWidget_RenderWeatherError(t *testing.T) {
 	cal := &stubCalSource{events: sampleEvents()}
 	ws := &stubWeatherSource{err: context.DeadlineExceeded}
 	w := New(bounds, cal, ws, fixedClock(testTime), Config{
-		MaxEvents:   5,
-		WeekStart:   time.Monday,
-		TempUnit:    "C",
+		MaxEvents: 5,
+		WeekStart: time.Monday,
+		Weather:   daygrid.WeatherConfig{TempUnit: "C", Latitude: 45.4, Longitude: -75.7},
+
 		ShowWeather: true,
-		Latitude:    45.4,
-		Longitude:   -75.7,
 	})
 
 	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
@@ -208,12 +207,11 @@ func TestWidget_RenderWeatherStaleOnError(t *testing.T) {
 	cal := &stubCalSource{events: sampleEvents()}
 	ws := &stubWeatherSource{forecast: sampleForecast(), err: context.DeadlineExceeded}
 	w := New(bounds, cal, ws, fixedClock(testTime), Config{
-		MaxEvents:   5,
-		WeekStart:   time.Monday,
-		TempUnit:    "C",
+		MaxEvents: 5,
+		WeekStart: time.Monday,
+		Weather:   daygrid.WeatherConfig{TempUnit: "C", Latitude: 45.4, Longitude: -75.7},
+
 		ShowWeather: true,
-		Latitude:    45.4,
-		Longitude:   -75.7,
 	})
 
 	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
@@ -242,7 +240,7 @@ func TestWidget_RenderCalendarError(t *testing.T) {
 	w := New(bounds, cal, nil, fixedClock(testTime), Config{
 		MaxEvents: 5,
 		WeekStart: time.Monday,
-		TempUnit:  "C",
+		Weather:   daygrid.WeatherConfig{TempUnit: "C"},
 	})
 
 	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
@@ -257,7 +255,7 @@ func TestWidget_SundayWeekStart(t *testing.T) {
 	w := New(bounds, cal, nil, fixedClock(testTime), Config{
 		MaxEvents: 5,
 		WeekStart: time.Sunday,
-		TempUnit:  "C",
+		Weather:   daygrid.WeatherConfig{TempUnit: "C"},
 	})
 
 	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
@@ -272,7 +270,7 @@ func TestWidget_ShowLocation(t *testing.T) {
 	w := New(bounds, cal, nil, fixedClock(testTime), Config{
 		MaxEvents:    5,
 		WeekStart:    time.Monday,
-		TempUnit:     "C",
+		Weather:      daygrid.WeatherConfig{TempUnit: "C"},
 		ShowLocation: true,
 	})
 
@@ -288,36 +286,13 @@ func TestWidget_FahrenheitUnit(t *testing.T) {
 	w := New(bounds, &stubCalSource{}, ws, fixedClock(testTime), Config{
 		MaxEvents:   5,
 		WeekStart:   time.Monday,
-		TempUnit:    "F",
+		Weather:     daygrid.WeatherConfig{TempUnit: "F"},
 		ShowWeather: true,
 	})
 
 	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
-	}
-}
-
-func TestFindForecast_Found(t *testing.T) {
-	days := sampleForecast().Days
-	result := findForecast(days, time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC))
-	if result.Date.IsZero() {
-		t.Error("expected to find forecast for Apr 29")
-	}
-}
-
-func TestFindForecast_NotFound(t *testing.T) {
-	days := sampleForecast().Days
-	result := findForecast(days, time.Date(2026, 5, 10, 0, 0, 0, 0, time.UTC))
-	if !result.Date.IsZero() {
-		t.Error("expected zero value for missing date")
-	}
-}
-
-func TestFindForecast_Empty(t *testing.T) {
-	result := findForecast(nil, time.Date(2026, 4, 27, 0, 0, 0, 0, time.UTC))
-	if !result.Date.IsZero() {
-		t.Error("expected zero value for nil days")
 	}
 }
 
@@ -586,8 +561,8 @@ func TestParseConfig_LatLon(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseConfig: %v", err)
 	}
-	if c.Latitude != 45.4 || c.Longitude != -75.7 {
-		t.Errorf("got lat=%f lon=%f", c.Latitude, c.Longitude)
+	if c.Weather.Latitude != 45.4 || c.Weather.Longitude != -75.7 {
+		t.Errorf("got lat=%f lon=%f", c.Weather.Latitude, c.Weather.Longitude)
 	}
 
 	cfg["latitude"] = "north"
@@ -676,8 +651,8 @@ func TestParseConfig_TempUnit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseConfig: %v", err)
 	}
-	if c.TempUnit != "F" {
-		t.Errorf("TempUnit = %q, want F", c.TempUnit)
+	if c.Weather.TempUnit != "F" {
+		t.Errorf("TempUnit = %q, want F", c.Weather.TempUnit)
 	}
 
 	cfg["temp_unit"] = "K"
@@ -784,11 +759,11 @@ func TestParseConfig_WeatherModel(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseConfig: unexpected error: %v", err)
 			}
-			if got.WeatherModel != tt.want {
-				t.Errorf("WeatherModel = %q, want %q", got.WeatherModel, tt.want)
+			if got.Weather.Model != tt.want {
+				t.Errorf("WeatherModel = %q, want %q", got.Weather.Model, tt.want)
 			}
-			if got.modelSet != tt.wantSet {
-				t.Errorf("modelSet = %v, want %v", got.modelSet, tt.wantSet)
+			if got.Weather.ModelSet != tt.wantSet {
+				t.Errorf("modelSet = %v, want %v", got.Weather.ModelSet, tt.wantSet)
 			}
 		})
 	}
@@ -864,14 +839,14 @@ func TestFactory_ResolvesWeatherFromProvider(t *testing.T) {
 			t.Fatalf("Factory: %v", err)
 		}
 		c := w.(*Widget).config
-		if c.Latitude != 43.244 || c.Longitude != -79.837 {
-			t.Errorf("location = %v,%v want provider default 43.244,-79.837", c.Latitude, c.Longitude)
+		if c.Weather.Latitude != 43.244 || c.Weather.Longitude != -79.837 {
+			t.Errorf("location = %v,%v want provider default 43.244,-79.837", c.Weather.Latitude, c.Weather.Longitude)
 		}
-		if c.TempUnit != "C" {
-			t.Errorf("TempUnit = %q, want inherited C", c.TempUnit)
+		if c.Weather.TempUnit != "C" {
+			t.Errorf("TempUnit = %q, want inherited C", c.Weather.TempUnit)
 		}
-		if c.WeatherModel != weather.ModelGEM {
-			t.Errorf("WeatherModel = %q, want inherited gem", c.WeatherModel)
+		if c.Weather.Model != weather.ModelGEM {
+			t.Errorf("WeatherModel = %q, want inherited gem", c.Weather.Model)
 		}
 	})
 
@@ -886,17 +861,17 @@ func TestFactory_ResolvesWeatherFromProvider(t *testing.T) {
 			t.Fatalf("Factory: %v", err)
 		}
 		c := w.(*Widget).config
-		if c.Latitude != 43.244 {
-			t.Errorf("Latitude = %v, want inherited 43.244", c.Latitude)
+		if c.Weather.Latitude != 43.244 {
+			t.Errorf("Latitude = %v, want inherited 43.244", c.Weather.Latitude)
 		}
-		if c.Longitude != -123.1 {
-			t.Errorf("Longitude = %v, want override -123.1", c.Longitude)
+		if c.Weather.Longitude != -123.1 {
+			t.Errorf("Longitude = %v, want override -123.1", c.Weather.Longitude)
 		}
-		if c.TempUnit != "F" {
-			t.Errorf("TempUnit = %q, want override F", c.TempUnit)
+		if c.Weather.TempUnit != "F" {
+			t.Errorf("TempUnit = %q, want override F", c.Weather.TempUnit)
 		}
-		if c.WeatherModel != weather.ModelECMWF {
-			t.Errorf("WeatherModel = %q, want override ecmwf", c.WeatherModel)
+		if c.Weather.Model != weather.ModelECMWF {
+			t.Errorf("WeatherModel = %q, want override ecmwf", c.Weather.Model)
 		}
 	})
 }
@@ -953,7 +928,7 @@ func TestWidget_HighlightHourUsesDisplayZone(t *testing.T) {
 			fixedClock(now.In(loc)), Config{
 				MaxEvents:   5,
 				ShowWeather: true,
-				TempUnit:    "C",
+				Weather:     daygrid.WeatherConfig{TempUnit: "C"},
 			})
 		frame := image.NewPaletted(bounds, widget.PaperPalette)
 		if err := w.Render(frame); err != nil {
@@ -975,7 +950,7 @@ func TestWidget_DaysNarrowsTheWindow(t *testing.T) {
 		Days:        5,
 		MaxEvents:   5,
 		ShowWeather: true,
-		TempUnit:    "C",
+		Weather:     daygrid.WeatherConfig{TempUnit: "C"},
 	})
 
 	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
@@ -1010,7 +985,7 @@ func TestWidget_UnsetDaysRendersFullWeek(t *testing.T) {
 	cal := &stubCalSource{events: sampleEvents()}
 	w := New(bounds, cal, nil, fixedClock(testTime), Config{
 		MaxEvents: 5,
-		TempUnit:  "C",
+		Weather:   daygrid.WeatherConfig{TempUnit: "C"},
 	})
 
 	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
@@ -1024,5 +999,102 @@ func TestWidget_UnsetDaysRendersFullWeek(t *testing.T) {
 	}
 	if frame.ColorIndexAt(113, 300) != widget.PaperBlack {
 		t.Error("no divider at x=113 — not laying out 7 columns")
+	}
+}
+
+// TestWidget_Golden is the regression net for refactors of the shared
+// calendar + weather scaffolding (issue #92). The extraction is only
+// correct if these do not move: every constant, every wrap decision and
+// every day-bucketing rule shows up in the pixels.
+func TestWidget_Golden(t *testing.T) {
+	bounds := image.Rect(0, 52, 800, 480)
+
+	tests := []struct {
+		label string
+		cal   *stubCalSource
+		ws    *stubWeatherSource
+		cfg   func(*Config)
+		clock time.Time // zero means testTime in UTC
+	}{
+		{
+			label: "full week with weather",
+			cal:   &stubCalSource{events: sampleEvents()},
+			ws:    &stubWeatherSource{forecast: sampleForecast()},
+		},
+		{
+			label: "no weather source",
+			cal:   &stubCalSource{events: sampleEvents()},
+		},
+		{
+			label: "no events",
+			cal:   &stubCalSource{},
+			ws:    &stubWeatherSource{forecast: sampleForecast()},
+		},
+		{
+			label: "five day columns",
+			cal:   &stubCalSource{events: sampleEvents()},
+			ws:    &stubWeatherSource{forecast: sampleForecast()},
+			cfg:   func(c *Config) { c.Days = 5 },
+		},
+		{
+			label: "locations shown",
+			cal:   &stubCalSource{events: sampleEvents()},
+			ws:    &stubWeatherSource{forecast: sampleForecast()},
+			cfg:   func(c *Config) { c.ShowLocation = true },
+		},
+		{
+			// The all-day bucketing case the extraction must not lose:
+			// a VALUE=DATE event is anchored to UTC midnight while the
+			// columns are built in the viewer's zone.
+			//
+			// The clock is Toronto, not UTC, and that is the whole
+			// point. In UTC, date-bucketing and plain instant-overlap
+			// produce identical pixels, so the golden would pass
+			// against the bug it exists to catch. At UTC-4 the
+			// Wednesday column starts hours after the event's UTC
+			// midnight, so an instant comparison drags the Wednesday
+			// event into Tuesday and the pixels move.
+			label: "all-day event in a negative-UTC zone",
+			clock: testTime.In(mustLoad(t, "America/Toronto")),
+			cal: &stubCalSource{events: []ical.Event{{
+				UID: "trip", Summary: "Conference", AllDay: true,
+				Start: time.Date(2026, 4, 29, 0, 0, 0, 0, time.UTC),
+				End:   time.Date(2026, 4, 30, 0, 0, 0, 0, time.UTC),
+			}}},
+			ws: &stubWeatherSource{forecast: sampleForecast()},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			cfg := Config{
+				MaxEvents: 5,
+				WeekStart: time.Monday,
+				Days:      defaultDays,
+				Weather:   daygrid.WeatherConfig{TempUnit: "C", Latitude: 45.4, Longitude: -75.7},
+
+				ShowWeather:      tt.ws != nil,
+				ShowWeatherLabel: true,
+				HighlightHour:    15,
+			}
+			if tt.cfg != nil {
+				tt.cfg(&cfg)
+			}
+			var ws weather.Source
+			if tt.ws != nil {
+				ws = tt.ws
+			}
+			clock := tt.clock
+			if clock.IsZero() {
+				clock = testTime
+			}
+			w := New(bounds, tt.cal, ws, fixedClock(clock), cfg)
+
+			frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
+			if err := w.Render(frame); err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			testutil.AssertGoldenPNG(t, frame)
+		})
 	}
 }

@@ -4,8 +4,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 )
 
 // feedsOnly is the minimum valid config — feeds is the only required key.
@@ -105,23 +103,23 @@ func TestParseConfig_Accepted(t *testing.T) {
 			}
 		}},
 		{"latitude", withKey("latitude", 43.25), func(t *testing.T, c Config) {
-			if c.Latitude != 43.25 || !c.latSet {
-				t.Errorf("Latitude = %v, set = %v", c.Latitude, c.latSet)
+			if c.Weather.Latitude != 43.25 || !c.Weather.LatSet {
+				t.Errorf("Latitude = %v, set = %v", c.Weather.Latitude, c.Weather.LatSet)
 			}
 		}},
 		{"longitude", withKey("longitude", -79.87), func(t *testing.T, c Config) {
-			if c.Longitude != -79.87 || !c.lonSet {
-				t.Errorf("Longitude = %v, set = %v", c.Longitude, c.lonSet)
+			if c.Weather.Longitude != -79.87 || !c.Weather.LonSet {
+				t.Errorf("Longitude = %v, set = %v", c.Weather.Longitude, c.Weather.LonSet)
 			}
 		}},
 		{"temp_unit", withKey("temp_unit", "F"), func(t *testing.T, c Config) {
-			if c.TempUnit != "F" || !c.unitSet {
-				t.Errorf("TempUnit = %q, set = %v", c.TempUnit, c.unitSet)
+			if c.Weather.TempUnit != "F" || !c.Weather.UnitSet {
+				t.Errorf("TempUnit = %q, set = %v", c.Weather.TempUnit, c.Weather.UnitSet)
 			}
 		}},
 		{"weather_model", withKey("weather_model", "gem"), func(t *testing.T, c Config) {
-			if !c.modelSet {
-				t.Error("modelSet = false")
+			if !c.Weather.ModelSet {
+				t.Error("ModelSet = false")
 			}
 		}},
 	}
@@ -134,56 +132,6 @@ func TestParseConfig_Accepted(t *testing.T) {
 			tt.check(t, cfg)
 		})
 	}
-}
-
-// A widget that sets nothing inherits location, unit and model from the
-// shared provider, so a dashboard configures them once at the top level.
-func TestResolveWeatherDefaults(t *testing.T) {
-	provider := weather.NewProvider(nil, time.Hour, time.Now, weather.Settings{
-		Location: weather.Location{Latitude: 43.25, Longitude: -79.87},
-		TempUnit: "F",
-		Model:    weather.ModelGEM,
-	})
-
-	t.Run("inherits everything unset", func(t *testing.T) {
-		var cfg Config
-		resolveWeatherDefaults(&cfg, provider)
-		if cfg.Latitude != 43.25 || cfg.Longitude != -79.87 {
-			t.Errorf("location = %v,%v", cfg.Latitude, cfg.Longitude)
-		}
-		if cfg.TempUnit != "F" {
-			t.Errorf("TempUnit = %q", cfg.TempUnit)
-		}
-		if cfg.WeatherModel != weather.ModelGEM {
-			t.Errorf("WeatherModel = %v", cfg.WeatherModel)
-		}
-	})
-
-	t.Run("keeps what the widget set", func(t *testing.T) {
-		cfg := Config{
-			Latitude: 1, latSet: true,
-			Longitude: 2, lonSet: true,
-			TempUnit: "C", unitSet: true,
-			WeatherModel: weather.ModelECMWF, modelSet: true,
-		}
-		resolveWeatherDefaults(&cfg, provider)
-		if cfg.Latitude != 1 || cfg.Longitude != 2 || cfg.TempUnit != "C" {
-			t.Errorf("overrides lost: %+v", cfg)
-		}
-		if cfg.WeatherModel != weather.ModelECMWF {
-			t.Errorf("WeatherModel = %v, want the override", cfg.WeatherModel)
-		}
-	})
-
-	// Without a provider there is nothing to inherit, but a unit is
-	// still needed — a blank one would render a bare number.
-	t.Run("falls back to Celsius without a provider", func(t *testing.T) {
-		var cfg Config
-		resolveWeatherDefaults(&cfg, nil)
-		if cfg.TempUnit != "C" {
-			t.Errorf("TempUnit = %q, want C", cfg.TempUnit)
-		}
-	})
 }
 
 // The docs promise the config is swappable with weekly-calendar, so a

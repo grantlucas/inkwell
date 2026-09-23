@@ -10,6 +10,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 )
 
 var _ widget.Widget = (*Widget)(nil)
@@ -26,18 +27,12 @@ type Config struct {
 	Refresh      time.Duration
 	MaxEvents    int
 	ShowLocation bool
-	Latitude     float64
-	Longitude    float64
-	TempUnit     string
-	WeatherModel weather.Model
 
-	// Presence of each weather override. When false, Factory fills the
-	// field from the shared Provider's defaults, so a dashboard sets
-	// location, model and unit once at the top level.
-	latSet   bool
-	lonSet   bool
-	unitSet  bool
-	modelSet bool
+	// Weather carries the location, unit and model, along with which of
+	// them this widget actually set — Factory fills the rest from the
+	// shared Provider's defaults, so a dashboard configures them once
+	// at the top level.
+	Weather daygrid.WeatherConfig
 }
 
 // Widget renders the bold-five screen.
@@ -77,8 +72,8 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	// serialized them with, so they still need converting.
 	now := w.now()
 	loc := now.Location()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
-	weekEnd := today.AddDate(0, 0, columns)
+	days := daygrid.Days(now, columns)
+	winStart, winEnd := daygrid.Window(days)
 
 	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 	defer cancel()
@@ -86,17 +81,14 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	// A fetch failure must not blank the panel: render with whatever
 	// arrived and log so the failure reaches the operator's terminal
 	// rather than being silently dropped.
-	events, err := w.cal.Events(ctx, today, weekEnd)
+	events, err := w.cal.Events(ctx, winStart, winEnd)
 	if err != nil {
 		log.Printf("boldfive: fetch calendar events: %v", err)
 	}
 
 	var forecastDays []weather.DailyForecast
 	if w.weather != nil {
-		f, err := w.weather.Forecast(ctx, weather.Location{
-			Latitude:  w.config.Latitude,
-			Longitude: w.config.Longitude,
-		}, columns)
+		f, err := w.weather.Forecast(ctx, w.config.Weather.Location(), columns)
 		if err != nil {
 			log.Printf("boldfive: fetch weather forecast: %v", err)
 		}
@@ -106,20 +98,20 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	}
 
 	for i, col := range computeColumns(w.bounds) {
-		day := today.AddDate(0, 0, i)
+		day := days[i]
 
-		renderDayHeader(frame, col.Header, day)
+		renderDayHeader(frame, col.Header, day.Start)
 
-		renderWeatherBand(frame, col.Weather, findForecast(forecastDays, day), weatherOptions{
-			TempUnit: w.config.TempUnit,
+		renderWeatherBand(frame, col.Weather, daygrid.FindForecast(forecastDays, day), weatherOptions{
+			TempUnit: w.config.Weather.TempUnit,
 			// Today is always the leftmost column, so the marker goes
 			// there and nowhere else — "now" is not a point on any
 			// other day's axis.
-			ShowNowMarker: i == 0,
+			ShowNowMarker: day.IsToday,
 			NowHour:       now.Hour(),
 		})
 
-		renderEvents(frame, col.Events, filterEventsForDay(events, day, day.AddDate(0, 0, 1)), eventOptions{
+		renderEvents(frame, col.Events, daygrid.FilterEventsForDay(events, day), eventOptions{
 			MaxEvents:    w.config.MaxEvents,
 			ShowLocation: w.config.ShowLocation,
 			Location:     loc,
@@ -133,17 +125,6 @@ func (w *Widget) Render(frame *image.Paletted) error {
 		}
 	}
 	return nil
-}
-
-// findForecast returns the DailyForecast for the given day, or a zero
-// value when the forecast does not reach that far.
-func findForecast(days []weather.DailyForecast, day time.Time) weather.DailyForecast {
-	for _, d := range days {
-		if d.Date.Year() == day.Year() && d.Date.YearDay() == day.YearDay() {
-			return d
-		}
-	}
-	return weather.DailyForecast{}
 }
 
 // Factory creates a bold-five Widget from config and dependencies.
@@ -176,7 +157,7 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 	if deps.DataSources != nil {
 		provider, _ = deps.DataSources["weather"].(*weather.Provider)
 	}
-	resolveWeatherDefaults(&cfg, provider)
+	daygrid.ResolveDefaults(&cfg.Weather, provider)
 
 	// A caller-injected weather_source (tests, custom transports) wins;
 	// otherwise draw from the shared Provider bound to the resolved
@@ -186,33 +167,8 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 	case ok:
 		ws = src
 	case provider != nil:
-		ws = provider.SourceForModel(cfg.WeatherModel)
+		ws = provider.SourceForModel(cfg.Weather.Model)
 	}
 
 	return New(bounds, cachedCal, ws, now, cfg), nil
-}
-
-// resolveWeatherDefaults fills any weather field the widget did not set
-// from the shared Provider's defaults, so a dashboard configures
-// location, model and unit once at the top level.
-func resolveWeatherDefaults(cfg *Config, provider *weather.Provider) {
-	var def weather.Settings
-	if provider != nil {
-		def = provider.Defaults()
-	}
-	if !cfg.latSet {
-		cfg.Latitude = def.Location.Latitude
-	}
-	if !cfg.lonSet {
-		cfg.Longitude = def.Location.Longitude
-	}
-	if !cfg.unitSet {
-		cfg.TempUnit = def.TempUnit
-	}
-	if cfg.TempUnit == "" {
-		cfg.TempUnit = "C"
-	}
-	if !cfg.modelSet {
-		cfg.WeatherModel = def.Model
-	}
 }
