@@ -22,7 +22,7 @@ func TestWrapText(t *testing.T) {
 		{"short title stays on one line", "Standup", 20, 2, []string{"Standup"}},
 		{"wraps at a word boundary", "Platform architecture review", 20, 2, []string{"Platform", "architecture review"}},
 		{"breaks an unbreakable word", "Supercalifragilistic", 10, 2, []string{"Supercalif", "ragilistic"}},
-		{"ellipses past the line budget", "one two three four five six seven", 10, 2, []string{"one two", "three fou…"}},
+		{"ellipses past the line budget", "one two three four five six seven", 10, 2, []string{"one two", "three fou»"}},
 		{"empty text draws nothing", "", 20, 2, nil},
 		{"whitespace only draws nothing", "   ", 20, 2, nil},
 		// The budget is in characters, so a multi-byte title must not
@@ -56,7 +56,7 @@ func TestTruncate(t *testing.T) {
 	}{
 		{"fits", "16:15", 10, "16:15"},
 		{"exactly fits", "16:15", 5, "16:15"},
-		{"ellipsed", "Design review", 6, "Desig…"},
+		{"ellipsed", "Design review", 6, "Desig»"},
 		{"no room for an ellipsis", "Design", 1, "D"},
 		{"zero budget", "Design", 0, ""},
 	}

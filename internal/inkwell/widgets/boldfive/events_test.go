@@ -32,10 +32,10 @@ func TestWrapText(t *testing.T) {
 		want     []string
 	}{
 		{"short title stays on one line", "Standup", 14, 2, []string{"Standup"}},
-		{"wraps at a word boundary", "Platform architecture review", 14, 2, []string{"Platform", "architecture…"}},
+		{"wraps at a word boundary", "Platform architecture review", 14, 2, []string{"Platform", "architecture»"}},
 		{"exactly fills a line", "Car in for svc", 14, 2, []string{"Car in for svc"}},
 		{"breaks an unbreakable word", "Supercalifragilistic", 10, 2, []string{"Supercalif", "ragilistic"}},
-		{"ellipses past the line budget", "one two three four five six", 10, 2, []string{"one two", "three fou…"}},
+		{"ellipses past the line budget", "one two three four five six", 10, 2, []string{"one two", "three fou»"}},
 		{"empty text draws nothing", "", 14, 2, nil},
 		{"whitespace only draws nothing", "   ", 14, 2, nil},
 	}
@@ -68,7 +68,7 @@ func TestTruncate(t *testing.T) {
 	}{
 		{"fits", "09:00", 10, "09:00"},
 		{"exactly fits", "09:00", 5, "09:00"},
-		{"ellipsed", "Standup", 5, "Stan…"},
+		{"ellipsed", "Standup", 5, "Stan»"},
 		{"no room for an ellipsis", "Standup", 1, "S"},
 		{"zero budget", "Standup", 0, ""},
 	}

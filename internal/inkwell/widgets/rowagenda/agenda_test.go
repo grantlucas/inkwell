@@ -166,13 +166,13 @@ func TestFitTo(t *testing.T) {
 	}{
 		{"fits", "Standup", 10 * adv, "Standup"},
 		{"exactly fits", "Standup", 7 * adv, "Standup"},
-		{"ellipsed", "Design review", 7 * adv, "Design…"},
+		{"ellipsed", "Design review", 7 * adv, "Design»"},
 		{"one character of room", "Design", 1 * adv, "D"},
 		{"no room at all", "Design", 0, ""},
 		{"trims surrounding space", "  Standup  ", 10 * adv, "Standup"},
 		// The budget is in characters, so the cut is in runes: byte
 		// slicing would halve a multi-byte glyph.
-		{"multi-byte title", "日本語のミーティング", 5 * adv, "日本語の…"},
+		{"multi-byte title", "日本語のミーティング", 5 * adv, "日本語の»"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -266,13 +266,85 @@ func TestLayoutSlots_ShortRowDropsSlots(t *testing.T) {
 		{"one column", 2},
 		{"two columns", 5},
 	}
+	// Asserted against the glyph's *descender*, not the baseline. The
+	// code used to branch on the baseline alone, and the test asserted
+	// the same predicate — so it could not fail, and it said nothing
+	// about the claim in its own name.
+	descent := daygrid.BodyFace.Metrics().Descent.Ceil()
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			for _, s := range layoutSlots(short, tt.events) {
-				if s.y > short.Max.Y {
-					t.Errorf("slot at y=%d runs past the row's %d", s.y, short.Max.Y)
+				if s.y+descent >= short.Max.Y {
+					t.Errorf("slot at baseline %d descends past the row's %d", s.y, short.Max.Y)
 				}
 			}
 		})
+	}
+}
+
+// The temperature block and the chart share the badge, and the chart is
+// drawn second — so an overlap does not read as a layout slip, it reads
+// as bars painted through the digits. The shipped goldens cannot catch
+// it because their rain sits in hours 12-17, well right of the label.
+func TestRenderBadge_TemperatureNeverReachesTheChart(t *testing.T) {
+	badge := computeRows(image.Rect(0, 0, 800, 480))[0].Badge
+
+	// Morning rain, so the leftmost bars land where the label would
+	// overrun if it could.
+	var hourly []weather.HourlyPoint
+	for h := range 24 {
+		prob := 0.0
+		if h >= 6 && h <= 9 {
+			prob = 0.9
+		}
+		hourly = append(hourly, weather.HourlyPoint{Hour: h, PrecipitationProb: prob})
+	}
+
+	// The widest readings the block has to hold.
+	tests := []struct {
+		label  string
+		hi, lo float64
+		unit   string
+	}{
+		{"negative celsius", -15, -22, "C"},
+		{"three-digit fahrenheit", 37.8, 20, "F"}, // 100°F
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			frame := newTestFrame(800, 480)
+			renderBadge(frame, badge, weather.DailyForecast{
+				Date: time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC),
+				High: tt.hi, Low: tt.lo, Hourly: hourly,
+			}, tt.unit, true, true, 8)
+
+			// The widest reading the block can hold must end before
+			// the chart's left edge.
+			if end := hiDX + tempMaxChars*daygrid.BodyAdvance(); end > chartDX {
+				t.Errorf("temperature block can reach %d, chart starts at %d — they overlap", end, chartDX)
+			}
+			// And this day's actual reading must not have drawn into
+			// the chart's first bar slot either.
+			if daygrid.TextWidth(daygrid.BodyBoldFace, "-100°F") > tempMaxChars*daygrid.BodyAdvance() {
+				t.Error("tempMaxChars no longer covers the widest reading")
+			}
+		})
+	}
+}
+
+// The empty-day message is a fixed string, so at the narrowest bounds
+// the widget accepts it has to be fitted like every other one — an
+// unfitted 170 px message in a 100 px slot paints straight over
+// whatever shares the frame.
+func TestRenderAgenda_EmptyMessageStaysInBounds(t *testing.T) {
+	bounds := image.Rect(0, 0, minWidth, 96)
+	frame := newTestFrame(800, 480)
+	renderAgenda(frame, image.Rect(agendaX, 0, minWidth, 96), nil, eventOptions{Location: time.UTC})
+
+	for y := range 480 {
+		for x := bounds.Max.X; x < 800; x++ {
+			if frame.ColorIndexAt(x, y) != widget.PaperWhite {
+				t.Fatalf("drew at (%d,%d), past the widget's %d px edge", x, y, bounds.Max.X)
+			}
+		}
 	}
 }

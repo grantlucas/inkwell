@@ -2,6 +2,8 @@ package todayhero
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
@@ -91,8 +93,13 @@ func parseConfig(config map[string]any) (Config, error) {
 	// show_weather: false would draw a weather band the operator
 	// explicitly turned off, which looks like a bug in the widget
 	// rather than a key that did not carry over.
-	for key, why := range unsupportedKeys {
+	// Sorted, because ranging a map would name an arbitrary one of
+	// several leftover keys per run — so removing them one at a time
+	// would look like the error was wandering rather than counting
+	// down.
+	for _, key := range slices.Sorted(maps.Keys(unsupportedKeys)) {
 		if _, ok := config[key]; ok {
+			why := unsupportedKeys[key]
 			return cfg, fmt.Errorf("today-hero: %s is not supported: %s", key, why)
 		}
 	}

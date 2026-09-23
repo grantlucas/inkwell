@@ -25,14 +25,22 @@ const (
 	badgeIconX  = 4
 	badgeIconY  = 8
 	badgeIconSz = 38
-	hiScale     = 2
 	hiDX        = 46
 	hiBaseline  = 40
 	loBaseline  = 68
-	chartDX     = 104
-	chartW      = 110
-	chartPadY   = 4
-	chartLabelH = 14
+
+	// tempMaxChars is the widest reading the temperature block has to
+	// hold — "-100°F" — and chartDX is placed clear of it. The two are
+	// drawn into the same badge and the chart is drawn second, so an
+	// overlap does not look like a layout slip, it looks like bars
+	// painted through the digits. At the design sketch's 104 they did
+	// overlap; TestRenderBadge_TemperatureNeverReachesTheChart pins
+	// the relationship so they cannot drift back together.
+	tempMaxChars = 6
+	chartDX      = 112
+	chartW       = 106
+	chartPadY    = 4
+	chartLabelH  = 14
 )
 
 // renderGutter draws the date block: the numeral at 3x with the weekday
@@ -89,9 +97,15 @@ func renderBadge(frame *image.Paletted, bounds image.Rectangle, forecast weather
 		hi, lo = weather.CelsiusToFahrenheit(hi), weather.CelsiusToFahrenheit(lo)
 		label = "F"
 	}
+	// Body size, not scaled. A 2x high is 120 px at its widest, which
+	// runs straight through the chart — the badge is 222 px and cannot
+	// hold a 38 px icon, a display-sized temperature and a legible
+	// chart at once. The row already has a 3x date numeral carrying it
+	// at distance, and this is the same compressed-day shape as
+	// today-hero's rows, which are 1x too.
 	x := bounds.Min.X + hiDX
-	daygrid.Scaled(daygrid.BodyBoldFace, hiScale, widget.PaperBlack).Draw(
-		frame, x, top+hiBaseline, fmt.Sprintf("%d°%s", int(math.Round(hi)), label))
+	daygrid.DrawText(frame, x, top+hiBaseline,
+		fmt.Sprintf("%d°%s", int(math.Round(hi)), label), daygrid.BodyBoldFace, widget.PaperBlack)
 	daygrid.DrawText(frame, x, top+loBaseline,
 		fmt.Sprintf("%d°", int(math.Round(lo))), daygrid.BodyFace, widget.PaperBlack)
 

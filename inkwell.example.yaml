@@ -220,8 +220,14 @@ dashboard:
     #       bounds: [0, 0, 800, 480]
     #       refresh: "15m"   # how often it may refresh the panel
     #       config:
-    #         # Same keys as weekly-calendar, minus max_events: the
-    #         # row's slot count is the cap and it adapts to the load.
+    #         # The shared calendar keys. max_events is rejected here:
+    #         # the row's slot count is the cap and it adapts to the
+    #         # day's load, so a setting could only contradict the
+    #         # geometry. days, week_start, show_weather,
+    #         # show_weather_label and highlight_hour are rejected too,
+    #         # each with the reason — a config pasted over from
+    #         # weekly-calendar fails to load rather than quietly
+    #         # ignoring half of what you wrote.
     #         feeds:
     #           - "https://example.com/my-calendar.ics"
     #         show_location: false

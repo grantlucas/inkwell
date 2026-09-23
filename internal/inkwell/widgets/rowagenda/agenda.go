@@ -24,8 +24,18 @@ const (
 	// splits: two columns of two is four slots.
 	twoColumnRows = 2
 
-	colGap   = 12
-	emptyMsg = "Nothing scheduled"
+	colGap = 12
+	// Upper case, like the "+N MORE" marker beside it and the ALL DAY
+	// label above it. Mixed case in this one string read as a second
+	// typographic system on the same row.
+	emptyMsg = "NOTHING SCHEDULED"
+
+	// Tamzen carries encodings 32-255, so U+2026 HORIZONTAL ELLIPSIS
+	// is not in it — the face reports no glyph, the drawers paint
+	// nothing with zero advance, and a truncated title simply stopped
+	// mid-word with no sign it had been cut. U+00BB is in the range
+	// and actually draws.
+	ellipsis = "»"
 )
 
 // eventOptions carries the per-render knobs from widget config.
@@ -63,7 +73,12 @@ func renderAgenda(frame *image.Paletted, bounds image.Rectangle, events []calend
 	}
 
 	if len(events) == 0 {
-		daygrid.DrawText(frame, slots[0].x, slots[0].y, emptyMsg, daygrid.BodyFace, widget.PaperBlack)
+		// Fitted like every other string here. At the narrowest bounds
+		// the widget accepts, the raw message is wider than the slot
+		// and would paint over whatever shares the frame — which is
+		// the failure the minWidth guard exists to prevent.
+		daygrid.DrawText(frame, slots[0].x, slots[0].y,
+			fitTo(emptyMsg, slots[0].width), daygrid.BodyFace, widget.PaperBlack)
 		return 0
 	}
 
@@ -113,7 +128,7 @@ func layoutSlots(bounds image.Rectangle, n int) []slot {
 		var out []slot
 		for i := range oneColumnMax {
 			sy := y + i*lineH
-			if sy > bounds.Max.Y {
+			if !fitsAbove(sy, bounds.Max.Y) {
 				break
 			}
 			out = append(out, slot{x: x, y: sy, width: full})
@@ -126,7 +141,7 @@ func layoutSlots(bounds image.Rectangle, n int) []slot {
 	for col := range 2 {
 		for row := range twoColumnRows {
 			sy := y + row*lineH
-			if sy > bounds.Max.Y {
+			if !fitsAbove(sy, bounds.Max.Y) {
 				break
 			}
 			out = append(out, slot{x: x + col*(colW+colGap), y: sy, width: colW})
@@ -135,6 +150,14 @@ func layoutSlots(bounds image.Rectangle, n int) []slot {
 	// Read down the left column then down the right, which is the
 	// order the times run in.
 	return out
+}
+
+// fitsAbove reports whether a baseline leaves room for the glyph's
+// descender above bottom. Comparing the baseline alone admits a line
+// whose descenders hang below the row and into the next day's — and
+// Max.Y is exclusive, so a baseline exactly on it is already past.
+func fitsAbove(baseline, bottom int) bool {
+	return baseline+daygrid.BodyFace.Metrics().Descent.Ceil() < bottom
 }
 
 // drawEventInSlot draws one event as a time and a title on one line.
@@ -186,5 +209,5 @@ func fitTo(s string, width int) string {
 		}
 		return string(r[:1])
 	}
-	return string(r[:maxChars-1]) + "…"
+	return string(r[:maxChars-1]) + ellipsis
 }
