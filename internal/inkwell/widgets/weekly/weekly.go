@@ -1,10 +1,8 @@
 package weekly
 
 import (
-	"context"
 	"fmt"
 	"image"
-	"log"
 	"net/http"
 	"time"
 
@@ -87,42 +85,30 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	now := w.now()
 	loc := now.Location()
 	days := daygrid.Days(now, w.config.Days)
-	weekStart, weekEnd := daygrid.Window(days)
 
-	// One render-scope context shared by calendar + weather fetches.
-	// A slow upstream on either side won't stall the render loop past
-	// the timeout now that both HTTP paths honor ctx.
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := daygrid.FetchContext()
 	defer cancel()
 
-	// A calendar fetch failure (network, parse, etc.) shouldn't blank
-	// the dashboard — render with whatever events made it through (or
-	// an empty list) but log so the failure shows up in the operator's
-	// terminal instead of being silently dropped.
-	events, err := w.cal.Events(ctx, weekStart, weekEnd)
-	if err != nil {
-		log.Printf("weekly: fetch calendar events: %v", err)
+	// show_weather off means the source is never consulted, so the
+	// weather half of the fetch is skipped rather than fetched and
+	// discarded.
+	ws := w.weather
+	if !w.config.ShowWeather {
+		ws = nil
 	}
+	fetched := daygrid.Fetch(ctx, widgetName, w.cal, ws, days, w.config.Weather.Location())
+	events, forecastDays := fetched.Events, fetched.Days()
 
-	var forecast *weather.Forecast
+	// The band's height follows from whether a forecast came back at
+	// all, not from whether it carried any days: a 200 response with
+	// no daily data is a non-nil Forecast with none, and collapsing
+	// the band for that would reflow the whole screen for one cycle.
 	weatherH := 0
-	if w.config.ShowWeather && w.weather != nil {
-		f, err := w.weather.Forecast(ctx, w.config.Weather.Location(), w.config.Days)
-		if err != nil {
-			log.Printf("weekly: fetch weather forecast: %v", err)
-		}
-		if f != nil {
-			forecast = f
-			weatherH = defaultWeatherH
-		}
+	if fetched.HasForecast() {
+		weatherH = defaultWeatherH
 	}
 
 	cols := computeColumns(w.bounds, weatherH, w.config.Days)
-
-	var forecastDays []weather.DailyForecast
-	if forecast != nil {
-		forecastDays = forecast.Days
-	}
 	globalMin, globalMax := weatherview.GlobalTempRange(forecastDays)
 
 	for i, col := range cols {
