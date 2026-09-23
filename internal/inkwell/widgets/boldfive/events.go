@@ -25,6 +25,13 @@ const (
 	// maxTitleLines caps a single title so one long summary cannot eat
 	// the whole column.
 	maxTitleLines = 2
+
+	// Tamzen carries encodings 32-255, so U+2026 HORIZONTAL ELLIPSIS
+	// is not in it — the face reports no glyph, the drawers paint
+	// nothing with zero advance, and a truncated title simply stopped
+	// mid-word with no sign it had been cut. U+00BB is in the range
+	// and actually draws.
+	ellipsis = "»"
 )
 
 // eventOptions carries the per-render knobs from widget config.
@@ -160,7 +167,7 @@ func wrapText(text string, maxChars, maxLines int) []string {
 
 	if len(split) > maxLines {
 		split = split[:maxLines]
-		split[maxLines-1] = truncate(split[maxLines-1]+"…", maxChars)
+		split[maxLines-1] = truncate(split[maxLines-1]+ellipsis, maxChars)
 	}
 	return split
 }
@@ -179,5 +186,5 @@ func truncate(s string, maxChars int) string {
 	if maxChars <= 1 {
 		return string(r[:maxChars])
 	}
-	return string(r[:maxChars-1]) + "…"
+	return string(r[:maxChars-1]) + ellipsis
 }

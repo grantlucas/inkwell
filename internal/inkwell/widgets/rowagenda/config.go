@@ -1,4 +1,4 @@
-package boldfive
+package rowagenda
 
 import (
 	"fmt"
@@ -9,15 +9,16 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 )
 
-// Config defaults. maxEvents is four rather than weekly's five: the
-// taller line height this screen exists for costs one event per column.
+// Config defaults. There is no max_events here: the row's slot count
+// is the cap, and it adapts to the day's load — three across the full
+// width, or four in two columns. A separate setting could only
+// contradict the geometry.
 const (
-	defaultRefresh   = 15 * time.Minute
-	defaultMaxEvents = 4
+	defaultRefresh = 15 * time.Minute
 
 	// widgetName prefixes every config error so a dashboard that fails
 	// to load says which widget rejected it.
-	widgetName = "bold-five"
+	widgetName = "row-agenda"
 )
 
 // parseConfig validates and extracts config values. The accepted keys
@@ -26,10 +27,7 @@ const (
 // every calendar-plus-weather screen shares; what is left here is the
 // handful of keys specific to this one.
 func parseConfig(config map[string]any) (Config, error) {
-	cfg := Config{
-		Refresh:   defaultRefresh,
-		MaxEvents: defaultMaxEvents,
-	}
+	cfg := Config{Refresh: defaultRefresh}
 
 	f, ok := config["feeds"]
 	if !ok {
@@ -57,17 +55,6 @@ func parseConfig(config map[string]any) (Config, error) {
 			return cfg, fmt.Errorf("%s: refresh must be >= 1m, got %v", widgetName, d)
 		}
 		cfg.Refresh = d
-	}
-
-	if v, ok := config["max_events"]; ok {
-		n, ok := v.(int)
-		if !ok {
-			return cfg, fmt.Errorf("%s: max_events must be an integer, got %T", widgetName, v)
-		}
-		if n <= 0 {
-			return cfg, fmt.Errorf("%s: max_events must be positive, got %d", widgetName, n)
-		}
-		cfg.MaxEvents = n
 	}
 
 	if v, ok := config["show_location"]; ok {
@@ -99,20 +86,21 @@ func parseConfig(config map[string]any) (Config, error) {
 	for _, key := range slices.Sorted(maps.Keys(unsupportedKeys)) {
 		if _, ok := config[key]; ok {
 			why := unsupportedKeys[key]
-			return cfg, fmt.Errorf("bold-five: %s is not supported: %s", key, why)
+			return cfg, fmt.Errorf("row-agenda: %s is not supported: %s", key, why)
 		}
 	}
 
 	return cfg, nil
 }
 
-// unsupportedKeys are weekly-calendar keys with no bold-five meaning,
+// unsupportedKeys are weekly-calendar keys with no row-agenda meaning,
 // each with the reason, so the error says what to do rather than just
 // refusing.
 var unsupportedKeys = map[string]string{
-	"days":               "bold-five is always five columns; every type size is derived from a 160 px column",
-	"week_start":         "columns always start from today, so there is no week to start",
-	"show_weather":       "the weather band is part of the layout; a day with no forecast already draws nothing",
-	"show_weather_label": "there is no condition label to show — the icon carries the condition",
-	"highlight_hour":     "the now-marker follows the clock, on today's column only",
+	"days":               "row-agenda is always five rows; the row height is what the date numeral's size sets",
+	"max_events":         "the row's slot count is the cap, and it adapts to the day's load — three across the full width, or four in two columns",
+	"week_start":         "the rows always start from today, so there is no week to start",
+	"show_weather":       "the weather badge is part of the layout; a day with no forecast already draws nothing",
+	"show_weather_label": "the badge has no condition label — the icon carries the condition",
+	"highlight_hour":     "the now-marker follows the clock, on today's row only",
 }

@@ -498,6 +498,50 @@ hero column. An earlier draft promoted it and started the rows at +2,
 which quietly dropped a day; the panel keeps its full five-day span and
 nothing appears twice.
 
+### `row-agenda`
+
+The axis swap. Days become full-width rows, so a day gets 96 px of
+height instead of 160 px of width — and for text that is the trade that
+matters, because width is what titles were starving for. Titles get
+40-odd characters instead of 13, which makes this the only one of the
+three new screens where nothing truncates on a realistic week.
+"Platform architecture review" fits. So does "Car in for service", with
+room left over.
+
+The agenda's column count adapts to the day's load, which is what keeps
+titles long on the days that can afford it: three events or fewer take
+the full row width, four or more split into two columns. When there is
+more than fits, the last slot carries "+N MORE" rather than
+overprinting an event. An empty day says "Nothing scheduled".
+
+Today's date gutter inverts. Here the highlight earns its ink in a way
+it does not on `bold-five`: rows have no "today is leftmost" convention
+to lean on, so without it nothing says which row is now.
+
+<!-- markdownlint-disable MD013 -->
+| Key | Type | Default | Accepted values | Impact |
+|-----|------|---------|-----------------|--------|
+| `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Same form as `weekly-calendar`, including [feed rules](#feed-rules). |
+| `refresh` | duration | `"15m"` | `>= 1m` | **Calendar data cache TTL** — how often feeds are re-fetched. Not the render cadence. |
+| `show_location` | bool | `false` | `true`, `false` | Appends the event's location to its title, when it has one and the line has room. |
+| `latitude` | number | inherits `weather.latitude` | `[-90, 90]` | Per-widget forecast location override. |
+| `longitude` | number | inherits `weather.longitude` | `[-180, 180]` | Per-widget forecast location override. |
+| `temp_unit` | string | inherits `weather.temp_unit` | `C`, `F` | Per-widget unit override. |
+| `weather_model` | string | inherits `weather.model` | `gfs`, `ecmwf`, `gem` | Per-widget model override. |
+<!-- markdownlint-enable MD013 -->
+
+There is deliberately no `max_events`: the row's slot count is the cap,
+and it adapts to the day's load. A separate setting could only
+contradict the geometry. It is rejected with that explanation, as are
+the other `weekly-calendar` keys this screen has no equivalent for.
+
+**What it gives up:** 96 px a day caps you at three or four items
+before "+N MORE", so a genuinely packed Monday loses detail a column
+would have shown — this screen is better at reading what is there and
+worse at showing everything. Its precipitation bars are also the
+narrowest of the three screens that carry them, 110 px against
+`bold-five`'s 160. Still a shape, but a cramped one.
+
 #### Feed rules
 
 A feed entry may be an object instead of a URL string, carrying rules
