@@ -532,3 +532,85 @@ func TestParse_EXDATEZoneResolvedOncePerLine(t *testing.T) {
 		})
 	}
 }
+
+// A recurring event in a VTIMEZONE zone has to keep its local clock
+// time across a switchover, the same way an IANA-named one does.
+//
+// Resolving the zone to a fixed offset chosen at DTSTART could not do
+// that: the walkers step in whatever offset DTSTART landed in, so a
+// weekly event starting in January kept January's offset all year and
+// rendered an hour out from March onward — permanently, not just
+// across the transition.
+func TestOccurrences_VTimezoneRecurrenceKeepsLocalTime(t *testing.T) {
+	input := "BEGIN:VCALENDAR\n" + windowsEastern +
+		"BEGIN:VEVENT\nUID:weekly\n" +
+		"DTSTART;TZID=Eastern Standard Time:20260105T190000\n" +
+		"DTEND;TZID=Eastern Standard Time:20260105T200000\n" +
+		"RRULE:FREQ=WEEKLY\n" +
+		"SUMMARY:Monday Practice\nEND:VEVENT\nEND:VCALENDAR\n"
+
+	events, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+
+	occ := Occurrences(events, utc(2026, 1, 1, 0, 0), utc(2026, 8, 1, 0, 0))
+	if len(occ) < 26 {
+		t.Fatalf("got %d occurrences, want at least 26", len(occ))
+	}
+
+	// Every occurrence is 19:00 in the feed's own zone, on both sides
+	// of the March switchover.
+	for _, o := range occ {
+		if h, m := o.Start.Hour(), o.Start.Minute(); h != 19 || m != 0 {
+			t.Fatalf("%s: local time = %02d:%02d, want 19:00", o.Start.Format("2006-01-02"), h, m)
+		}
+	}
+
+	// And the UTC instant moves, which is what proves the zone is
+	// DST-aware rather than a fixed offset: 00:00Z in winter, 23:00Z
+	// the previous day in summer.
+	if got := occ[0].Start.UTC().Hour(); got != 0 {
+		t.Errorf("first occurrence UTC hour = %d, want 0 (EST)", got)
+	}
+	last := occ[len(occ)-1]
+	if got := last.Start.UTC().Hour(); got != 23 {
+		t.Errorf("%s: UTC hour = %d, want 23 (EDT)", last.Start.Format("2006-01-02"), got)
+	}
+}
+
+// If the synthesised zone data were ever rejected, the component has to
+// fall back to a fixed offset rather than failing the parse: a zone an
+// hour out beats a feed that will not load at all.
+func TestParse_VTimezoneFallsBackWhenZoneDataIsRejected(t *testing.T) {
+	orig := loadTZData
+	defer func() { loadTZData = orig }()
+	loadTZData = func(string, []byte) (*time.Location, error) {
+		return nil, errIconLike{}
+	}
+
+	input := "BEGIN:VCALENDAR\n" + windowsEastern +
+		"BEGIN:VEVENT\nUID:winter\n" +
+		"DTSTART;TZID=Eastern Standard Time:20260119T090000\n" +
+		"SUMMARY:Winter\nEND:VEVENT\nEND:VCALENDAR\n"
+
+	events, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("got %d events, want 1", len(events))
+	}
+	// Standard time, the fallback offset: 09:00 at -05:00 is 14:00Z.
+	want := time.Date(2026, 1, 19, 14, 0, 0, 0, time.UTC)
+	if !events[0].Start.Equal(want) {
+		t.Errorf("Start = %v, want %v", events[0].Start.UTC(), want)
+	}
+}
+
+type errIconLike struct{}
+
+func (errIconLike) Error() string { return "rejected" }

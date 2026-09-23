@@ -500,7 +500,7 @@ func TestExtractTZID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			loc := extractTZID(tt.params, nil, time.Time{})
+			loc := extractTZID(tt.params, nil)
 			switch {
 			case tt.want == "":
 				if loc != nil {

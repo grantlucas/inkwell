@@ -12,19 +12,24 @@ import (
 // file. time.LoadLocation only understands IANA names, so without
 // reading VTIMEZONE those feeds fall back to UTC and render hours off.
 //
-// The offsets are resolved per instant rather than compiled into a
-// *time.Location, because Go can only build a DST-aware Location from
-// TZif data. Picking the rule that applies to a given wall time and
-// handing back a time.FixedZone for it gets the same answer either side
-// of a transition without synthesising a zoneinfo blob.
+// A component that defines both halves and says when they swap is
+// compiled into a real DST-aware *time.Location (see tzif.go), because
+// a recurrence has to step in one — a fixed offset picked per instant
+// gets single events right and drifts recurrences by an hour after the
+// next switchover. Components that define less than that fall back to
+// a single fixed offset, which is all they gave us.
 
 // tzRule is one STANDARD or DAYLIGHT subcomponent: the offset it
 // switches to, and the yearly rule saying when it takes effect.
 type tzRule struct {
-	name      string // TZNAME (e.g. "EST"); cosmetic, names the FixedZone
+	name      string // TZNAME (e.g. "EST"); cosmetic, names the zone
 	offset    int    // TZOFFSETTO, seconds east of UTC
 	hasOffset bool
-	daylight  bool // from BEGIN:DAYLIGHT rather than BEGIN:STANDARD
+	// from is TZOFFSETFROM: the offset in force *before* this rule
+	// takes effect. A switchover is written in the outgoing zone's
+	// wall time, so this is what converts it to a UTC instant.
+	from     int
+	daylight bool // from BEGIN:DAYLIGHT rather than BEGIN:STANDARD
 
 	// The switchover, from DTSTART's clock time plus the RRULE. A
 	// subcomponent with no usable RRULE defines a zone that never
@@ -42,6 +47,13 @@ type tzRule struct {
 type vtimezone struct {
 	id    string
 	rules []tzRule
+
+	// loc is the DST-aware Location compiled from the rules, when they
+	// describe a switching zone. Built once when the component closes,
+	// because a recurrence has to step in a real Location — a fixed
+	// offset chosen per instant gets single events right and drifts
+	// recurrences by an hour after the next switchover (issue #105).
+	loc *time.Location
 }
 
 // parseVTimezones collects every VTIMEZONE in the stream into a name →
@@ -65,6 +77,9 @@ func parseVTimezones(lines []string) map[string]*vtimezone {
 			// nothing, so it is not worth keeping — resolution falls
 			// through to the UTC default and its log line.
 			if cur.id != "" && len(cur.rules) > 0 {
+				if loc, ok := cur.buildLocation(); ok {
+					cur.loc = loc
+				}
 				if zones == nil {
 					zones = make(map[string]*vtimezone)
 				}
@@ -103,6 +118,10 @@ func applyTZProperty(zone *vtimezone, rule *tzRule, line string) {
 		if off, ok := parseUTCOffset(value); ok {
 			rule.offset = off
 			rule.hasOffset = true
+		}
+	case "TZOFFSETFROM":
+		if off, ok := parseUTCOffset(value); ok {
+			rule.from = off
 		}
 	case "TZNAME":
 		rule.name = value
@@ -226,52 +245,24 @@ func twoDigits(s string) (int, bool) {
 	return int(s[0]-'0')*10 + int(s[1]-'0'), true
 }
 
-// locationFor returns the zone in effect at the given naive wall time.
-// The returned location is a fixed offset chosen for that instant, not
-// a DST-aware Location — see the note at the top of this file.
+// locationFor returns the zone this component defines.
 //
-// That has a consequence worth knowing: a *recurring* event resolves
-// its zone once, from DTSTART, and the walkers in occurrences.go then
-// step in whatever fixed offset that produced. A weekly event starting
-// in January therefore keeps January's offset all year, and renders an
-// hour out once the zone switches. Single events, and recurrences that
-// do not cross a switchover, are unaffected. An IANA TZID is unaffected
-// either way, because LoadLocation is tried first and returns a real
-// DST-aware Location — so this only bites a recurring event in a feed
-// that names its zone the Windows way. Closing it properly means
-// synthesising TZif data for time.LoadLocationFromTZData (issue #105).
-func (v *vtimezone) locationFor(wall time.Time) *time.Location {
-	std, dst := v.pair()
-
-	// Without both halves, or without the rules that say when they
-	// swap, the best available answer is a single offset. Standard time
-	// is the one to fall back on: it is what the zone is for most of the
-	// year, and taking the first subcomponent instead would hand a feed
-	// that lists DAYLIGHT first — with a STANDARD rule in a form this
-	// parser does not read — the daylight offset all winter.
-	if std == nil || dst == nil || !std.hasRule || !dst.hasRule {
-		if std != nil {
-			return v.fixedZone(*std)
-		}
-		return v.fixedZone(*dst)
+// Normally that is the DST-aware Location compiled from the rules. The
+// fallback is for components that could not be compiled — one half
+// missing, or a switchover rule in a form this parser cannot read —
+// and those have only one offset to give, so it does not depend on the
+// instant. Standard time is preferred: it is what the zone is for most
+// of the year, and a feed that lists DAYLIGHT first would otherwise
+// run on the daylight offset all winter.
+func (v *vtimezone) locationFor() *time.Location {
+	if v.loc != nil {
+		return v.loc
 	}
-
-	year := wall.Year()
-	dstStart := dst.onsetIn(year)
-	stdStart := std.onsetIn(year)
-
-	// Northern hemisphere: DST is the interval between the two onsets.
-	// Southern: it wraps the year boundary, so the test inverts.
-	var inDST bool
-	if dstStart.Before(stdStart) {
-		inDST = !wall.Before(dstStart) && wall.Before(stdStart)
+	if std, dst := v.pair(); std != nil {
+		return v.fixedZone(*std)
 	} else {
-		inDST = !wall.Before(dstStart) || wall.Before(stdStart)
-	}
-	if inDST {
 		return v.fixedZone(*dst)
 	}
-	return v.fixedZone(*std)
 }
 
 // pair returns the last STANDARD and DAYLIGHT rule in the component.

@@ -127,15 +127,12 @@ func Parse(r io.Reader) ([]Event, error) {
 				// parse as UTC and fail to match the corresponding
 				// TZID-anchored occurrence instant.
 				params, _, _ := cutProperty(line)
-				// The zone is resolved per value, because a VTIMEZONE
-				// offset depends on which side of a switchover the
-				// value falls. Resolution is memoised per line so an
-				// unknown TZID logs once rather than once per value —
-				// a 50-date EXDATE line would otherwise emit fifty
-				// identical lines on every refresh cycle.
-				resolve := memoiseZone(params, zones)
+				// Resolved once for the line: every value on it shares
+				// the same TZID, and the zone no longer depends on
+				// which instant is being placed.
+				loc := extractTZID(params, zones)
 				for v := range strings.SplitSeq(value, ",") {
-					t, err := parseICSTime(v, resolve(v))
+					t, err := parseICSTime(v, loc)
 					if err != nil {
 						return nil, fmt.Errorf("parse EXDATE %q: %w", v, err)
 					}
@@ -296,15 +293,12 @@ func parseDateTime(line string, zones map[string]*vtimezone) (time.Time, bool, e
 		return t, false, nil
 	}
 
-	// The zone has to be chosen from the value's own wall time, because
-	// a VTIMEZONE offset depends on which side of a switchover it falls,
-	// so the naive fields are read first and re-anchored after.
-	if wall, ok := naiveWall(value); ok {
-		if loc := extractTZID(params, zones, wall); loc != nil {
-			y, mo, d := wall.Date()
-			hh, mm, ss := wall.Clock()
-			return time.Date(y, mo, d, hh, mm, ss, 0, loc), false, nil
+	if loc := extractTZID(params, zones); loc != nil {
+		t, err := time.ParseInLocation("20060102T150405", value, loc)
+		if err != nil {
+			return time.Time{}, false, fmt.Errorf("invalid datetime %q: %w", value, err)
 		}
+		return t, false, nil
 	}
 
 	t, err := time.Parse("20060102T150405", value)
@@ -319,7 +313,7 @@ func parseDateTime(line string, zones map[string]*vtimezone) (time.Time, bool, e
 // unknown TZID gets a log line so an operator can spot timezone bugs
 // in the feed (e.g. a Toronto event suddenly rendering in UTC) instead
 // of silently mis-bucketing the event into the wrong column.
-func extractTZID(params string, zones map[string]*vtimezone, wall time.Time) *time.Location {
+func extractTZID(params string, zones map[string]*vtimezone) *time.Location {
 	for _, part := range splitParams(params) {
 		if strings.HasPrefix(part, "TZID=") {
 			// RFC 5545 3.1 lets a param value be DQUOTE-wrapped, and
@@ -334,58 +328,13 @@ func extractTZID(params string, zones map[string]*vtimezone, wall time.Time) *ti
 			// Windows zone names) define it in a VTIMEZONE, so the
 			// offsets are usually right there in the file.
 			if vt := zones[name]; vt != nil {
-				return vt.locationFor(wall)
+				return vt.locationFor()
 			}
 			log.Printf("ical: unknown TZID %q, treating as UTC", name)
 			return nil
 		}
 	}
 	return nil
-}
-
-// memoiseZone returns a per-value zone resolver for one property line
-// that resolves at most once. Every value on the line shares the same
-// TZID, so a second lookup can only repeat the first one's work — and,
-// when the zone is unknown, its log line.
-//
-// The offset can still differ per value across a switchover; the first
-// resolved location is reused deliberately, because an EXDATE list
-// spanning a transition is not worth a log line per entry. DTSTART and
-// DTEND, which is where the offset actually matters, resolve on their
-// own lines.
-func memoiseZone(params string, zones map[string]*vtimezone) func(string) *time.Location {
-	var (
-		loc  *time.Location
-		done bool
-	)
-	return func(v string) *time.Location {
-		if done {
-			return loc
-		}
-		wall, ok := naiveWall(v)
-		if !ok {
-			// Date-only or Z-suffixed: unambiguous already, and no
-			// reason to burn the single resolution on it.
-			return nil
-		}
-		loc, done = extractTZID(params, zones, wall), true
-		return loc
-	}
-}
-
-// naiveWall reads the wall-clock fields of an iCal datetime value,
-// ignoring any zone, and reports whether the value needs one at all.
-// A date-only or Z-suffixed value already carries an unambiguous
-// instant, so it returns false and no zone is resolved for it.
-func naiveWall(v string) (time.Time, bool) {
-	if len(v) == 8 || strings.HasSuffix(v, "Z") {
-		return time.Time{}, false
-	}
-	t, err := time.Parse("20060102T150405", v)
-	if err != nil {
-		return time.Time{}, false
-	}
-	return t, true
 }
 
 // parseDuration parses an iCal DURATION value like "PT1H30M", "P1D", etc.
