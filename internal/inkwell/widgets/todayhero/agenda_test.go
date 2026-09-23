@@ -266,3 +266,68 @@ func TestRenderRowAgenda_OverflowMarkerNeedsRoom(t *testing.T) {
 		}
 	}
 }
+
+// The agenda can run out of room before it runs out of cap, and both
+// have to leave the marker a line. Reserving it only when the cap
+// truncated the list meant any max_events past what fits stopped
+// silently — which is the failure the reserve exists to prevent, still
+// reachable through the other door.
+func TestRenderHeroAgenda_MarkerSurvivesEitherLimit(t *testing.T) {
+	bounds := computeHero(image.Rect(0, 0, 800, 480)).Agenda
+	events := make([]calendar.Event, 5)
+	for i := range events {
+		start := time.Date(2026, 3, 16, 9+i, 0, 0, 0, time.UTC)
+		events[i] = calendar.Event{Summary: "Event", Start: start, End: start.Add(time.Hour)}
+	}
+
+	tests := []struct {
+		label     string
+		maxEvents int
+	}{
+		{"the cap is what truncates", 3},
+		{"the room is what truncates", 5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			frame := newTestFrame(800, 480)
+			drawn := renderHeroAgenda(frame, bounds, events,
+				eventOptions{MaxEvents: tt.maxEvents, Location: time.UTC})
+			if drawn >= len(events) {
+				t.Fatalf("drew %d of %d events — this case is meant to overflow", drawn, len(events))
+			}
+
+			// The marker sits wherever the last event ended, so rather
+			// than guess at a band, compare against the same agenda
+			// rendered with nothing left over: the difference is the
+			// marker.
+			quiet := newTestFrame(800, 480)
+			renderHeroAgenda(quiet, bounds, events[:drawn],
+				eventOptions{MaxEvents: tt.maxEvents, Location: time.UTC})
+
+			withMarker := countIndexIn(frame, bounds, widget.PaperBlack)
+			without := countIndexIn(quiet, bounds, widget.PaperBlack)
+			if withMarker <= without {
+				t.Errorf("drew %d of %d events and said nothing about the rest", drawn, len(events))
+			}
+		})
+	}
+}
+
+// A timed VEVENT with neither DTEND nor DURATION is parsed with
+// End == Start, so an exclusive comparison drops it at the very minute
+// it fires — and if it were the last one, the panel would say "DONE FOR
+// TODAY" over an event happening now.
+func TestRemainingToday_ZeroDurationEventIsStillCurrent(t *testing.T) {
+	at := func(h, m int) time.Time { return time.Date(2026, 3, 16, h, m, 0, 0, time.UTC) }
+	reminder := calendar.Event{Summary: "Pick up parcel", Start: at(16, 0), End: at(16, 0)}
+
+	if got := remainingToday([]calendar.Event{reminder}, at(15, 45)); len(got) != 1 {
+		t.Error("dropped before it fires")
+	}
+	if got := remainingToday([]calendar.Event{reminder}, at(16, 0)); len(got) != 1 {
+		t.Error("dropped at the minute it fires — the panel would read DONE FOR TODAY over it")
+	}
+	if got := remainingToday([]calendar.Event{reminder}, at(16, 1)); len(got) != 0 {
+		t.Error("still shown a minute after it fired")
+	}
+}

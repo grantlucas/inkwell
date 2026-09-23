@@ -31,6 +31,11 @@ const (
 	// Up to three events a row; a fourth would leave no room for the
 	// overflow marker to say how many were dropped.
 	rowMaxEvents = 3
+
+	// Upper case, like every other label this screen paints —
+	// TOMORROW, ALL DAY, DONE FOR TODAY, NO RAIN TODAY. Mixed case in
+	// the rows alone would read as a second typographic system.
+	emptyRowMsg = "NOTHING SCHEDULED"
 )
 
 // dayRowOptions carries what a row needs beyond its events.
@@ -117,7 +122,7 @@ func renderRowAgenda(frame *image.Paletted, bounds image.Rectangle, events []cal
 
 	y := bounds.Min.Y + rowPadX + daygrid.BodyAscent()
 	if len(events) == 0 {
-		daygrid.DrawText(frame, x, y, "Nothing scheduled", daygrid.BodyFace, widget.PaperBlack)
+		daygrid.DrawText(frame, x, y, emptyRowMsg, daygrid.BodyFace, widget.PaperBlack)
 		return
 	}
 
@@ -132,6 +137,6 @@ func renderRowAgenda(frame *image.Paletted, bounds image.Rectangle, events []cal
 		// The marker occupies a slot of its own rather than
 		// overprinting the last event — an earlier draft drew it on
 		// top of the third one.
-		daygrid.DrawText(frame, x, y, fmt.Sprintf("+%d more", remaining), daygrid.BodyFace, widget.PaperBlack)
+		daygrid.DrawText(frame, x, y, fmt.Sprintf("+%d MORE", remaining), daygrid.BodyFace, widget.PaperBlack)
 	}
 }

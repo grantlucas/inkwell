@@ -64,50 +64,74 @@ func renderHeroAgenda(frame *image.Paletted, bounds image.Rectangle, events []ca
 
 	limit := min(max(opts.MaxEvents, 0), len(events))
 
-	// When there is more than will be drawn, the marker's line is
-	// reserved up front rather than fitted in afterwards. The agenda is
-	// almost exactly three events tall, so a marker squeezed in at the
-	// end never fits — and an agenda that silently stops is worse than
-	// one that shows a event fewer and says how many it dropped.
-	bottom := bounds.Max.Y
-	if len(events) > limit {
-		bottom -= lineH
+	// Two passes, because the agenda can run out of room before it
+	// runs out of cap. Reserving the marker's line only when the cap
+	// truncated the list left the room-limited case — any max_events
+	// past what fits — silently stopping with nothing said about the
+	// rest, which is the failure this reserve exists to prevent.
+	plan := planEvents(events[:limit], y, bounds.Max.Y, maxChars, opts)
+	if len(plan) < len(events) {
+		plan = planEvents(events[:limit], y, bounds.Max.Y-lineH, maxChars, opts)
 	}
 
-	drawn := 0
-	for i, e := range events[:limit] {
+	for i, p := range plan {
+		if i > 0 {
+			// Hairline between events, so a two-line title does not
+			// run into the next event's time.
+			daygrid.DrawHLine(frame, x, bounds.Max.X-heroPadX, p.top-agendaGap/2, widget.PaperBlack)
+		}
+		daygrid.Scaled(daygrid.BodyBoldFace, timeScale, widget.PaperBlack).Draw(
+			frame, x, p.top+timeAscent, p.timeLine)
+		ty := p.top + timeAscent + daygrid.BodyAscent()
+		for _, line := range p.titleLines {
+			daygrid.DrawText(frame, x, ty, line, daygrid.BodyFace, widget.PaperBlack)
+			ty += lineH
+		}
+	}
+
+	drawn := len(plan)
+	if remaining := len(events) - drawn; remaining > 0 {
+		my := bounds.Min.Y + agendaTopPad + daygrid.BodyAscent()
+		if drawn > 0 {
+			last := plan[drawn-1]
+			my = last.top + timeAscent + daygrid.BodyAscent() + len(last.titleLines)*lineH + agendaGap
+		}
+		if my <= bounds.Max.Y {
+			daygrid.DrawText(frame, x, my,
+				truncate(fmt.Sprintf("+%d MORE TODAY", remaining), maxChars),
+				daygrid.BodyBoldFace, widget.PaperBlack)
+		}
+	}
+	return drawn
+}
+
+// eventPlan is one event resolved to the rows it will occupy, so the
+// draw pass never re-wraps and cannot disagree with the measurement
+// that decided the event fit.
+type eventPlan struct {
+	top        int
+	timeLine   string
+	titleLines []string
+}
+
+// planEvents lays events out from y down to bottom, keeping only those
+// that fit whole. A time with its title clipped off below reads as an
+// event with no name, so a partial event is not drawn at all.
+func planEvents(events []calendar.Event, y, bottom, maxChars int, opts eventOptions) []eventPlan {
+	lineH := daygrid.BodyLineH()
+	timeAscent := daygrid.BodyAscent() * timeScale
+
+	var out []eventPlan
+	for _, e := range events {
 		titleLines := wrapText(titleFor(e, opts), maxChars, maxTitleLines)
-		// A whole event or none of it: a time with its title clipped
-		// off below reads as an event with no name.
 		needed := timeAscent + daygrid.BodyAscent() + len(titleLines)*lineH
 		if y+needed > bottom {
 			break
 		}
-
-		if i > 0 {
-			// Hairline between events, so a two-line title does not
-			// run into the next event's time.
-			daygrid.DrawHLine(frame, x, bounds.Max.X-heroPadX, y-agendaGap/2, widget.PaperBlack)
-		}
-
-		daygrid.Scaled(daygrid.BodyBoldFace, timeScale, widget.PaperBlack).Draw(
-			frame, x, y+timeAscent, timeLineFor(e, opts))
-		y += timeAscent + daygrid.BodyAscent()
-
-		for _, line := range titleLines {
-			daygrid.DrawText(frame, x, y, line, daygrid.BodyFace, widget.PaperBlack)
-			y += lineH
-		}
-		y += agendaGap
-		drawn++
+		out = append(out, eventPlan{top: y, timeLine: timeLineFor(e, opts), titleLines: titleLines})
+		y += needed + agendaGap
 	}
-
-	if remaining := len(events) - drawn; remaining > 0 && y+daygrid.BodyAscent() <= bounds.Max.Y {
-		daygrid.DrawText(frame, x, y+daygrid.BodyAscent(),
-			truncate(fmt.Sprintf("+%d MORE TODAY", remaining), maxChars),
-			daygrid.BodyBoldFace, widget.PaperBlack)
-	}
-	return drawn
+	return out
 }
 
 // timeLineFor is the event's clock label. Times stay precise — 16:15,
@@ -134,9 +158,13 @@ func titleFor(e calendar.Event, opts eventOptions) string {
 func remainingToday(events []calendar.Event, now time.Time) []calendar.Event {
 	var out []calendar.Event
 	for _, e := range events {
-		// An all-day event applies to the whole day, so it never
-		// "finishes" partway through it.
-		if e.AllDay || e.End.After(now) {
+		// Not After: a timed VEVENT with neither DTEND nor DURATION is
+		// parsed with End == Start, so After would drop a reminder at
+		// the very minute it fires — and if it were the last one, the
+		// panel would say "DONE FOR TODAY" over an event happening now.
+		// An all-day event applies to the whole day and never finishes
+		// partway through it.
+		if e.AllDay || !e.End.Before(now) {
 			out = append(out, e)
 		}
 	}

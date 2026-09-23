@@ -186,7 +186,9 @@ func TestWidget_IdentityBlockIsInverted(t *testing.T) {
 
 	black := countIndexIn(frame, block, widget.PaperBlack)
 	white := countIndexIn(frame, block, widget.PaperWhite)
-	if black < black+white-black/2 {
+	// Inverted means the field is mostly black with white text on it,
+	// not mostly white with a black run.
+	if black <= white {
 		t.Errorf("identity block is %d black / %d white — it does not look inverted", black, white)
 	}
 	if white == 0 {
@@ -263,10 +265,17 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
-			// A neighbour already on the frame, outside these bounds.
-			neighbour := image.Rect(0, 481-1, 800, 480)
-			_ = neighbour
 			daygrid.FillRect(frame, image.Rect(0, 0, 800, 480), widget.PaperWhite)
+
+			// A neighbour already on the shared frame, in the space
+			// this widget would spill into. The draw helpers clip to
+			// the frame, not to the widget, so nothing but the guard
+			// keeps this intact.
+			neighbour := image.Rect(tt.bounds.Max.X-1, tt.bounds.Max.Y, 800, 480)
+			if neighbour.Empty() {
+				neighbour = image.Rect(0, tt.bounds.Max.Y, 800, 480)
+			}
+			daygrid.FillRect(frame, neighbour, widget.PaperGray70)
 
 			w := New(tt.bounds, &stubCalSource{events: sampleEvents()},
 				&stubWeatherSource{forecast: sampleForecast()}, fixedClock(testTime),
@@ -276,6 +285,9 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 			}
 			if got := countIndexIn(frame, frame.Bounds(), widget.PaperBlack); got != 0 {
 				t.Errorf("drew %d px into bounds too small to draw into", got)
+			}
+			if got := countIndexIn(frame, neighbour, widget.PaperGray70); got != neighbour.Dx()*neighbour.Dy() {
+				t.Error("painted over the neighbouring widget")
 			}
 		})
 	}
