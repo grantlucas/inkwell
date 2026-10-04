@@ -26,16 +26,16 @@ const (
 	headerH = 92
 
 	// weatherH covers the condition icon, the hi/lo pair and the
-	// precipitation chart. It is the height the hourly temperature
-	// curve used to occupy — dropping the curve is what buys the bars
-	// enough height to read at distance.
+	// combined chart: precipitation bars with the temperature line
+	// drawn over them rather than in a band of its own, which is what
+	// leaves the bars enough height to read at distance.
 	weatherH = 104
 )
 
 // minHeight is the shortest widget this screen can be drawn into. Every
 // renderer places its content at a fixed offset from its band's top —
-// the date numeral's descent lands at +112, the low temperature's at
-// about +168 — and the draw helpers clip to the *frame*, not to the
+// the date numeral's base lands at about +88, the low temperature's at
+// about +148 — and the draw helpers clip to the *frame*, not to the
 // widget's bounds. On a shared 800x480 frame that means a widget given
 // less room than its bands need would paint over whichever widget sits
 // below it, which is the hazard newPrecipLayout documents. Clamping the

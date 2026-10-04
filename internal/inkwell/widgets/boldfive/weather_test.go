@@ -103,9 +103,9 @@ func TestRenderWeatherBand_TempUnit(t *testing.T) {
 	}
 }
 
-// A dry day draws no bars at all. A flat row of stubs reads as a broken
-// widget from across the room; silence reads as a dry day. There is no
-// dry-day caption in this cell either — 144 px cannot carry one.
+// A dry day draws no bars at all: a flat row of stubs reads as a broken
+// widget from across the room. Its chart still carries the temperature
+// line, which TestWidget_DryDayStillDrawsAChart pins.
 func TestRenderWeatherBand_DryDayDrawsNoBars(t *testing.T) {
 	rect := weatherRect()
 	wet := newTestFrame(160, 480)

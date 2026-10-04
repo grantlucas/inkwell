@@ -358,6 +358,7 @@ nothing and saves four flashes an hour.
 | `use_24_hour` | bool | `false` | `true`, `false` | 24-hour phrasing instead of 12-hour. |
 | `language` | string | `"en"` | `en` | Only English today; any other value is rejected rather than silently ignored. |
 | `align` | string | `"center"` | `center`, `left`, `right` | Pins the phrase to an edge, so a corner placement keeps a fixed anchor as the phrase length changes. Left/right inset 4px. |
+| `scale` | integer | `1` | `>= 1` | Whole-number size multiplier. The longest phrase the settings can produce must fit the bounds at this scale, or loading fails. `2` across the full 800 px width is the large header-band clock bold-five uses; `3` does not fit. |
 <!-- markdownlint-enable MD013 -->
 
 ### `separator`
@@ -409,15 +410,24 @@ and leave these out; overriding here defeats the shared cache.
 The same five-column calendar-and-weather shape as `weekly-calendar`,
 with every element sized to be read from across the room rather than
 from arm's length: the day numeral goes from a 2.1 mm cap (readable to
-about 0.35 m) to 6.2 mm (about 1.06 m). It takes the whole panel — the
-header band carries its own date, so it needs no separate `date` widget
-above it.
+about 0.35 m) to 6.2 mm (about 1.06 m). Each column carries its own
+date, so it needs no separate `date` widget.
 
-What it trades away is the hourly temperature curve. That is the height
-the precipitation bars borrowed to become legible, and it is the real
-cost of this screen: if you read that curve, this is the one that costs
-you most. Event titles get about 14 characters a line, the ceiling for a
-160 px column, so it makes text bigger without making it fit better.
+Every column draws the combined chart: precipitation bars with the
+temperature line over them, on one temperature scale shared by the five
+days. A dry day still shows its line, so no column's chart is empty,
+and a cold day sits visibly lower than a warm one. Event titles get
+about 14 characters a line, the ceiling for a 160 px column, so it
+makes text bigger without making it fit better.
+
+It draws no clock of its own. The example config puts a
+[`fuzzy_clock`](#fuzzy_clock) at `scale: 2` in a 46 px header band,
+a 2 px `separator` under it, and bold-five in the remaining
+`[0, 48, 800, 480]`. In that layout a column fits three events even
+when every title wraps, so the example sets `max_events: 3`. A day
+with more events than fit ends with a `+N MORE` line counting the
+ones not shown; when the last event that fits would leave no room for
+that line, it gives way to it, so hidden events are always counted.
 
 There is no today highlight. Today is always the leftmost column, so an
 inverted header would spend ink restating what position already says.
@@ -427,7 +437,7 @@ inverted header would spend ink restating what position already says.
 |-----|------|---------|-----------------|--------|
 | `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Same form as `weekly-calendar`, including [feed rules](#feed-rules). |
 | `refresh` | duration | `"15m"` | `>= 1m` | **Calendar data cache TTL** — how often feeds are re-fetched. Not the render cadence. |
-| `max_events` | integer | `4` | Positive | Cap on events shown per column. One fewer than `weekly-calendar`: the taller line height costs an event. |
+| `max_events` | integer | `4` | Positive | Cap on events shown per column. One fewer than `weekly-calendar`: the taller line height costs an event. Under a clock header band, `3` is what fits. Events past the cap or past the column's height are counted in a `+N MORE` line. |
 | `show_location` | bool | `false` | `true`, `false` | Appends the event's location to its title, when it has one and the line has room. |
 | `latitude` | number | inherits `weather.latitude` | `[-90, 90]` | Per-widget forecast location override. |
 | `longitude` | number | inherits `weather.longitude` | `[-180, 180]` | Per-widget forecast location override. |
