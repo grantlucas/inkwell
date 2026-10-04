@@ -17,8 +17,8 @@ import "image"
 const (
 	// split is where the hero column ends and the day rows begin.
 	// 338 of 800 is 42% — enough for a 60 px date numeral and a
-	// precipitation chart wide enough to show a band of rain as a
-	// band rather than a texture.
+	// combined chart wide enough to show a band of rain as a band
+	// rather than a texture.
 	split = 338
 
 	// dividerW is the rule between the two halves. 3 px rather than 1
@@ -27,7 +27,7 @@ const (
 	dividerW = 3
 
 	// The hero column's bands.
-	identityH  = 116 // inverted block: date, month, fuzzy clock
+	identityH  = 116 // date, month and fuzzy clock above a rule
 	weatherTop = identityH
 	chartTop   = 202
 	chartBot   = 276

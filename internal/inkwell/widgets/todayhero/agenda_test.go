@@ -9,6 +9,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
 func TestWrapText(t *testing.T) {
@@ -201,7 +202,7 @@ func TestRenderRowAgenda_EmptyDay(t *testing.T) {
 // DailyForecast is indistinguishable from a real 0°/0° reading.
 func TestRenderRowWeather_MissingForecast(t *testing.T) {
 	frame := newTestFrame(800, 480)
-	renderRowWeather(frame, image.Rect(0, 0, 800, 120), weather.DailyForecast{}, "C")
+	renderRowWeather(frame, image.Rect(0, 0, 800, 120), weather.DailyForecast{}, "C", weatherview.TempRange{Max: 20})
 	if got := countIndexIn(frame, frame.Bounds(), widget.PaperBlack); got != 0 {
 		t.Errorf("drew %d px for a day with no forecast", got)
 	}
@@ -231,7 +232,7 @@ func TestIconFailureStillDrawsTheTemperatures(t *testing.T) {
 
 	t.Run("day row", func(t *testing.T) {
 		frame := newTestFrame(800, 480)
-		renderRowWeather(frame, image.Rect(0, 0, 800, 120), day, "C")
+		renderRowWeather(frame, image.Rect(0, 0, 800, 120), day, "C", weatherview.TempRange{Max: 20})
 		if countIndexIn(frame, frame.Bounds(), widget.PaperBlack) == 0 {
 			t.Error("nothing drawn after the icon failed")
 		}
