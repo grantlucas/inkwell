@@ -13,20 +13,13 @@ import (
 
 const (
 	agendaPadX = 10
-	agendaPadY = 10
+	// agendaPadY is the room above the first line and below the last.
+	// planRows sizes a row as this twice plus its lines, so changing it
+	// changes how many lines a week can carry.
+	agendaPadY = 8
 
-	// oneColumnMax is the most events a row will lay out across its
-	// full width. Past it the row splits in two, trading title length
-	// for slot count.
-	oneColumnMax = 3
-
-	// twoColumnRows is how many lines each column gets once the row
-	// splits: two columns of two is four slots.
-	twoColumnRows = 2
-
-	colGap = 12
-	// Upper case, like the "+N MORE" marker beside it and the ALL DAY
-	// label above it. Mixed case in this one string read as a second
+	// Upper case, like the "+N MORE" marker below it and the ALL DAY
+	// label beside it. Mixed case in this one string read as a second
 	// typographic system on the same row.
 	emptyMsg = "NOTHING SCHEDULED"
 
@@ -56,18 +49,16 @@ type slot struct {
 	width int
 }
 
-// renderAgenda draws a day's events across the row.
+// renderAgenda draws a day's events down one column, a line each, into
+// the lines planRows gave the row.
 //
-// The column count adapts to the day's load, which is what keeps titles
-// long on the days that can afford it: three events or fewer take the
-// full row width, and four or more split into two columns. That is the
-// whole point of the screen — width is what titles were starving for,
-// so it is spent on them whenever the day allows.
-//
-// A day with more events than slots gives its last slot to the overflow
-// marker rather than overprinting an event with it.
-func renderAgenda(frame *image.Paletted, bounds image.Rectangle, events []calendar.Event, opts eventOptions) int {
-	slots := layoutSlots(bounds, len(events))
+// One column whatever the day's load: width is what titles were
+// starving for, so a busy day grows downward rather than splitting into
+// columns that cut every title short. When the week was too full for
+// every event to get a line, the row's last line becomes "+N MORE"
+// rather than overprinting an event.
+func renderAgenda(frame *image.Paletted, bounds image.Rectangle, events []calendar.Event, lines int, opts eventOptions) int {
+	slots := layoutSlots(bounds, lines)
 	if len(slots) == 0 {
 		return 0
 	}
@@ -82,38 +73,29 @@ func renderAgenda(frame *image.Paletted, bounds image.Rectangle, events []calend
 		return 0
 	}
 
-	// When there is more than fits, the last slot becomes the marker,
-	// so the number of events drawn is one fewer than the slot count.
-	capacity := len(slots)
-	overflow := len(events) > capacity
+	// When there is more than fits, the last line becomes the marker,
+	// so the number of events drawn is one fewer than the lines.
+	capacity := min(len(slots), len(events))
+	overflow := len(events) > len(slots)
 	if overflow {
 		capacity--
 	}
-	// The slot count is fixed by the layout, not by the day: a row
-	// with one event still gets three one-column slots. Bounding the
-	// walk by the events as well is what keeps it from reading past
-	// them.
-	capacity = min(capacity, len(events))
 
-	drawn := 0
-	for i, s := range slots {
-		if i >= capacity {
-			break
-		}
-		drawEventInSlot(frame, s, events[i], opts)
-		drawn++
+	for i := range capacity {
+		drawEventInSlot(frame, slots[i], events[i], opts)
 	}
 
 	if overflow {
 		s := slots[capacity]
 		daygrid.DrawText(frame, s.x, s.y,
-			fitTo(fmt.Sprintf("+%d MORE", len(events)-drawn), s.width),
+			fitTo(fmt.Sprintf("+%d MORE", len(events)-capacity), s.width),
 			daygrid.BodyBoldFace, widget.PaperBlack)
 	}
-	return drawn
+	return capacity
 }
 
-// layoutSlots places the drawable lines for a row carrying n events.
+// layoutSlots places up to n agenda lines down the row, each the full
+// width of the agenda, stopping at the row's bottom edge.
 func layoutSlots(bounds image.Rectangle, n int) []slot {
 	lineH := daygrid.BodyLineH()
 	x := bounds.Min.X + agendaPadX
@@ -124,31 +106,14 @@ func layoutSlots(bounds image.Rectangle, n int) []slot {
 		return nil
 	}
 
-	if n <= oneColumnMax {
-		var out []slot
-		for i := range oneColumnMax {
-			sy := y + i*lineH
-			if !fitsAbove(sy, bounds.Max.Y) {
-				break
-			}
-			out = append(out, slot{x: x, y: sy, width: full})
-		}
-		return out
-	}
-
-	colW := (full - colGap) / 2
 	var out []slot
-	for col := range 2 {
-		for row := range twoColumnRows {
-			sy := y + row*lineH
-			if !fitsAbove(sy, bounds.Max.Y) {
-				break
-			}
-			out = append(out, slot{x: x + col*(colW+colGap), y: sy, width: colW})
+	for i := range n {
+		sy := y + i*lineH
+		if !fitsAbove(sy, bounds.Max.Y) {
+			break
 		}
+		out = append(out, slot{x: x, y: sy, width: full})
 	}
-	// Read down the left column then down the right, which is the
-	// order the times run in.
 	return out
 }
 

@@ -9,10 +9,10 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 )
 
-// Config defaults. There is no max_events here: the row's slot count
-// is the cap, and it adapts to the day's load — three across the full
-// width, or four in two columns. A separate setting could only
-// contradict the geometry.
+// Config defaults. There is no max_events here: a row grows to show
+// every event the week has room for, and when the week is too full the
+// busiest rows give up lines first. A separate cap could only
+// contradict that.
 const (
 	defaultRefresh = 15 * time.Minute
 
@@ -97,8 +97,8 @@ func parseConfig(config map[string]any) (Config, error) {
 // each with the reason, so the error says what to do rather than just
 // refusing.
 var unsupportedKeys = map[string]string{
-	"days":               "row-agenda is always five rows; the row height is what the date numeral's size sets",
-	"max_events":         "the row's slot count is the cap, and it adapts to the day's load — three across the full width, or four in two columns",
+	"days":               "row-agenda is always five rows, so the screen shows the same span of days however full the week is",
+	"max_events":         "each row grows to fit its events, and when the week is too full the busiest rows give up lines first",
 	"week_start":         "the rows always start from today, so there is no week to start",
 	"show_weather":       "the weather badge is part of the layout; a day with no forecast already draws nothing",
 	"show_weather_label": "the badge has no condition label — the icon carries the condition",

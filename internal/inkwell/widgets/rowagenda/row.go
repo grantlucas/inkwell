@@ -13,21 +13,29 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
+// The offsets below are from the top of the minRowH block planRows
+// centres in each row, so the date, the icon and the chart sit level
+// with each other however tall the row's agenda makes it.
 const (
-	gutterPadX      = 10
-	dateScale       = 3
-	dateBaseline    = 52
+	gutterPadX = 10
+	dateScale  = 3
+	// The 3x numeral and the stacked weekday and month are centred on
+	// the block, with the month's baseline level with the numeral's.
+	dateBaseline    = 56
 	abbrGap         = 8
 	weekdayBaseline = 36
 	monthBaseline   = 56
 
-	// The weather badge.
-	badgeIconX  = 4
-	badgeIconY  = 8
+	// The weather badge: icon and hi/lo pair centred on the block. The
+	// partly-cloudy glyph's sun ray reaches past its nominal size, and
+	// butted against the high it read as a minus sign ("-16°C"), so the
+	// icon sits flush left and the pair starts clear of the ray.
+	badgeIconX  = 0
+	badgeIconY  = (minRowH - badgeIconSz) / 2
 	badgeIconSz = 38
-	hiDX        = 46
-	hiBaseline  = 40
-	loBaseline  = 68
+	hiDX        = 52
+	hiBaseline  = 34
+	loBaseline  = 56
 
 	// tempMaxChars is the widest reading the temperature block has to
 	// hold — "-100°F" — and chartDX is placed clear of it. The two are
@@ -46,38 +54,33 @@ const (
 // renderGutter draws the date block: the numeral at 3x with the weekday
 // and month stacked beside it.
 //
-// Today's gutter inverts. Here the highlight earns its ink in a way it
-// does not on bold-five: rows have no "today is leftmost" convention to
-// lean on, so without it there is nothing saying which row is now.
-// Inversion rather than a tint, because a PaperGray20 field vanishes in
-// Gray4's light bucket and snaps to white under the BW threshold.
+// The same plain date on every row, today included. Today is the first
+// row, and position says that on its own; a filled block would sit in
+// the same place every refresh, which is what burns into an e-paper
+// panel.
 func renderGutter(frame *image.Paletted, bounds image.Rectangle, day daygrid.Day) {
-	ink := widget.PaperBlack
-	if day.IsToday {
-		daygrid.FillRect(frame, bounds, widget.PaperBlack)
-		ink = widget.PaperWhite
-	}
-
 	x := bounds.Min.X + gutterPadX
 	numeral := fmt.Sprintf("%d", day.Start.Day())
-	drawer := daygrid.Scaled(daygrid.BodyBoldFace, dateScale, ink)
+	drawer := daygrid.Scaled(daygrid.BodyBoldFace, dateScale, widget.PaperBlack)
 	drawer.Draw(frame, x, bounds.Min.Y+dateBaseline, numeral)
 
 	abbrX := x + drawer.Measure(numeral) + abbrGap
 	daygrid.DrawText(frame, abbrX, bounds.Min.Y+weekdayBaseline,
-		strings.ToUpper(day.Start.Format("Mon")), daygrid.BodyFace, ink)
+		strings.ToUpper(day.Start.Format("Mon")), daygrid.BodyFace, widget.PaperBlack)
 	daygrid.DrawText(frame, abbrX, bounds.Min.Y+monthBaseline,
-		strings.ToUpper(day.Start.Format("Jan")), daygrid.BodyFace, ink)
+		strings.ToUpper(day.Start.Format("Jan")), daygrid.BodyFace, widget.PaperBlack)
 }
 
 // renderBadge draws the condition icon, the hi/lo pair, and the row's
-// precipitation chart.
+// combined chart: precipitation bars with the temperature line over
+// them, plotted on rng, the range shared by all five rows.
 //
-// These bars are the narrowest of the three screens that carry them —
-// 110 px against bold-five's 160 — so they are still a shape, but a
-// cramped one. The 50% guide stays off at this width: the dashes would
-// compete with the bars they are meant to measure.
-func renderBadge(frame *image.Paletted, bounds image.Rectangle, forecast weather.DailyForecast, unit string, isToday, marker bool, nowHour int) {
+// The chart is on every row whether or not rain is due, so a dry day
+// still shows the shape of its temperature rather than a blank cell,
+// and a cold day visibly sits lower than a warm one. The bars are the
+// narrowest of the screens that carry them, so the 50% guide stays off:
+// the dashes would compete with the bars they are meant to measure.
+func renderBadge(frame *image.Paletted, bounds image.Rectangle, forecast weather.DailyForecast, unit string, isToday, marker bool, nowHour int, rng weatherview.TempRange) {
 	if forecast.Date.IsZero() {
 		// A zero DailyForecast is indistinguishable from a real
 		// reading, so drawing it would state a forecast nobody made.
@@ -118,9 +121,7 @@ func renderBadge(frame *image.Paletted, bounds image.Rectangle, forecast weather
 		NowHour:       nowHour,
 		ShowNowMarker: isToday && marker,
 		ShowGuide:     false,
-		// No dry-day caption: 110 px cannot carry a legible phrase, and
-		// an empty cell already reads as a dry day.
-		DryText: "",
+		TempRange:     &rng,
 	})
 }
 

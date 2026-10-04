@@ -9,11 +9,16 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
-func agendaRect() image.Rectangle {
-	return computeRows(image.Rect(0, 0, 800, 480))[0].Agenda
+// busyRow is the first row of a week whose first day carries n events
+// and whose other days are empty, as the widget would lay it out.
+func busyRow(n int) rowLayout {
+	return planRows(panel, []int{n, 0, 0, 0, 0})[0]
 }
+
+func agendaRect() image.Rectangle { return busyRow(0).Agenda }
 
 func nEvents(n int) []calendar.Event {
 	out := make([]calendar.Event, n)
@@ -24,45 +29,26 @@ func nEvents(n int) []calendar.Event {
 	return out
 }
 
-// The column count adapts to the day's load, which is the whole point
-// of the screen: width is what titles were starving for, so it is spent
-// on them whenever the day can afford it.
-func TestLayoutSlots_AdaptsToTheLoad(t *testing.T) {
-	bounds := agendaRect()
-	full := bounds.Dx() - 2*agendaPadX
-
-	tests := []struct {
-		label     string
-		events    int
-		wantSlots int
-		wantWide  bool // slots take the full width
-	}{
-		{"one event", 1, 3, true},
-		{"three events", 3, 3, true},
-		{"four events splits into columns", 4, 4, false},
-		{"many events", 9, 4, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.label, func(t *testing.T) {
-			slots := layoutSlots(bounds, tt.events)
-			if len(slots) != tt.wantSlots {
-				t.Fatalf("got %d slots, want %d", len(slots), tt.wantSlots)
+// Every row is one event column running the agenda's full width,
+// however busy the day: width is what titles were starving for, and the
+// row grows downward instead of splitting sideways.
+func TestLayoutSlots_OneFullWidthColumn(t *testing.T) {
+	for _, n := range []int{1, 3, 4, 7} {
+		row := busyRow(n)
+		full := row.Agenda.Dx() - 2*agendaPadX
+		slots := layoutSlots(row.Agenda, row.Lines)
+		if len(slots) != n {
+			t.Fatalf("%d events: got %d slots, want one per event", n, len(slots))
+		}
+		for i, s := range slots {
+			if s.width != full || s.x != slots[0].x {
+				t.Errorf("%d events: slot %d is at x=%d, %d px wide; want x=%d, the full %d",
+					n, i, s.x, s.width, slots[0].x, full)
 			}
-			if tt.wantWide && slots[0].width != full {
-				t.Errorf("slot width = %d, want the full %d", slots[0].width, full)
+			if i > 0 && s.y != slots[i-1].y+daygrid.BodyLineH() {
+				t.Errorf("%d events: slot %d is not the line below slot %d", n, i, i-1)
 			}
-			if !tt.wantWide && slots[0].width >= full {
-				t.Errorf("slot width = %d, want less than the full %d", slots[0].width, full)
-			}
-		})
-	}
-
-	// A one-column slot has to be worth the swap: it should carry
-	// noticeably more characters than a two-column one.
-	wide := layoutSlots(bounds, 1)[0].width / daygrid.BodyAdvance()
-	narrow := layoutSlots(bounds, 4)[0].width / daygrid.BodyAdvance()
-	if wide < narrow*2-2 {
-		t.Errorf("one-column slot is %d chars against two-column's %d — the split is not buying enough", wide, narrow)
+		}
 	}
 }
 
@@ -74,60 +60,75 @@ func TestLayoutSlots_TooNarrow(t *testing.T) {
 	}
 }
 
-// The overflow marker must occupy a slot rather than overprinting one.
-// An earlier draft of this design drew it on top of the fourth event.
-func TestRenderAgenda_OverflowMarkerDoesNotOverprint(t *testing.T) {
-	bounds := agendaRect()
-	events := nEvents(9)
-
-	frame := newTestFrame(800, 480)
-	drawn := renderAgenda(frame, bounds, events, eventOptions{Location: time.UTC})
-
-	slots := layoutSlots(bounds, len(events))
-	if drawn != len(slots)-1 {
-		t.Fatalf("drew %d events into %d slots, want one fewer than the slots", drawn, len(slots))
+// A row that lost lines to a crowded week gives its last visible line
+// to "+N MORE", counting every event it could not show, and the marker
+// takes its own line rather than overprinting an event.
+func TestRenderAgenda_OverflowMarker(t *testing.T) {
+	// A nine-event day that the week trimmed to eight lines: seven
+	// events and a marker for the other five.
+	row := busyRow(9)
+	bounds, lines := row.Agenda, row.Lines
+	events := nEvents(12)
+	if lines != 8 {
+		t.Fatalf("the busy row has %d lines, want 8", lines)
 	}
 
-	// Draw the same events with the marker suppressed, then compare the
-	// marker's slot: if the marker overprinted an event, the slot would
-	// carry ink from both.
+	frame := newTestFrame(800, 480)
+	drawn := renderAgenda(frame, bounds, events, lines, eventOptions{Location: time.UTC})
+	if drawn != lines-1 {
+		t.Fatalf("drew %d events into %d lines, want one fewer than the lines", drawn, lines)
+	}
+
+	slots := layoutSlots(bounds, lines)
+	marker := slots[lines-1]
+	markerBox := image.Rect(marker.x, marker.y-daygrid.BodyAscent(), marker.x+marker.width, marker.y+daygrid.BodyLineH()-daygrid.BodyAscent())
+
+	// Draw the same events with the marker suppressed: if the marker
+	// overprinted an event, its line would carry ink from both.
 	eventsOnly := newTestFrame(800, 480)
-	renderAgenda(eventsOnly, bounds, events[:drawn], eventOptions{Location: time.UTC})
-
-	marker := slots[len(slots)-1]
-	markerBox := image.Rect(marker.x, marker.y-daygrid.BodyAscent(), marker.x+marker.width, marker.y+daygrid.BodyLineH())
+	renderAgenda(eventsOnly, bounds, events[:drawn], lines, eventOptions{Location: time.UTC})
 	if got := countIndexIn(eventsOnly, markerBox, widget.PaperBlack); got != 0 {
-		t.Errorf("the marker's slot already carries %d px of event ink — it is being overprinted", got)
+		t.Errorf("the marker's line already carries %d px of event ink — it is being overprinted", got)
 	}
-	if countIndexIn(frame, markerBox, widget.PaperBlack) == 0 {
-		t.Error("no marker drawn in the reserved slot")
-	}
-}
 
-// Exactly as many events as slots draws them all, with no marker.
-func TestRenderAgenda_ExactFitDrawsNoMarker(t *testing.T) {
-	bounds := agendaRect()
-	slots := layoutSlots(bounds, 4)
-	events := nEvents(len(slots))
-
-	frame := newTestFrame(800, 480)
-	if drawn := renderAgenda(frame, bounds, events, eventOptions{Location: time.UTC}); drawn != len(slots) {
-		t.Errorf("drew %d events, want all %d", drawn, len(slots))
+	// The marker counts the five events that did not make it.
+	want := newTestFrame(800, 480)
+	daygrid.DrawText(want, marker.x, marker.y, "+5 MORE", daygrid.BodyBoldFace, widget.PaperBlack)
+	for y := markerBox.Min.Y; y < markerBox.Max.Y; y++ {
+		for x := markerBox.Min.X; x < markerBox.Max.X; x++ {
+			if frame.ColorIndexAt(x, y) != want.ColorIndexAt(x, y) {
+				t.Fatalf("the marker line differs from \"+5 MORE\" at (%d,%d)", x, y)
+			}
+		}
 	}
 }
 
-// A row with one event must not read past it into the fixed slot list.
-func TestRenderAgenda_FewerEventsThanSlots(t *testing.T) {
-	frame := newTestFrame(800, 480)
-	if drawn := renderAgenda(frame, agendaRect(), nEvents(1), eventOptions{Location: time.UTC}); drawn != 1 {
-		t.Errorf("drew %d events, want 1", drawn)
+// When every event has a line, they are all drawn and there is no
+// marker.
+func TestRenderAgenda_DrawsEveryEventThatFits(t *testing.T) {
+	tests := []struct {
+		label  string
+		events int
+		lines  int
+	}{
+		{"exact fit", 5, 5},
+		{"room to spare", 1, 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			frame := newTestFrame(800, 480)
+			drawn := renderAgenda(frame, busyRow(tt.events).Agenda, nEvents(tt.events), tt.lines, eventOptions{Location: time.UTC})
+			if drawn != tt.events {
+				t.Errorf("drew %d events, want all %d", drawn, tt.events)
+			}
+		})
 	}
 }
 
 // An empty day says so; a blank strip reads as a fault.
 func TestRenderAgenda_EmptyDay(t *testing.T) {
 	frame := newTestFrame(800, 480)
-	if drawn := renderAgenda(frame, agendaRect(), nil, eventOptions{Location: time.UTC}); drawn != 0 {
+	if drawn := renderAgenda(frame, agendaRect(), nil, 1, eventOptions{Location: time.UTC}); drawn != 0 {
 		t.Errorf("drew %d events, want 0", drawn)
 	}
 	if countIndexIn(frame, agendaRect(), widget.PaperBlack) == 0 {
@@ -137,7 +138,7 @@ func TestRenderAgenda_EmptyDay(t *testing.T) {
 
 func TestRenderAgenda_TooNarrow(t *testing.T) {
 	frame := newTestFrame(800, 480)
-	if drawn := renderAgenda(frame, image.Rect(0, 0, 40, 96), nEvents(2), eventOptions{Location: time.UTC}); drawn != 0 {
+	if drawn := renderAgenda(frame, image.Rect(0, 0, 40, 96), nEvents(2), 2, eventOptions{Location: time.UTC}); drawn != 0 {
 		t.Errorf("drew %d events into a 40 px row, want 0", drawn)
 	}
 }
@@ -220,10 +221,53 @@ func TestTimeLineAndTitle(t *testing.T) {
 // DailyForecast is indistinguishable from a real 0°/0° reading.
 func TestRenderBadge_MissingForecast(t *testing.T) {
 	frame := newTestFrame(800, 480)
-	renderBadge(frame, computeRows(image.Rect(0, 0, 800, 480))[0].Badge,
-		weather.DailyForecast{}, "C", true, true, 14)
+	renderBadge(frame, busyRow(0).Badge,
+		weather.DailyForecast{}, "C", true, true, 14, weatherview.TempRange{Min: 0, Max: 25})
 	if got := countIndexIn(frame, frame.Bounds(), widget.PaperBlack); got != 0 {
 		t.Errorf("drew %d px for a day with no forecast", got)
+	}
+}
+
+// Every row carries the combined chart, so a dry day still draws its
+// temperature line rather than leaving the chart blank, and two days on
+// one shared range sit at different heights when one is colder.
+func TestRenderBadge_CombinedChart(t *testing.T) {
+	badge := busyRow(0).Badge
+	chart := image.Rect(badge.Min.X+chartDX, badge.Min.Y, badge.Min.X+chartDX+chartW, badge.Max.Y)
+	rng := weatherview.TempRange{Min: -10, Max: 30}
+
+	dryDay := func(temp float64) weather.DailyForecast {
+		var hourly []weather.HourlyPoint
+		for h := range 24 {
+			hourly = append(hourly, weather.HourlyPoint{Hour: h, Temperature: temp})
+		}
+		return weather.DailyForecast{
+			Date: time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC),
+			High: temp, Low: temp, Hourly: hourly,
+		}
+	}
+
+	// topInk is the first row of the chart carrying ink above its
+	// baseline, which on a dry day is the temperature line.
+	topInk := func(frame *image.Paletted) int {
+		for y := chart.Min.Y; y < chart.Max.Y; y++ {
+			if countIndexIn(frame, image.Rect(chart.Min.X, y, chart.Max.X, y+1), widget.PaperBlack) > 0 {
+				return y
+			}
+		}
+		return -1
+	}
+
+	cold, warm := newTestFrame(800, 480), newTestFrame(800, 480)
+	renderBadge(cold, badge, dryDay(-5), "C", false, false, 14, rng)
+	renderBadge(warm, badge, dryDay(25), "C", false, false, 14, rng)
+
+	coldY, warmY := topInk(cold), topInk(warm)
+	if coldY < 0 || warmY < 0 {
+		t.Fatal("a dry day drew a blank chart")
+	}
+	if warmY >= coldY {
+		t.Errorf("the warm day's line (y=%d) is not above the cold day's (y=%d)", warmY, coldY)
 	}
 }
 
@@ -235,11 +279,11 @@ func TestRenderBadge_IconFailure(t *testing.T) {
 	drawIcon = func(*image.Paletted, int, int, int, weather.Condition) error { return errIcon{} }
 
 	frame := newTestFrame(800, 480)
-	renderBadge(frame, computeRows(image.Rect(0, 0, 800, 480))[0].Badge,
+	renderBadge(frame, busyRow(0).Badge,
 		weather.DailyForecast{
 			Date: time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC),
 			High: 14, Low: 3,
-		}, "C", true, true, 14)
+		}, "C", true, true, 14, weatherview.TempRange{Min: 0, Max: 25})
 	if countIndexIn(frame, frame.Bounds(), widget.PaperBlack) == 0 {
 		t.Error("nothing drawn after the icon failed")
 	}
@@ -257,28 +301,19 @@ func (errIcon) Error() string { return "no glyph" }
 func TestLayoutSlots_ShortRowDropsSlots(t *testing.T) {
 	wide := agendaRect().Dx()
 	// Tall enough for one line and no more.
-	short := image.Rect(0, 0, wide, agendaPadY+daygrid.BodyAscent())
+	short := image.Rect(0, 0, wide, agendaPadY+daygrid.BodyLineH()+1)
 
-	tests := []struct {
-		label  string
-		events int
-	}{
-		{"one column", 2},
-		{"two columns", 5},
+	slots := layoutSlots(short, 3)
+	if len(slots) != 1 {
+		t.Fatalf("got %d slots in a one-line row, want 1", len(slots))
 	}
 	// Asserted against the glyph's *descender*, not the baseline. The
 	// code used to branch on the baseline alone, and the test asserted
 	// the same predicate — so it could not fail, and it said nothing
 	// about the claim in its own name.
 	descent := daygrid.BodyFace.Metrics().Descent.Ceil()
-	for _, tt := range tests {
-		t.Run(tt.label, func(t *testing.T) {
-			for _, s := range layoutSlots(short, tt.events) {
-				if s.y+descent >= short.Max.Y {
-					t.Errorf("slot at baseline %d descends past the row's %d", s.y, short.Max.Y)
-				}
-			}
-		})
+	if s := slots[0]; s.y+descent >= short.Max.Y {
+		t.Errorf("slot at baseline %d descends past the row's %d", s.y, short.Max.Y)
 	}
 }
 
@@ -287,7 +322,7 @@ func TestLayoutSlots_ShortRowDropsSlots(t *testing.T) {
 // as bars painted through the digits. The shipped goldens cannot catch
 // it because their rain sits in hours 12-17, well right of the label.
 func TestRenderBadge_TemperatureNeverReachesTheChart(t *testing.T) {
-	badge := computeRows(image.Rect(0, 0, 800, 480))[0].Badge
+	badge := busyRow(0).Badge
 
 	// Morning rain, so the leftmost bars land where the label would
 	// overrun if it could.
@@ -315,7 +350,7 @@ func TestRenderBadge_TemperatureNeverReachesTheChart(t *testing.T) {
 			renderBadge(frame, badge, weather.DailyForecast{
 				Date: time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC),
 				High: tt.hi, Low: tt.lo, Hourly: hourly,
-			}, tt.unit, true, true, 8)
+			}, tt.unit, true, true, 8, weatherview.TempRange{Min: -30, Max: 40})
 
 			// The widest reading the block can hold must end before
 			// the chart's left edge.
@@ -338,7 +373,7 @@ func TestRenderBadge_TemperatureNeverReachesTheChart(t *testing.T) {
 func TestRenderAgenda_EmptyMessageStaysInBounds(t *testing.T) {
 	bounds := image.Rect(0, 0, minWidth, 96)
 	frame := newTestFrame(800, 480)
-	renderAgenda(frame, image.Rect(agendaX, 0, minWidth, 96), nil, eventOptions{Location: time.UTC})
+	renderAgenda(frame, image.Rect(agendaX, 0, minWidth, 96), nil, 1, eventOptions{Location: time.UTC})
 
 	for y := range 480 {
 		for x := bounds.Max.X; x < 800; x++ {

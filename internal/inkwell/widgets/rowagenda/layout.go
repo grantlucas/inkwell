@@ -1,23 +1,26 @@
 // Package rowagenda implements the row-agenda screen: days as
 // full-width rows, so event titles stop truncating.
 //
-// It is the axis swap. A day gets 96 px of height instead of 160 px of
-// width, and for text that is the trade that matters — width is what
-// titles were starving for. Titles get 40-odd characters instead of 13,
-// which makes this the only one of the three new screens where nothing
-// truncates on a realistic week.
+// It is the axis swap. A day gets its height from its events instead of
+// a fixed column width, and for text that is the trade that matters —
+// width is what titles were starving for. Every row has one event
+// column running the width of the agenda, so a title gets 35-odd
+// characters whatever else the day holds.
 //
 // It is a separate widget type rather than a mode of weekly-calendar,
 // so the current view stays available as a control in the rotation.
 package rowagenda
 
-import "image"
+import (
+	"image"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+)
 
 const (
-	// rows is fixed at five: five 96 px rows fill the panel exactly,
-	// and the date numeral's 3x height is what sets that 96.
+	// rows is fixed at five: the screen always shows the same span of
+	// days, however crowded the week is.
 	rows = 5
-	rowH = 96
 
 	// gutterW is the date block: numeral plus the stacked weekday and
 	// month abbreviations.
@@ -30,39 +33,115 @@ const (
 )
 
 // rowLayout is one day's zones.
+//
+// Gutter and Badge are minRowH tall and centred in the row, so the date
+// and the chart sit level with each other on every row and every chart
+// shares one height — a taller chart on a busier day would draw the
+// same rain at a different size. Agenda runs the row's full height.
 type rowLayout struct {
 	Bounds image.Rectangle
 	Gutter image.Rectangle
 	Badge  image.Rectangle
 	Agenda image.Rectangle
+	// Lines is how many agenda lines the row draws: one per event, or
+	// fewer when the week would not otherwise fit, in which case the
+	// last of them carries "+N MORE".
+	Lines  int
 	IsLast bool
 }
 
-// computeRows divides bounds into five day rows and gives each its
-// gutter, weather badge and agenda.
+// planRows divides bounds into five day rows, one per entry in counts,
+// each as tall as its events need and never shorter than minRowH.
 //
-// Any remainder from an odd height goes to the last row, so the rows
-// above it keep a common height and their date numerals line up — which
-// is the one thing a stack of rows has to get right.
-func computeRows(bounds image.Rectangle) []rowLayout {
+// Room the rows do not need is shared between them evenly, so a quiet
+// week still fills the panel. Any remainder from the division goes to
+// the last row, so the rows above it keep a common share.
+func planRows(bounds image.Rectangle, counts []int) []rowLayout {
+	lines := fitLines(counts, bounds.Dy())
+
+	heights := make([]int, rows)
+	used := 0
+	for i, n := range lines {
+		heights[i] = rowHeight(n)
+		used += heights[i]
+	}
+	spare := max(bounds.Dy()-used, 0)
+	for i := range heights {
+		heights[i] += spare / rows
+	}
+	heights[rows-1] += spare % rows
+
 	out := make([]rowLayout, rows)
+	x := bounds.Min.X
+	y0 := bounds.Min.Y
 	for i := range rows {
-		y0 := bounds.Min.Y + i*rowH
-		y1 := y0 + rowH
+		y1 := y0 + heights[i]
 		if i == rows-1 {
 			y1 = bounds.Max.Y
 		}
-		x := bounds.Min.X
+		blockY := y0 + (y1-y0-minRowH)/2
 		out[i] = rowLayout{
 			Bounds: image.Rect(x, y0, bounds.Max.X, y1),
-			Gutter: image.Rect(x, y0, x+gutterW, y1),
-			Badge:  image.Rect(x+gutterW, y0, x+agendaX, y1),
+			Gutter: image.Rect(x, blockY, x+gutterW, blockY+minRowH),
+			Badge:  image.Rect(x+gutterW, blockY, x+agendaX, blockY+minRowH),
 			Agenda: image.Rect(x+agendaX, y0, bounds.Max.X, y1),
+			Lines:  lines[i],
 			IsLast: i == rows-1,
 		}
+		y0 = y1
 	}
 	return out
 }
+
+// fitLines gives each row a line per event, then, while the rows would
+// be taller than height, takes one line at a time from the busiest row.
+//
+// Taking from the busiest row is what keeps quiet days whole: a day with
+// two events never loses one so that a day with nine can show a tenth.
+// A tie goes against the later day, so today and tomorrow — the rows
+// read first — keep their detail longest.
+//
+// Trimming stops at the lines a minimum-height row holds anyway, since
+// below that a row gets no shorter. Bounds too short for five minimum
+// rows are refused by Render before they reach here; the stop keeps any
+// other caller from looping forever.
+func fitLines(counts []int, height int) []int {
+	lines := make([]int, rows)
+	total := 0
+	for i := range rows {
+		// An empty day still takes a line: it says so.
+		lines[i] = max(counts[i], 1)
+		total += rowHeight(lines[i])
+	}
+
+	floor := (minRowH - 2*agendaPadY) / daygrid.BodyLineH()
+	for total > height {
+		busiest := 0
+		for i, n := range lines {
+			if n >= lines[busiest] {
+				busiest = i
+			}
+		}
+		if lines[busiest] <= floor {
+			break
+		}
+		total -= rowHeight(lines[busiest])
+		lines[busiest]--
+		total += rowHeight(lines[busiest])
+	}
+	return lines
+}
+
+// rowHeight is the height a row needs for n agenda lines.
+func rowHeight(n int) int {
+	return max(minRowH, 2*agendaPadY+n*daygrid.BodyLineH())
+}
+
+// minRowH is the shortest a row may be: the height the badge's combined
+// chart needs to stay readable, which is also three lines of agenda.
+// With five rows at the minimum the panel has 100 px to spare, which is
+// five more lines spread across the busy days.
+const minRowH = 76
 
 // minHeight and minWidth are the smallest bounds this screen can draw
 // into. Every element is placed at a fixed offset from its row, and the
@@ -70,6 +149,6 @@ func computeRows(bounds image.Rectangle) []rowLayout {
 // a widget given less room would paint over whichever widget shares the
 // frame with it.
 const (
-	minHeight = rows * rowH
+	minHeight = rows * minRowH
 	minWidth  = agendaX + 120
 )
