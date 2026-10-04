@@ -195,25 +195,27 @@ dashboard:
     #         # top-level weather: block; override per widget if needed.
 
     # A fourth screen: row-agenda. The axis swap — days become
-    # full-width rows, so a day gets 96 px of height instead of 160 px
-    # of width. For text that is the trade that matters: titles get
-    # 40-odd characters instead of 13, which makes this the only screen
-    # where nothing truncates on a realistic week. "Platform
-    # architecture review" fits, and so does "Car in for service".
+    # full-width rows with one event column each, so titles get 35-odd
+    # characters instead of 13, which makes this the only screen where
+    # nothing truncates on a realistic week. "Platform architecture
+    # review" fits, and so does "Car in for service".
     #
-    # The agenda's column count adapts to the day's load, which is what
-    # keeps titles long on the days that can afford it: three events or
-    # fewer take the full row width, four or more split into two
-    # columns. Today's date gutter inverts — rows have no "today is
-    # leftmost" convention to lean on, so without it nothing says which
-    # row is now.
+    # Rows are sized to their events: a quiet day's row is short and a
+    # busy day's row is tall, never shorter than the height that keeps
+    # its combined chart readable. There are always five rows. When the
+    # week will not fit, the busiest rows give up events first, one line
+    # at a time, and their last line becomes "+N MORE" — quiet days are
+    # never squeezed to make room. Every row carries the combined chart
+    # (precipitation bars with the temperature line) on one temperature
+    # scale shared by all five days. Today is the first row, shown by
+    # position alone: the date is plain on every row, so nothing fills
+    # the same patch of panel every refresh.
     #
-    # What it gives up: 96 px a day caps you at three or four items
-    # before "+N MORE", so a genuinely packed Monday loses detail a
-    # column would have shown. This screen is better at reading what is
-    # there and worse at showing everything. Its precipitation bars are
-    # also the narrowest of the three that carry them (110 px against
-    # bold-five's 160) — still a shape, but a cramped one.
+    # What it gives up: a genuinely packed week loses detail from its
+    # busiest days, so this screen is better at reading what is there
+    # than at showing everything. Its charts are also the narrowest of
+    # the screens that carry them (110 px against bold-five's 160) —
+    # still a shape, but a cramped one.
     #
     # - name: row-agenda
     #   widgets:
@@ -222,9 +224,9 @@ dashboard:
     #       refresh: "15m"   # how often it may refresh the panel
     #       config:
     #         # The shared calendar keys. max_events is rejected here:
-    #         # the row's slot count is the cap and it adapts to the
-    #         # day's load, so a setting could only contradict the
-    #         # geometry. days, week_start, show_weather,
+    #         # rows grow to fit their events and the busiest give up
+    #         # lines first, so a cap could only contradict that.
+    #         # days, week_start, show_weather,
     #         # show_weather_label and highlight_hour are rejected too,
     #         # each with the reason — a config pasted over from
     #         # weekly-calendar fails to load rather than quietly
