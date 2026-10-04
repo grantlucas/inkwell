@@ -77,6 +77,7 @@ dashboard:
         #     use_24_hour: false                       # 12-hour by default
         #     language: en                             # only "en" supported today
         #     align: center                            # center (default), left, or right
+        #     scale: 1                                 # whole-number size; the longest phrase must fit
         - type: separator
           bounds: [0, 50, 800, 52]
           refresh: "static"   # never changes; never triggers a refresh

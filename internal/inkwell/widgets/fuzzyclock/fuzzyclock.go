@@ -16,16 +16,14 @@ package fuzzyclock
 import (
 	"fmt"
 	"image"
-	"image/color"
-	"image/draw"
 	"strings"
 	"time"
 
 	"golang.org/x/image/font"
-	"golang.org/x/image/math/fixed"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 )
 
 // Compile-time interface check.
@@ -82,54 +80,92 @@ type Widget struct {
 	now    func() time.Time
 	opts   Options
 	align  Align
+	scale  int
 }
+
+// edgeInset is how far a left- or right-aligned phrase sits from its edge,
+// matching the clock widget.
+const edgeInset = 4
 
 // New creates a fuzzy clock Widget. A nil now falls back to time.Now so the
 // widget renders something reasonable when callers wire it up without an
 // explicit clock. The zero Align centers the phrase, preserving the widget's
-// original behavior.
-func New(bounds image.Rectangle, now func() time.Time, opts Options, align Align) *Widget {
+// original behavior. scale is the integer size multiplier (1 is the original
+// size); anything below 1 draws at 1.
+//
+// New does not check that the phrase fits: Factory does that once, at
+// configuration time, so a screen never finds out minute by minute.
+func New(bounds image.Rectangle, now func() time.Time, opts Options, align Align, scale int) *Widget {
 	if now == nil {
 		now = time.Now
 	}
-	return &Widget{bounds: bounds, now: now, opts: opts, align: align}
+	return &Widget{bounds: bounds, now: now, opts: opts, align: align, scale: max(scale, 1)}
 }
 
 // Bounds returns the rectangle this widget occupies on the display.
 func (w *Widget) Bounds() image.Rectangle { return w.bounds }
 
 // Render draws the fuzzy time within the bounds using black text on a white
-// background, aligned per the widget's Align (center by default). Text sources
-// PaperBlack so the anti-aliased glyph fringe straddles the BW threshold
-// cleanly (see fonts.Face / project rendering rules). Left/right alignment
-// insets the text 4px from the matching edge, matching the clock widget.
+// background, aligned per the widget's Align (center by default). The phrase is
+// the body face drawn through the daygrid helpers at the widget's scale, so it
+// is a solid 1-bit mask at every size. Left/right alignment insets the text 4px
+// from the matching edge, matching the clock widget.
 func (w *Widget) Render(frame *image.Paletted) error {
-	draw.Draw(frame, w.bounds, image.NewUniform(color.White), image.Point{}, draw.Src)
+	daygrid.FillWhite(frame, w.bounds)
 
+	drawer := daygrid.Scaled(fuzzyFace, w.scale, widget.PaperBlack)
 	text := Phrase(w.now(), w.opts)
-	textW := font.MeasureString(fuzzyFace, text).Ceil()
+	textW := drawer.Measure(text)
 	metrics := fuzzyFace.Metrics()
-	textH := (metrics.Ascent + metrics.Descent).Ceil()
+	textH := (metrics.Ascent + metrics.Descent).Ceil() * w.scale
 
 	var x int
 	switch w.align {
 	case AlignLeft:
-		x = w.bounds.Min.X + 4
+		x = w.bounds.Min.X + edgeInset
 	case AlignRight:
-		x = w.bounds.Max.X - textW - 4
+		x = w.bounds.Max.X - textW - edgeInset
 	default:
 		x = w.bounds.Min.X + (w.bounds.Dx()-textW)/2
 	}
-	y := w.bounds.Min.Y + (w.bounds.Dy()-textH)/2 + metrics.Ascent.Ceil()
+	y := w.bounds.Min.Y + (w.bounds.Dy()-textH)/2 + metrics.Ascent.Ceil()*w.scale
 
-	d := &font.Drawer{
-		Dst:  frame,
-		Src:  image.NewUniform(color.Black),
-		Face: fuzzyFace,
-		Dot:  fixed.P(x, y),
+	drawer.Draw(frame, x, y, text)
+	return nil
+}
+
+// fitError reports why the longest phrase this configuration can produce does
+// not fit w's bounds, or nil if it does. The widget draws a different phrase
+// every five minutes, so checking the one that happens to be showing at load
+// time would let a screen silently clip its clock at 8:25 on some later day.
+//
+// Ink is wider than the advance by the dilation radius on each side, and an
+// edge-aligned phrase also gives up its inset, so both count against the room.
+func (w *Widget) fitError() error {
+	drawer := daygrid.Scaled(fuzzyFace, w.scale, widget.PaperBlack)
+	grow := drawer.Grow
+
+	longest := ""
+	for hour := range 24 {
+		for minute := 0; minute < 60; minute += 5 {
+			p := Phrase(time.Date(2000, 1, 1, hour, minute, 0, 0, time.UTC), w.opts)
+			if drawer.Measure(p) > drawer.Measure(longest) {
+				longest = p
+			}
+		}
 	}
-	d.DrawString(text)
 
+	needW := drawer.Measure(longest) + 2*grow
+	if w.align != AlignCenter {
+		needW += edgeInset
+	}
+	metrics := fuzzyFace.Metrics()
+	needH := (metrics.Ascent+metrics.Descent).Ceil()*w.scale + 2*grow
+
+	if needW > w.bounds.Dx() || needH > w.bounds.Dy() {
+		return fmt.Errorf("fuzzy_clock: %q at scale %d needs %dx%d px but bounds are %dx%d",
+			longest, w.scale, needW, needH, w.bounds.Dx(), w.bounds.Dy())
+	}
 	return nil
 }
 
@@ -146,6 +182,11 @@ func (w *Widget) Render(frame *image.Paletted) error {
 //   - align (string): "center" (default), "left", or "right". Pins the phrase
 //     to an edge so a corner placement keeps a fixed anchor as the phrase
 //     length changes. Left/right inset 4px.
+//   - scale (int): whole-number size multiplier, at least 1. Default: 1, the
+//     original size. It is set, not derived from the bounds: auto-fitting would
+//     resize the clock whenever the phrase length changed, and every change is
+//     a flash on this panel. The longest phrase for the configured style and
+//     hour format must fit the bounds at this scale or the config is rejected.
 func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
 	opts := Options{Style: StyleSentence, NoonMidnight: true}
 	var align Align
@@ -210,11 +251,27 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 		}
 	}
 
+	scale := 1
+	if v, ok := config["scale"]; ok {
+		n, ok := v.(int)
+		if !ok {
+			return nil, fmt.Errorf("fuzzy_clock: scale must be an integer, got %T", v)
+		}
+		if n < 1 {
+			return nil, fmt.Errorf("fuzzy_clock: scale must be at least 1, got %d", n)
+		}
+		scale = n
+	}
+
 	now := deps.Now
 	if now == nil {
 		now = time.Now
 	}
-	return New(bounds, now, opts, align), nil
+	w := New(bounds, now, opts, align, scale)
+	if err := w.fitError(); err != nil {
+		return nil, err
+	}
+	return w, nil
 }
 
 // Phrase renders t as a natural-language English phrase. It is the pure,

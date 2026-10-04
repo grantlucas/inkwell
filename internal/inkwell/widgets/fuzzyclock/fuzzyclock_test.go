@@ -1,12 +1,14 @@
 package fuzzyclock
 
 import (
+	"fmt"
 	"image"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
+	"github.com/grantlucas/inkwell/internal/inkwell/testutil"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
@@ -148,7 +150,7 @@ func TestPhrase_Options(t *testing.T) {
 
 func TestWidget_Bounds(t *testing.T) {
 	bounds := image.Rect(0, 0, 800, 50)
-	w := New(bounds, fixedClock(at(8, 30)), Options{}, AlignCenter)
+	w := New(bounds, fixedClock(at(8, 30)), Options{}, AlignCenter, 1)
 	if got := w.Bounds(); got != bounds {
 		t.Errorf("Bounds() = %v, want %v", got, bounds)
 	}
@@ -156,7 +158,7 @@ func TestWidget_Bounds(t *testing.T) {
 
 func TestWidget_Render(t *testing.T) {
 	bounds := image.Rect(0, 0, 800, 50)
-	w := New(bounds, fixedClock(at(8, 30)), Options{Style: StyleSentence, NoonMidnight: true}, AlignCenter)
+	w := New(bounds, fixedClock(at(8, 30)), Options{Style: StyleSentence, NoonMidnight: true}, AlignCenter, 1)
 
 	frame := image.NewPaletted(bounds, widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
@@ -176,7 +178,7 @@ func TestWidget_Render(t *testing.T) {
 }
 
 func TestNew_NilNow(t *testing.T) {
-	w := New(image.Rect(0, 0, 800, 50), nil, Options{}, AlignCenter)
+	w := New(image.Rect(0, 0, 800, 50), nil, Options{}, AlignCenter, 1)
 	frame := image.NewPaletted(image.Rect(0, 0, 800, 50), widget.PaperPalette)
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
@@ -325,4 +327,115 @@ func TestMustLoadFuzzyFace_PanicsOnFontError(t *testing.T) {
 		}
 	}()
 	_ = mustLoadFuzzyFace()
+}
+
+// renderFrame renders w into a fresh frame the size of its bounds.
+func renderFrame(t *testing.T, w *Widget) *image.Paletted {
+	t.Helper()
+	frame := image.NewPaletted(w.Bounds(), widget.PaperPalette)
+	if err := w.Render(frame); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	return frame
+}
+
+// TestWidget_Golden pins the drawn clock for each alignment at the default
+// size and at a large one. The scale 1 goldens were captured before scale
+// existed, so they prove the default draws exactly what it always did.
+func TestWidget_Golden(t *testing.T) {
+	aligns := []struct {
+		label string
+		align Align
+	}{
+		{"center", AlignCenter},
+		{"left", AlignLeft},
+		{"right", AlignRight},
+	}
+	for _, scale := range []int{1, 2} {
+		for _, a := range aligns {
+			t.Run(fmt.Sprintf("scale %d %s", scale, a.label), func(t *testing.T) {
+				w := New(image.Rect(0, 0, 800, 50), fixedClock(at(8, 30)),
+					Options{Style: StyleSentence, NoonMidnight: true}, a.align, scale)
+				frame := renderFrame(t, w)
+				// Only paper and solid black: a 1-bit mask has no gray for
+				// packBW's threshold to drop or Gray4 to bucket wrongly, so
+				// the device view matches in both color modes.
+				for i, px := range frame.Pix {
+					if px != widget.PaperWhite && px != widget.PaperBlack {
+						t.Fatalf("pixel %d has palette index %d, want only white or black", i, px)
+					}
+				}
+				testutil.AssertGoldenPNG(t, frame)
+			})
+		}
+	}
+}
+
+// TestFactory_Scale covers the scale setting: what it defaults to, which
+// values are configuration errors, and the fit check. The fit check measures
+// the longest phrase the configured style and hour format can produce, so the
+// width cases sit exactly on each side of that phrase's width at a 10 px
+// advance times the scale:
+//
+//   - 12-hour with noon/midnight words: "Just after half past midnight", 29
+//     glyphs, 290 px. Spelling out "twelve" instead drops it to 27, 270 px.
+//   - 24-hour: "Just after half past twenty-three", 33 glyphs, 330 px.
+//
+// Dilation adds its radius to each side of the ink (1 px at 2x) and an edge
+// alignment adds its 4 px inset.
+func TestFactory_Scale(t *testing.T) {
+	cases := []struct {
+		label     string
+		bounds    image.Rectangle
+		config    map[string]any
+		wantScale int
+		wantErr   bool
+	}{
+		{label: "default is 1x", bounds: image.Rect(0, 0, 800, 50), wantScale: 1},
+		{label: "explicit 1", bounds: image.Rect(0, 0, 800, 50), config: map[string]any{"scale": 1}, wantScale: 1},
+		{label: "explicit 2", bounds: image.Rect(0, 0, 800, 50), config: map[string]any{"scale": 2}, wantScale: 2},
+		{label: "zero", bounds: image.Rect(0, 0, 800, 50), config: map[string]any{"scale": 0}, wantErr: true},
+		{label: "negative", bounds: image.Rect(0, 0, 800, 50), config: map[string]any{"scale": -1}, wantErr: true},
+		{label: "float", bounds: image.Rect(0, 0, 800, 50), config: map[string]any{"scale": 1.5}, wantErr: true},
+		{label: "string", bounds: image.Rect(0, 0, 800, 50), config: map[string]any{"scale": "2"}, wantErr: true},
+		{label: "bool", bounds: image.Rect(0, 0, 800, 50), config: map[string]any{"scale": true}, wantErr: true},
+
+		{label: "12h exactly wide enough", bounds: image.Rect(0, 0, 290, 50), wantScale: 1},
+		{label: "12h one px too narrow", bounds: image.Rect(0, 0, 289, 50), wantErr: true},
+		{label: "title style is as long", bounds: image.Rect(0, 0, 289, 50), config: map[string]any{"style": "title"}, wantErr: true},
+		{label: "lower style is as long", bounds: image.Rect(0, 0, 289, 50), config: map[string]any{"style": "lower"}, wantErr: true},
+		{label: "noon words off is shorter", bounds: image.Rect(0, 0, 270, 50), config: map[string]any{"use_words_for_noon_and_midnight": false}, wantScale: 1},
+		{label: "noon words off, one px too narrow", bounds: image.Rect(0, 0, 269, 50), config: map[string]any{"use_words_for_noon_and_midnight": false}, wantErr: true},
+		{label: "24h exactly wide enough", bounds: image.Rect(0, 0, 330, 50), config: map[string]any{"use_24_hour": true}, wantScale: 1},
+		{label: "24h one px too narrow", bounds: image.Rect(0, 0, 329, 50), config: map[string]any{"use_24_hour": true}, wantErr: true},
+		{label: "2x needs twice the width plus dilation", bounds: image.Rect(0, 0, 582, 50), config: map[string]any{"scale": 2}, wantScale: 2},
+		{label: "2x one px short of that", bounds: image.Rect(0, 0, 581, 50), config: map[string]any{"scale": 2}, wantErr: true},
+		{label: "2x too narrow for 1x width", bounds: image.Rect(0, 0, 290, 50), config: map[string]any{"scale": 2}, wantErr: true},
+		{label: "3x cannot fit the panel width", bounds: image.Rect(0, 0, 800, 100), config: map[string]any{"scale": 3}, wantErr: true},
+		{label: "left align needs its inset", bounds: image.Rect(0, 0, 293, 50), config: map[string]any{"align": "left"}, wantErr: true},
+		{label: "left align with its inset", bounds: image.Rect(0, 0, 294, 50), config: map[string]any{"align": "left"}, wantScale: 1},
+		{label: "right align with its inset", bounds: image.Rect(0, 0, 294, 50), config: map[string]any{"align": "right"}, wantScale: 1},
+
+		{label: "exactly tall enough", bounds: image.Rect(0, 0, 800, 20), wantScale: 1},
+		{label: "one px too short", bounds: image.Rect(0, 0, 800, 19), wantErr: true},
+		{label: "2x exactly tall enough with dilation", bounds: image.Rect(0, 0, 800, 42), config: map[string]any{"scale": 2}, wantScale: 2},
+		{label: "2x one px too short", bounds: image.Rect(0, 0, 800, 41), config: map[string]any{"scale": 2}, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			w, err := Factory(tc.bounds, tc.config, widget.Deps{Now: fixedClock(at(8, 30))})
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Factory: %v", err)
+			}
+			if got := w.(*Widget).scale; got != tc.wantScale {
+				t.Errorf("scale = %d, want %d", got, tc.wantScale)
+			}
+		})
+	}
 }
