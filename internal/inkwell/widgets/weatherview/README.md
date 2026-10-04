@@ -66,8 +66,32 @@ renderer serves a 312 px hero cell and a 110 px row badge.
 | `LabelHeight`              | Height of the label band. `0` draws no labels and gives the bars the band.    |
 | `NowHour` / `ShowNowMarker`| Draws a 2 px solid `PaperBlack` stroke at the current hour.                   |
 | `ShowGuide`                | Dashed 50% reference line. Off by default; only the wide hero cell wants it.  |
-| `DryText`                  | Drawn centred on a dry day. Empty draws nothing.                             |
+| `DryText`                  | Drawn centred on a dry day. Empty draws nothing. Ignored with a `TempRange`.  |
+| `TempRange`                | Optional `*TempRange` (°C). Draws the temperature line: the combined chart.   |
 <!-- markdownlint-enable MD013 -->
+
+### Combined chart
+
+Set `PrecipChartOptions.TempRange` and the same renderer draws the **combined
+chart**: the temperature line over the precipitation bars. A nil range leaves
+the precipitation-only chart byte-for-byte as it was, so a screen opts in by
+passing a range and nothing else changes.
+
+- **One range per screen.** The caller computes a shared temperature range
+  across every day it shows (`GlobalTempRange` is the starting point) and
+  hands the same `TempRange` to each chart, so a cold day sits lower than a
+  warm one. The warmest value in the range touches the top of the plot and the
+  coldest the row above the baseline; temperatures outside it clamp to the
+  edge, and a collapsed range widens to one degree.
+- **The line is black over paper and white over a bar.** Each pixel is chosen
+  from what is already drawn underneath it — bar fill, bar cap or now marker
+  give a white pixel, bare paper a black one — so the same rule reads in BW
+  (solid black bar, white line) and Gray4 (dark-gray bar, white line) without
+  asking which mode is active. The line is 2 px thick.
+- **A dry day is never blank.** With a range the baseline, ticks and line are
+  drawn and the bars are not; `DryText` is dropped because the line already
+  fills the cell. Absent data (no hourly points in the window) still draws
+  nothing.
 
 ## Configuration
 

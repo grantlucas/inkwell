@@ -100,6 +100,13 @@ func drawTextCenteredGray(frame *image.Paletted, x1, x2, y int, text string, idx
 
 // drawLine draws a line from (x1,y1) to (x2,y2) using Bresenham's algorithm.
 func drawLine(frame *image.Paletted, x1, y1, x2, y2 int, idx uint8) {
+	walkLine(x1, y1, x2, y2, func(x, y int) { setPixel(frame, x, y, idx) })
+}
+
+// walkLine visits every pixel of the Bresenham line from (x1,y1) to
+// (x2,y2), both ends included, so a caller can decide each pixel's colour
+// before any of them is written.
+func walkLine(x1, y1, x2, y2 int, visit func(x, y int)) {
 	dx := abs(x2 - x1)
 	dy := abs(y2 - y1)
 	sx := 1
@@ -113,7 +120,7 @@ func drawLine(frame *image.Paletted, x1, y1, x2, y2 int, idx uint8) {
 	err := dx - dy
 
 	for {
-		setPixel(frame, x1, y1, idx)
+		visit(x1, y1)
 		if x1 == x2 && y1 == y2 {
 			break
 		}

@@ -30,6 +30,13 @@ type PrecipChartOptions struct {
 	// which is what the narrow cells want — a wide hero cell passes
 	// something like "NO RAIN TODAY".
 	DryText string
+	// TempRange turns the precipitation chart into the combined chart:
+	// the temperature line is drawn over the bars, scaled to this range.
+	// Nil draws precipitation only, exactly as before, so adoption is
+	// opt-in per screen. A day with a range is never blank: when it is
+	// dry the baseline, ticks and line are still drawn, with no bars,
+	// and DryText is dropped because the line already fills the cell.
+	TempRange *TempRange
 }
 
 const (
@@ -75,9 +82,10 @@ const (
 var precipLabelHours = []int{6, 12, 18}
 
 // RenderPrecipChart draws precipitation probability as bars across
-// 06:00–21:00, taking the whole of bounds. Unlike RenderHourlyChart there
-// is no temperature polyline; dropping the curve is what buys the bars
-// enough height to read from across the room.
+// 06:00–21:00, taking the whole of bounds. Unlike RenderHourlyChart the
+// temperature polyline is optional: without opts.TempRange the curve is
+// dropped, which is what buys the bars enough height to read from across
+// the room. With one it is drawn over the bars as the combined chart.
 //
 // The caller supplies the rect, the label face and the label band height,
 // so one renderer serves a 312 px hero cell and a 110 px row badge.
@@ -95,7 +103,8 @@ func RenderPrecipChart(frame *image.Paletted, bounds image.Rectangle, hourly []w
 		return
 	}
 
-	if peakProb(filtered) < dryThreshold {
+	dry := peakProb(filtered) < dryThreshold
+	if dry && opts.TempRange == nil {
 		drawDryDay(frame, bounds, opts)
 		return
 	}
@@ -117,8 +126,13 @@ func RenderPrecipChart(frame *image.Paletted, bounds image.Rectangle, hourly []w
 		drawPrecipNowMarker(frame, l, opts.NowHour)
 	}
 
-	drawPrecipBars(frame, l, filtered)
+	if !dry {
+		drawPrecipBars(frame, l, filtered)
+	}
 	drawPrecipAxis(frame, l, opts)
+	if opts.TempRange != nil {
+		drawTempLine(frame, l, filtered, *opts.TempRange)
+	}
 }
 
 // drawDryDay renders the dry-day state: the caller's text centred, or
