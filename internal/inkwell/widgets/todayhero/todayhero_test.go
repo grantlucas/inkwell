@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"image"
+	"math"
 	nethttp "net/http"
 	"strings"
 	"testing"
@@ -78,24 +79,31 @@ func (s *stubHTTPClient) Do(_ *nethttp.Request) (*nethttp.Response, error) {
 // sampleForecast covers today plus the four rows, with rain today (so
 // the hero chart draws bars and its marker) and a dry last day.
 func sampleForecast() *weather.Forecast {
+	// Wednesday is the cold day, so the shared range shows: its line
+	// sits visibly lower than its neighbours'.
+	highs := []float64{14, 15, 7, 17, 18}
+	lows := []float64{3, 4, -2, 6, 7}
 	var days []weather.DailyForecast
 	for i := range totalDays {
+		high, low := highs[i], lows[i]
 		var hourly []weather.HourlyPoint
 		for h := range 24 {
 			prob := 0.0
 			if i < totalDays-1 && h >= 12 && h <= 17 {
 				prob = 0.4 + 0.1*float64(i)
 			}
+			// Coldest at 03:00, warmest at 15:00, spanning the day's
+			// low to its high, so the temperature line has a shape.
 			hourly = append(hourly, weather.HourlyPoint{
 				Hour:              h,
-				Temperature:       8 + float64(i) + float64(h)/6,
+				Temperature:       low + (high-low)*(1-math.Cos(2*math.Pi*float64(h-3)/24))/2,
 				PrecipitationProb: prob,
 			})
 		}
 		days = append(days, weather.DailyForecast{
 			Date:      time.Date(2026, 3, 16+i, 0, 0, 0, 0, time.UTC),
-			High:      14 + float64(i),
-			Low:       3 + float64(i),
+			High:      high,
+			Low:       low,
 			Condition: weather.Condition(i % 4),
 			Hourly:    hourly,
 		})
@@ -103,13 +111,26 @@ func sampleForecast() *weather.Forecast {
 	return &weather.Forecast{Days: days}
 }
 
-// dryForecast is the same shape with no rain anywhere, for the
-// "NO RAIN TODAY" path.
+// dryForecast is the same shape with no rain anywhere: every chart is
+// the temperature line alone.
 func dryForecast() *weather.Forecast {
 	f := sampleForecast()
 	for i := range f.Days {
 		for h := range f.Days[i].Hourly {
 			f.Days[i].Hourly[h].PrecipitationProb = 0
+		}
+	}
+	return f
+}
+
+// rainyForecast is wet through most of every day, so the temperature
+// line spends most of each chart crossing bars and has to turn white
+// where it does.
+func rainyForecast() *weather.Forecast {
+	f := sampleForecast()
+	for i := range f.Days {
+		for h := range f.Days[i].Hourly {
+			f.Days[i].Hourly[h].PrecipitationProb = 0.55 + 0.4*math.Abs(math.Sin(float64(h+i)/3))
 		}
 	}
 	return f
@@ -177,22 +198,176 @@ func TestWidget_RequestsFiveDays(t *testing.T) {
 	}
 }
 
-// The identity block is inverted: a gray tint would vanish in Gray4's
-// light bucket and snap to white under the BW threshold, so inversion
-// is the only treatment that reads on both.
-func TestWidget_IdentityBlockIsInverted(t *testing.T) {
+// The identity band is plain black text on paper with a rule beneath
+// it. It used to be a solid black block, and a block that lands in the
+// same place on every refresh is the burn-in risk CLAUDE.md rules out:
+// today is already obvious from being the left column.
+func TestWidget_IdentityIsTextAboveARule(t *testing.T) {
 	frame := renderToFrame(t, newWidget(&stubCalSource{}, &stubWeatherSource{forecast: sampleForecast()}, testTime))
-	block := computeHero(image.Rect(0, 0, 800, 480)).Identity
+	band := computeHero(image.Rect(0, 0, 800, 480)).Identity
 
-	black := countIndexIn(frame, block, widget.PaperBlack)
-	white := countIndexIn(frame, block, widget.PaperWhite)
-	// Inverted means the field is mostly black with white text on it,
-	// not mostly white with a black run.
-	if black <= white {
-		t.Errorf("identity block is %d black / %d white — it does not look inverted", black, white)
+	black := countIndexIn(frame, band, widget.PaperBlack)
+	white := countIndexIn(frame, band, widget.PaperWhite)
+	// Text on paper is mostly paper. A filled block is mostly ink.
+	if black == 0 {
+		t.Fatal("the identity band drew nothing")
 	}
-	if white == 0 {
-		t.Error("no white text on the inverted block")
+	if black*4 > white {
+		t.Errorf("identity band is %d black / %d white — that is a filled block, not text", black, white)
+	}
+
+	// The rule runs across the band's padded width, under the text.
+	ruled := false
+	for y := band.Max.Y - 1; y >= band.Max.Y-identityRuleW-2 && !ruled; y-- {
+		row := image.Rect(band.Min.X+heroPadX, y, band.Max.X-heroPadX, y+1)
+		ruled = countIndexIn(frame, row, widget.PaperBlack) == row.Dx()
+	}
+	if !ruled {
+		t.Error("no rule across the bottom of the identity band")
+	}
+}
+
+// withTemps returns f with day i's hourly temperatures replaced by
+// temp(hour), leaving everything else — rain, highs, lows — untouched.
+func withTemps(f *weather.Forecast, i int, temp func(hour int) float64) *weather.Forecast {
+	for h := range f.Days[i].Hourly {
+		f.Days[i].Hourly[h].Temperature = temp(f.Days[i].Hourly[h].Hour)
+	}
+	return f
+}
+
+// sameIn reports whether two frames agree on every pixel in r.
+func sameIn(a, b *image.Paletted, r image.Rectangle) bool {
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		for x := r.Min.X; x < r.Max.X; x++ {
+			if a.ColorIndexAt(x, y) != b.ColorIndexAt(x, y) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func renderForecast(t *testing.T, f *weather.Forecast) *image.Paletted {
+	t.Helper()
+	return renderToFrame(t, newWidget(&stubCalSource{events: sampleEvents()}, &stubWeatherSource{forecast: f}, testTime))
+}
+
+// Every chart on the screen is the combined chart: the temperature line
+// is drawn over the precipitation bars, so the chart follows the day's
+// temperature even when it is dry. The behaviour is observed by
+// reshaping one day's temperatures and nothing else — if that chart's
+// pixels move, the line is being drawn.
+func TestWidget_ChartsCarryTheTemperatureLine(t *testing.T) {
+	bounds := image.Rect(0, 0, 800, 480)
+	rows := computeDayRows(bounds)
+	tests := []struct {
+		label string
+		day   int
+		chart image.Rectangle
+		base  func() *weather.Forecast
+	}{
+		{"today, dry", 0, computeHero(bounds).Chart, dryForecast},
+		{"today, rainy", 0, computeHero(bounds).Chart, sampleForecast},
+		{"first row, dry", 1, rowChart(rows[0]), dryForecast},
+		{"last row, rainy", dayRows, rowChart(rows[dayRows-1]), sampleForecast},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			before := renderForecast(t, tt.base())
+			// A day that warms then cools instead of one that climbs
+			// steadily, inside the same overall range so the shared
+			// scale itself does not move.
+			after := renderForecast(t, withTemps(tt.base(), tt.day, func(h int) float64 {
+				return 8 + float64(tt.day) + 2*math.Abs(float64(h-12))/6
+			}))
+			if sameIn(before, after, tt.chart) {
+				t.Error("reshaping the day's temperatures did not change its chart — no temperature line")
+			}
+		})
+	}
+}
+
+// One temperature range serves every chart on the screen, so a cold day
+// sits visibly lower than a warm one. Observed from the outside: warming
+// only the last day widens the shared range, and that moves the line in
+// today's chart even though today's own temperatures did not change.
+func TestWidget_ChartsShareOneTemperatureRange(t *testing.T) {
+	chart := computeHero(image.Rect(0, 0, 800, 480)).Chart
+	before := renderForecast(t, dryForecast())
+	after := renderForecast(t, withTemps(dryForecast(), dayRows, func(int) float64 { return 35 }))
+	if sameIn(before, after, chart) {
+		t.Error("a hot day four rows down did not move today's line — the charts are not on one range")
+	}
+}
+
+// hasSolidSquare reports whether frame holds a side x side square that
+// is entirely PaperBlack.
+func hasSolidSquare(frame *image.Paletted, side int) bool {
+	b := frame.Bounds()
+	// run[x] is how many PaperBlack pixels end at (x, y) going up.
+	run := make([]int, b.Dx())
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		wide := 0
+		for x := b.Min.X; x < b.Max.X; x++ {
+			i := x - b.Min.X
+			if frame.ColorIndexAt(x, y) == widget.PaperBlack {
+				run[i]++
+			} else {
+				run[i] = 0
+			}
+			if run[i] >= side {
+				wide++
+			} else {
+				wide = 0
+			}
+			if wide >= side {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// No large filled area may sit in a fixed position: a black block that
+// lands in the same place on every refresh invites ghosting. Today is
+// shown by position alone. Precipitation bars are filled, but they are
+// PaperGray70 under a black cap and move with the forecast, so the
+// check is for solid black.
+func TestWidget_NoLargeFixedFill(t *testing.T) {
+	tests := []struct {
+		label string
+		f     func() *weather.Forecast
+		clock time.Time
+	}{
+		{"dry afternoon", dryForecast, testTime},
+		{"rainy afternoon", rainyForecast, testTime},
+		{"evening", sampleForecast, time.Date(2026, 3, 16, 23, 0, 0, 0, time.UTC)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			frame := renderToFrame(t, newWidget(&stubCalSource{events: sampleEvents()},
+				&stubWeatherSource{forecast: tt.f()}, tt.clock))
+			if hasSolidSquare(frame, 20) {
+				t.Error("found a solid black 20x20 block — a fixed fill is a burn-in risk")
+			}
+		})
+	}
+}
+
+// The guard has to be able to fail: a block of the size the old
+// identity band drew is caught.
+func TestHasSolidSquare(t *testing.T) {
+	frame := newTestFrame(100, 100)
+	if hasSolidSquare(frame, 20) {
+		t.Fatal("blank paper reported a solid square")
+	}
+	daygrid.FillRect(frame, image.Rect(30, 40, 50, 60), widget.PaperBlack)
+	if !hasSolidSquare(frame, 20) {
+		t.Error("missed a 20x20 black square")
+	}
+	if hasSolidSquare(frame, 21) {
+		t.Error("reported a 21x21 square inside a 20x20 one")
 	}
 }
 
@@ -303,7 +478,8 @@ func TestWidget_Golden(t *testing.T) {
 	}{
 		{
 			// Mid-afternoon: today still has events, the chart has its
-			// bars and marker, and a day row overflows to "+N more".
+			// bars and marker, one day row overflows to "+N more" and
+			// the last row has no events at all.
 			label: "mid-afternoon with events remaining",
 			cal:   &stubCalSource{events: sampleEvents()},
 			ws:    &stubWeatherSource{forecast: sampleForecast()},
@@ -315,9 +491,18 @@ func TestWidget_Golden(t *testing.T) {
 			clock: time.Date(2026, 3, 16, 23, 0, 0, 0, time.UTC),
 		},
 		{
+			// Dry everywhere: every chart is baseline, ticks and the
+			// temperature line, and none of them is blank.
 			label: "a dry today",
 			cal:   &stubCalSource{events: sampleEvents()},
 			ws:    &stubWeatherSource{forecast: dryForecast()},
+		},
+		{
+			// Wet everywhere: the line spends most of each chart over
+			// bars, where it turns white.
+			label: "a rainy day",
+			cal:   &stubCalSource{events: sampleEvents()},
+			ws:    &stubWeatherSource{forecast: rainyForecast()},
 		},
 		{
 			label: "no weather at all",

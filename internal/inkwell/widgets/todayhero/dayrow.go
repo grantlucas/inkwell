@@ -11,21 +11,39 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
 const (
 	rowPadX = 12
 
-	// The date gutter: a tag, then the numeral, then the hi/lo.
-	tagBaseline     = 24
+	// The date gutter: the tag, then the numeral with the condition
+	// icon and the hi/lo beside it, then the day's combined chart. The
+	// numeral stays at 2x; the hi/lo is body size, on the numeral's
+	// centre line, and ends where the chart ends.
+	tagBaseline     = 20
 	rowDateScale    = 2
-	rowDateBaseline = 72
-	rowTempBaseline = 96
+	rowDateBaseline = 56
+	rowTempBaseline = 48
 
-	// The condition icon, and where the agenda starts after it.
-	rowIconSize = 40
-	rowIconDX   = 116
-	rowIconDY   = 40
+	// The condition icon is centred in the gap between the widest
+	// numeral and the hi/lo. 30 px rather than the old 40, so the three
+	// share one line and leave the lower half of the gutter to the
+	// chart. The glyphs' rays overrun their box by a few pixels, which
+	// is why the icon sits clear of the tag above it.
+	rowIconSize   = 30
+	rowIconDY     = 30
+	rowNumeralEnd = 54
+
+	// The chart fills the gutter under that line and stops short of the
+	// agenda column. The 14 px label band is bold-five's and
+	// row-agenda's, sized for the chart's own 12 px tier.
+	rowChartTop    = 64
+	rowChartRight  = 176
+	rowChartBottom = 4
+	rowChartLabelH = 14
+
+	// Where the agenda starts. Unchanged: the events keep their room.
 	rowAgendaDX = 186
 
 	// Up to three events a row; a fourth would leave no room for the
@@ -33,8 +51,8 @@ const (
 	rowMaxEvents = 3
 
 	// Upper case, like every other label this screen paints —
-	// TOMORROW, ALL DAY, DONE FOR TODAY, NO RAIN TODAY. Mixed case in
-	// the rows alone would read as a second typographic system.
+	// TOMORROW, ALL DAY, DONE FOR TODAY. Mixed case in the rows alone
+	// would read as a second typographic system.
 	emptyRowMsg = "NOTHING SCHEDULED"
 )
 
@@ -43,19 +61,20 @@ type dayRowOptions struct {
 	// IsTomorrow tags the row "TOMORROW" instead of its weekday.
 	IsTomorrow bool
 	TempUnit   string
-	Events     eventOptions
+	// TempRange is the screen's shared temperature scale, the same one
+	// today's chart plots against.
+	TempRange weatherview.TempRange
+	Events    eventOptions
 }
 
-// renderDayRow draws one following day: the date gutter, a condition
-// icon, and a short agenda.
+// renderDayRow draws one following day: the date gutter with its
+// condition icon and a small combined chart, then a short agenda.
 //
-// There is deliberately no precipitation chart here. It was tried and
-// reverted: a 462 px row cannot carry a legible bar chart *and* a
-// legible title, and titles dropped to about 12 characters. Future-day
-// rain is the condition icon and nothing more — which does mean this is
-// the one screen where the week's rain timing is genuinely missing. If
-// that matters it is an argument for bold-five or row-agenda, not a
-// thing to add back here.
+// The chart lives in the gutter, under the date, rather than beside the
+// agenda. A chart beside the agenda was tried and reverted: a 462 px
+// row cannot carry a legible bar chart *and* a legible title side by
+// side, and titles dropped to about 12 characters. Stacked under the
+// date it costs the agenda nothing.
 func renderDayRow(
 	frame *image.Paletted, bounds image.Rectangle, day daygrid.Day,
 	forecast weather.DailyForecast, events []calendar.Event, opts dayRowOptions,
@@ -76,12 +95,13 @@ func renderDayRow(
 	daygrid.Scaled(daygrid.BodyBoldFace, rowDateScale, widget.PaperBlack).Draw(
 		frame, x, top+rowDateBaseline, fmt.Sprintf("%d", day.Start.Day()))
 
-	renderRowWeather(frame, bounds, forecast, opts.TempUnit)
+	renderRowWeather(frame, bounds, forecast, opts.TempUnit, opts.TempRange)
 	renderRowAgenda(frame, bounds, events, opts.Events)
 }
 
-// renderRowWeather draws the row's hi/lo pair and condition icon.
-func renderRowWeather(frame *image.Paletted, bounds image.Rectangle, forecast weather.DailyForecast, unit string) {
+// renderRowWeather draws the row's hi/lo pair, condition icon and
+// combined chart.
+func renderRowWeather(frame *image.Paletted, bounds image.Rectangle, forecast weather.DailyForecast, unit string, rng weatherview.TempRange) {
 	if forecast.Date.IsZero() {
 		// Nothing forecast for this day. Drawing a zero would state a
 		// temperature nobody predicted.
@@ -92,13 +112,31 @@ func renderRowWeather(frame *image.Paletted, bounds image.Rectangle, forecast we
 	if unit == "F" {
 		hi, lo = weather.CelsiusToFahrenheit(hi), weather.CelsiusToFahrenheit(lo)
 	}
-	daygrid.DrawText(frame, bounds.Min.X+rowPadX, top+rowTempBaseline,
-		fmt.Sprintf("%d° %d°", int(math.Round(hi)), int(math.Round(lo))),
-		daygrid.BodyFace, widget.PaperBlack)
+	hiLo := fmt.Sprintf("%d° %d°", int(math.Round(hi)), int(math.Round(lo)))
+	tempX := bounds.Min.X + rowChartRight - daygrid.TextWidth(daygrid.BodyFace, hiLo)
+	daygrid.DrawText(frame, tempX, top+rowTempBaseline, hiLo, daygrid.BodyFace, widget.PaperBlack)
 
-	if err := drawIcon(frame, bounds.Min.X+rowIconDX, top+rowIconDY, rowIconSize, forecast.Condition); err != nil {
+	iconX := (bounds.Min.X + rowNumeralEnd + tempX - rowIconSize) / 2
+	if err := drawIcon(frame, iconX, top+rowIconDY, rowIconSize, forecast.Condition); err != nil {
 		log.Printf("todayhero: draw row icon for condition %d: %v", forecast.Condition, err)
 	}
+
+	// No now-marker, guide or dry caption: the marker belongs to today's
+	// chart alone, and at 164 px the guide's dashes would compete with
+	// the bars. A dry day still draws its temperature line.
+	weatherview.RenderPrecipChart(frame, rowChart(bounds), forecast.Hourly, weatherview.PrecipChartOptions{
+		LabelHeight: rowChartLabelH,
+		TempRange:   &rng,
+	})
+}
+
+// rowChart is the rect a row's combined chart takes: the lower half of
+// the date gutter.
+func rowChart(row image.Rectangle) image.Rectangle {
+	return image.Rect(
+		row.Min.X+rowPadX, row.Min.Y+rowChartTop,
+		row.Min.X+rowChartRight, row.Max.Y-rowChartBottom,
+	)
 }
 
 // renderRowAgenda draws up to three events as a time and a title on one
