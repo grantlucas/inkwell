@@ -170,6 +170,24 @@ Task sequencing and acceptance criteria live in
 [`inkwell-execution-plan.md`](inkwell-execution-plan.md). Use it as the source
 of truth for what to build next and mark tasks complete as you go.
 
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for `grantlucas/inkwell`, driven by the `gh` CLI.
+See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default triage roles, each label named after its role (`needs-triage`,
+`needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See
+`docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one root `CONTEXT.md` (created lazily) plus the ADRs in
+`docs/adrs/`. See `docs/agents/domain.md`.
+
 ## Session Completion
 
 **When ending a work session**, you MUST complete ALL steps
