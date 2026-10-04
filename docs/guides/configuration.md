@@ -511,23 +511,33 @@ nothing appears twice.
 
 ### `row-agenda`
 
-The axis swap. Days become full-width rows, so a day gets 96 px of
-height instead of 160 px of width — and for text that is the trade that
-matters, because width is what titles were starving for. Titles get
-40-odd characters instead of 13, which makes this the only one of the
-three new screens where nothing truncates on a realistic week.
-"Platform architecture review" fits. So does "Car in for service", with
-room left over.
+The axis swap. Days become full-width rows with one event column each,
+and for text that is the trade that matters, because width is what
+titles were starving for. Titles get 35-odd characters instead of 13,
+which makes this the only one of the three new screens where nothing
+truncates on a realistic week. "Platform architecture review" fits. So
+does "Car in for service", with room left over.
 
-The agenda's column count adapts to the day's load, which is what keeps
-titles long on the days that can afford it: three events or fewer take
-the full row width, four or more split into two columns. When there is
-more than fits, the last slot carries "+N MORE" rather than
-overprinting an event. An empty day says "Nothing scheduled".
+Rows are sized to their events. A quiet day's row is short and a busy
+day's row is tall, and no row is shorter than the height that keeps its
+chart readable (three lines of agenda). There are always five rows, and
+room the rows do not need is shared between them. When the rows would
+not fit on the panel, the busiest rows give up events first, one line
+at a time, and the last visible line of such a row becomes "+N MORE"
+with the count of what it could not show. Quiet days are never squeezed
+to make room; on a tie the later day gives up the line, so today keeps
+its detail longest. An empty day says "Nothing scheduled".
 
-Today's date gutter inverts. Here the highlight earns its ink in a way
-it does not on `bold-five`: rows have no "today is leftmost" convention
-to lean on, so without it nothing says which row is now.
+Every row carries the combined chart: precipitation bars with the
+temperature line over them, so a dry day still shows the shape of its
+temperature. All five charts share one temperature scale, so a cold day
+sits visibly lower than a warm one, and today's chart marks the current
+hour.
+
+Today is the first row, and position is the only thing marking it. The
+date is the same plain numeral, weekday and month on every row: a
+filled block in the same place every refresh is a burn-in risk on
+e-paper.
 
 <!-- markdownlint-disable MD013 -->
 | Key | Type | Default | Accepted values | Impact |
@@ -541,17 +551,18 @@ to lean on, so without it nothing says which row is now.
 | `weather_model` | string | inherits `weather.model` | `gfs`, `ecmwf`, `gem` | Per-widget model override. |
 <!-- markdownlint-enable MD013 -->
 
-There is deliberately no `max_events`: the row's slot count is the cap,
-and it adapts to the day's load. A separate setting could only
-contradict the geometry. It is rejected with that explanation, as are
-the other `weekly-calendar` keys this screen has no equivalent for.
+There is deliberately no `max_events`: rows grow to fit their events,
+and when the week is too full the busiest rows give up lines first. A
+separate cap could only contradict that. It is rejected with that
+explanation, as are the other `weekly-calendar` keys this screen has no
+equivalent for.
 
-**What it gives up:** 96 px a day caps you at three or four items
-before "+N MORE", so a genuinely packed Monday loses detail a column
-would have shown — this screen is better at reading what is there and
-worse at showing everything. Its precipitation bars are also the
-narrowest of the three screens that carry them, 110 px against
-`bold-five`'s 160. Still a shape, but a cramped one.
+**What it gives up:** the panel holds about twenty event lines across
+the five rows, so a genuinely packed week loses detail from its busiest
+days. This screen is better at reading what is there than at showing
+everything. Its charts are also the narrowest of the three screens that
+carry them, 110 px against `bold-five`'s 160. Still a shape, but a
+cramped one.
 
 #### Feed rules
 
