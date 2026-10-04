@@ -81,11 +81,19 @@ func (w *Widget) Render(frame *image.Paletted) error {
 		Location:     loc,
 	}
 
+	// One forecast per day shown, today first, and one temperature range
+	// across all of them for every chart on the screen.
+	forecasts := make([]weather.DailyForecast, len(days))
+	for i, day := range days {
+		forecasts[i] = daygrid.FindForecast(forecastDays, day)
+	}
+	rng := sharedRange(forecasts)
+
 	today := days[0]
 	hero := computeHero(w.bounds)
 	renderIdentity(frame, hero.Identity, now)
-	renderHeroWeather(frame, hero.Weather, daygrid.FindForecast(forecastDays, today), w.config.Weather.TempUnit)
-	renderHeroChart(frame, hero.Chart, daygrid.FindForecast(forecastDays, today), now.Hour())
+	renderHeroWeather(frame, hero.Weather, forecasts[0], w.config.Weather.TempUnit)
+	renderHeroChart(frame, hero.Chart, forecasts[0], now.Hour(), rng)
 	renderHeroAgenda(frame, hero.Agenda,
 		remainingToday(daygrid.FilterEventsForDay(events, today), now), eventOpts)
 
@@ -98,11 +106,12 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	for i, row := range computeDayRows(w.bounds) {
 		day := days[i+1]
 		renderDayRow(frame, row, day,
-			daygrid.FindForecast(forecastDays, day),
+			forecasts[i+1],
 			daygrid.FilterEventsForDay(events, day),
 			dayRowOptions{
 				IsTomorrow: i == 0,
 				TempUnit:   w.config.Weather.TempUnit,
+				TempRange:  rng,
 				Events:     eventOpts,
 			})
 		if i < dayRows-1 {

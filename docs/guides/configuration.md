@@ -455,10 +455,20 @@ room you only ever want today, and the week is a glance you take once
 you have walked up to it — so the panel is spent unevenly rather than
 evenly. Today gets 42% of the width; four more days share the rest.
 
-It has the best precipitation chart of the three screens — 15 px bars
-with a marker at the current hour, wide enough that an afternoon band
-reads as a band rather than a texture, and the only one with room for
-the 50% guide and for saying "NO RAIN TODAY" when there is none.
+Every chart on the screen is a combined chart: precipitation bars with
+the temperature line drawn over them, black over paper and white where
+it crosses a bar, so it reads in both `gray4` and `bw`. Today's is the
+widest of any screen — 15 px bars with a marker at the current hour,
+wide enough that an afternoon band reads as a band rather than a
+texture. Each day row carries a smaller one under its date. All five
+charts share one temperature range, so a cold day's line sits visibly
+lower than a warm day's, and a dry day still shows its temperature
+rather than an empty cell.
+
+The date, month and fuzzy clock are plain text above a rule. There is
+no filled block marking today: a black area that lands in the same place
+on every refresh is a burn-in risk, and today is already the left
+column.
 
 Today's agenda shows only what is left of the day. An event that
 finished two hours ago is history, and this is the screen that spends
@@ -486,12 +496,13 @@ equivalent for — `days`, `week_start`, `show_weather`,
 `show_weather_label`, `highlight_hour` — are rejected with an
 explanation rather than ignored.
 
-**What it gives up:** there is no precipitation chart in the day rows.
-A 462 px row cannot carry a legible bar chart *and* a legible title —
-titles dropped to about 12 characters when it was tried. Future-day
-rain is the condition icon and nothing more, so this is the one screen
-where the week's rain timing is genuinely missing. If that matters, it
-is an argument for `bold-five`.
+**What it gives up:** the day rows' charts are small. They sit under
+the date rather than beside the agenda, because a 462 px row cannot
+carry a legible chart *and* a legible title side by side — titles
+dropped to about 12 characters when that was tried. At 164 px they
+show the shape of the day's rain and temperature, not hour-by-hour
+detail. If that detail matters for the whole week, it is an argument
+for `bold-five`.
 
 Tomorrow's row is *tagged* "TOMORROW" rather than promoted into the
 hero column. An earlier draft promoted it and started the rows at +2,

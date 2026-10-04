@@ -25,7 +25,12 @@ const (
 	dateScale     = 3
 	dateBaseline  = 54
 	monthBaseline = 84
-	fuzzyBaseline = 108
+	fuzzyBaseline = 104
+
+	// The rule under the identity band, and the paper left between it
+	// and the band's bottom edge so it does not butt against the icon.
+	identityRuleW   = 2
+	identityRuleGap = 2
 
 	// Today's weather.
 	heroIconSize = 58
@@ -37,30 +42,27 @@ const (
 	loGap        = 12
 	condBaseline = 192
 
-	// The chart is the widest of any screen's, and the only one with
-	// room for the 50% guide and a dry-day caption.
+	// The chart's hour-label band.
 	chartLabelH = 20
-	dryText     = "NO RAIN TODAY"
 )
 
-// renderIdentity draws the inverted block: the date at 3x in
-// PaperWhite, then the month and the fuzzy clock beneath it.
+// renderIdentity draws the date at 3x, then the month and the fuzzy
+// clock beneath it, all in PaperBlack on paper, closed off by a rule.
 //
-// Inversion rather than a tint: a PaperGray20 background vanishes in
-// Gray4's light bucket and snaps to white under the BW threshold, so it
-// would read as a highlight on neither mode (CLAUDE.md). A solid black
-// field with white text reads on both.
+// This used to be a solid black block with the text knocked out of it.
+// A large fill that lands in the same place on every refresh is a
+// burn-in risk on this panel, and today is already obvious from being
+// the left column, so the band carries no fill or outline at all
+// (CLAUDE.md). The rule is what still separates it from the weather.
 func renderIdentity(frame *image.Paletted, bounds image.Rectangle, now time.Time) {
-	daygrid.FillRect(frame, bounds, widget.PaperBlack)
-
 	x := bounds.Min.X + heroPadX
-	daygrid.Scaled(daygrid.BodyBoldFace, dateScale, widget.PaperWhite).Draw(
+	daygrid.Scaled(daygrid.BodyBoldFace, dateScale, widget.PaperBlack).Draw(
 		frame, x, bounds.Min.Y+dateBaseline,
 		strings.ToUpper(now.Format("Mon"))+" "+fmt.Sprintf("%d", now.Day()),
 	)
 
 	daygrid.DrawText(frame, x, bounds.Min.Y+monthBaseline,
-		strings.ToUpper(now.Format("January")), daygrid.BodyFace, widget.PaperWhite)
+		strings.ToUpper(now.Format("January")), daygrid.BodyFace, widget.PaperBlack)
 
 	// The clock is fuzzy because a precise one would change every
 	// minute and the panel only refreshes every fifteen — a clock that
@@ -69,7 +71,13 @@ func renderIdentity(frame *image.Paletted, bounds image.Rectangle, now time.Time
 	// not change on a tick.
 	daygrid.DrawText(frame, x, bounds.Min.Y+fuzzyBaseline,
 		strings.ToUpper(fuzzyclock.Phrase(now, fuzzyclock.Options{})),
-		daygrid.BodyFace, widget.PaperWhite)
+		daygrid.BodyFace, widget.PaperBlack)
+
+	// Two pixels rather than the agenda rule's one: this one closes the
+	// band that names the day, so it is the heavier break.
+	for i := range identityRuleW {
+		daygrid.DrawHLine(frame, x, bounds.Max.X-heroPadX, bounds.Max.Y-identityRuleGap-identityRuleW+i, widget.PaperBlack)
+	}
 }
 
 // renderHeroWeather draws today's condition icon, its high and low, and
@@ -108,12 +116,20 @@ func renderHeroWeather(frame *image.Paletted, bounds image.Rectangle, day weathe
 		strings.ToUpper(day.Condition.Label()), daygrid.BodyFace, widget.PaperBlack)
 }
 
-// renderHeroChart draws today's precipitation. This is the widest
-// precipitation cell of any screen and the main reason to pick this
-// one: 15 px bars with a marker at the current hour, so an afternoon
-// band reads as a band rather than as a texture. It is the only cell
-// with room for the 50% guide and for saying so when the day is dry.
-func renderHeroChart(frame *image.Paletted, bounds image.Rectangle, day weather.DailyForecast, nowHour int) {
+// renderHeroChart draws today's combined chart: precipitation bars with
+// the temperature line over them. This is the widest chart cell of any
+// screen and the main reason to pick this one: 15 px bars with a marker
+// at the current hour, so an afternoon band reads as a band rather than
+// as a texture.
+//
+// rng is the screen's shared range, so today's line sits at the same
+// height as a row's line for the same temperature. A dry day still
+// draws the line, so the chart is never blank.
+//
+// The dashed 50% guide this cell used to carry is off: with the
+// temperature line running across the same plot, a dashed horizontal
+// reads as a second line rather than as a reference.
+func renderHeroChart(frame *image.Paletted, bounds image.Rectangle, day weather.DailyForecast, nowHour int, rng weatherview.TempRange) {
 	if day.Date.IsZero() {
 		return
 	}
@@ -121,9 +137,24 @@ func renderHeroChart(frame *image.Paletted, bounds image.Rectangle, day weather.
 		LabelHeight:   chartLabelH,
 		NowHour:       nowHour,
 		ShowNowMarker: true,
-		ShowGuide:     true,
-		DryText:       dryText,
+		TempRange:     &rng,
 	})
+}
+
+// sharedRange is the one temperature scale every chart on the screen
+// plots against, taken across the days the screen shows. A day with no
+// forecast is left out: its zero value would read as a 0° day and drag
+// the scale towards it.
+func sharedRange(forecasts []weather.DailyForecast) weatherview.TempRange {
+	var shown []weather.DailyForecast
+	for _, f := range forecasts {
+		if !f.Date.IsZero() {
+			shown = append(shown, f)
+		}
+	}
+	var rng weatherview.TempRange
+	rng.Min, rng.Max = weatherview.GlobalTempRange(shown)
+	return rng
 }
 
 // drawIcon is indirected through a var so the failure branch above is
