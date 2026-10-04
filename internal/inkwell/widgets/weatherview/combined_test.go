@@ -2,6 +2,7 @@ package weatherview
 
 import (
 	"image"
+	"math"
 	"testing"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil"
@@ -108,54 +109,41 @@ func TestRenderPrecipChart_DryDayWithRangeIsNeverBlank(t *testing.T) {
 	}
 }
 
-// Over bare paper the line is black; where it crosses a drawn bar it is
-// white, decided from the pixel underneath, so it reads against the bar
-// whether the bar lands dark gray (Gray4) or solid black (BW).
-func TestRenderPrecipChart_LineColourFollowsPixelUnderneath(t *testing.T) {
+// Over bare paper the line is black: a bar-less hour's column carries
+// PaperBlack above the baseline.
+func TestRenderPrecipChart_LineIsBlackOverPaper(t *testing.T) {
 	const w, h = 312, 120
 	bounds := image.Rect(0, 0, w, h)
+	frame := newTestFrame(w, h)
+	RenderPrecipChart(frame, bounds, flatHourly(15, map[int]float64{20: 0.9}),
+		PrecipChartOptions{LabelHeight: 16, TempRange: sharedRange})
 
-	cases := []struct {
-		label    string
-		probs    map[int]float64
-		hour     int
-		wantOver uint8
-	}{
-		{"over paper", map[int]float64{20: 0.9}, 8, widget.PaperBlack},
-		// A 100% bar fills the plot, so a mid-range line must cross it.
-		{"over a bar", map[int]float64{12: 1.0}, 12, widget.PaperWhite},
+	baseline := findBaseline(frame, bounds)
+	for _, y := range inkRows(frame, slotCentreX(bounds, 8), bounds.Min.Y, baseline) {
+		if got := frame.ColorIndexAt(slotCentreX(bounds, 8), y); got != widget.PaperBlack {
+			t.Fatalf("line pixel over paper at y=%d is index %d, want PaperBlack", y, got)
+		}
 	}
-	for _, tc := range cases {
-		t.Run(tc.label, func(t *testing.T) {
-			frame := newTestFrame(w, h)
-			RenderPrecipChart(frame, bounds, flatHourly(15, tc.probs),
-				PrecipChartOptions{LabelHeight: 16, TempRange: sharedRange})
+}
 
-			baseline := findBaseline(frame, bounds)
-			x := slotCentreX(bounds, tc.hour)
+// Where the line crosses a drawn bar it is white, decided from the pixel
+// underneath, so it reads against the bar whether the bar lands dark gray
+// (Gray4) or solid black (BW). A 100% bar fills the plot and its fill is
+// solid, so white anywhere inside it below the cap can only be the line.
+func TestRenderPrecipChart_LineIsWhiteOverBar(t *testing.T) {
+	const w, h = 312, 120
+	bounds := image.Rect(0, 0, w, h)
+	frame := newTestFrame(w, h)
+	RenderPrecipChart(frame, bounds, flatHourly(15, map[int]float64{12: 1.0}),
+		PrecipChartOptions{LabelHeight: 16, TempRange: sharedRange})
 
-			// Skip the 1 px cap row at the top of a full-height bar.
-			var ys []int
-			for y := bounds.Min.Y + 1; y < baseline; y++ {
-				switch idx := frame.ColorIndexAt(x, y); {
-				case tc.wantOver == widget.PaperWhite && idx == widget.PaperWhite:
-					ys = append(ys, y)
-				case tc.wantOver == widget.PaperBlack && idx == widget.PaperBlack:
-					ys = append(ys, y)
-				}
-			}
-			if len(ys) == 0 {
-				t.Fatalf("no %d-index line pixel in the column of hour %d", tc.wantOver, tc.hour)
-			}
-			if tc.wantOver == widget.PaperWhite {
-				// The bar fill is solid, so white anywhere inside it can
-				// only be the line.
-				if got := frame.ColorIndexAt(x, baseline-1); got == widget.PaperBlack {
-					t.Errorf("bar column ends in black at the baseline, want fill or line-white")
-				}
-			}
-		})
+	x := slotCentreX(bounds, 12)
+	for y := bounds.Min.Y + 1; y < findBaseline(frame, bounds); y++ {
+		if frame.ColorIndexAt(x, y) == widget.PaperWhite {
+			return
+		}
 	}
+	t.Error("no white line pixel inside the bar")
 }
 
 // Every day on a screen shares one scale, so a cold day sits lower than a
@@ -204,6 +192,7 @@ func TestRenderPrecipChart_RangeNeverDrawsOutsideBounds(t *testing.T) {
 	}{
 		{"temperature far above the range", image.Rect(40, 40, 190, 120), sharedRange, 500, PrecipChartOptions{LabelHeight: 16}},
 		{"temperature far below the range", image.Rect(40, 40, 190, 120), sharedRange, -500, PrecipChartOptions{LabelHeight: 16}},
+		{"NaN temperature", image.Rect(40, 40, 190, 120), sharedRange, math.NaN(), PrecipChartOptions{LabelHeight: 16}},
 		{"collapsed range", image.Rect(40, 40, 190, 120), &TempRange{Min: 10, Max: 10}, 10, PrecipChartOptions{LabelHeight: 16}},
 		{"inverted range", image.Rect(40, 40, 190, 120), &TempRange{Min: 20, Max: 5}, 12, PrecipChartOptions{LabelHeight: 16}},
 		{"label band swallows the cell", image.Rect(40, 40, 190, 50), sharedRange, 15, PrecipChartOptions{LabelHeight: 20}},

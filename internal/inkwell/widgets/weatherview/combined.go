@@ -2,6 +2,7 @@ package weatherview
 
 import (
 	"image"
+	"math"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
@@ -37,11 +38,16 @@ func (r TempRange) span() float64 {
 
 // y maps a temperature to the top row of the line within a plot that
 // starts at top and runs height rows. Temperatures outside the range
-// clamp to the edge of the plot rather than leaving it. The line is
+// clamp to the edge of the plot rather than leaving it, and a NaN reads as
+// the coldest value: converting NaN to an int is undefined, and a row far
+// outside the plot would send the line walker off to find it. The line is
 // tempLineW thick, so the warmest day's line starts on top and the
 // coldest day's ends on the plot's last row.
 func (r TempRange) y(temp float64, top, height int) int {
-	norm := min(max((temp-r.Min)/r.span(), 0), 1)
+	norm := 0.0
+	if !math.IsNaN(temp) {
+		norm = min(max((temp-r.Min)/r.span(), 0), 1)
+	}
 	travel := height - tempLineW
 	return top + travel - int(norm*float64(travel)+0.5)
 }

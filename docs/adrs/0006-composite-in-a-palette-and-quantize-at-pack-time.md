@@ -49,9 +49,11 @@ background tint lands in Gray4's light bucket and snaps to white under the BW
 threshold, so it reads on neither mode. Three rules fall out of that, and they're
 the ones [`AGENTS.md`](../../AGENTS.md) enforces on new visual work:
 
-- Soft accents are solid `PaperBlack` strokes or inverted fills, not gray tints.
-  Gray fills only pay off in regions big enough for a Gray4 bucket to read, which
-  in practice means precipitation-bar interiors at `PaperGray70`.
+- Soft accents are solid `PaperBlack` strokes, not gray tints. (This ADR once
+  also allowed inverted fills; `AGENTS.md` now forbids large fills in a fixed
+  position because of burn-in.) Gray fills only pay off in regions big enough
+  for a Gray4 bucket to read, which in practice means precipitation-bar
+  interiors at `PaperGray70`.
 - Text uses `PaperBlack`, and hierarchy comes from weight and size rather than
   colour.
 - Sign-off is the device view at `http://localhost:8080/`, not the `?source=1`
