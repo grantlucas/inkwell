@@ -84,13 +84,30 @@ func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calend
 	// zero value there would blank the agenda while a negative one
 	// would panic on the slice bound.
 	limit := min(max(opts.MaxEvents, 0), len(events))
+	descent := lineH - daygrid.BodyAscent()
+	// fits reports whether rows of text whose first baseline is top end
+	// inside the cell, descenders included: ink below bounds.Max.Y lands
+	// on whatever widget the compositor put underneath.
+	fits := func(top, rows int) bool {
+		return top+(rows-1)*lineH+descent <= bounds.Max.Y
+	}
+
 	drawn := 0
-	for _, e := range events[:limit] {
+	for i, e := range events[:limit] {
 		p := planEvent(e, maxChars, opts)
 		// The whole event has to fit, title included: a time line with
 		// its title clipped off below is worse than not showing the
 		// event, because it reads as an event with no name.
-		if y+(p.rows()-1)*lineH > bounds.Max.Y {
+		if !fits(y, p.rows()) {
+			break
+		}
+		// Anything left after this event is hidden, and a hidden event
+		// must be counted. When this event would leave no room for the
+		// "+N MORE" line it gives its place up to that line, and the
+		// count then includes it: a day that silently drops events
+		// reads as a quieter day than it is. No later event could fit
+		// where the one-row line does not, so this is the last chance.
+		if i+1 < len(events) && !fits(y+p.rows()*lineH+eventsGap, 1) {
 			break
 		}
 		daygrid.DrawText(frame, x, y, p.timeLine, daygrid.BodyBoldFace, widget.PaperBlack)
@@ -103,7 +120,7 @@ func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calend
 		drawn++
 	}
 
-	if remaining := len(events) - drawn; remaining > 0 && y <= bounds.Max.Y {
+	if remaining := len(events) - drawn; remaining > 0 && fits(y, 1) {
 		// Fitted to the column like every other row: on a narrow
 		// column "+12 MORE" is wider than the cell and would overhang
 		// the divider into the next day's agenda.

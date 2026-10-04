@@ -176,6 +176,32 @@ func TestRenderWeatherBand_RealZeroDegreesIsDrawn(t *testing.T) {
 	}
 }
 
+// The shared scale spans only the days the forecast reached. A day it did
+// not reach is a zero DailyForecast, and counting its 0°C would squash a
+// summer week's lines against the top of every chart.
+func TestSharedTempRange(t *testing.T) {
+	warm := dryDay(30, 20)
+	for i := range warm.Hourly {
+		warm.Hourly[i].Temperature = 25
+	}
+	tests := []struct {
+		label    string
+		days     []weather.DailyForecast
+		min, max float64
+	}{
+		{"spans the forecast days", []weather.DailyForecast{warm, dryDay(12, 4)}, 4, 30},
+		{"ignores days the forecast missed", []weather.DailyForecast{warm, {}, {}}, 20, 30},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			got := sharedTempRange(tt.days)
+			if got.Min != tt.min || got.Max != tt.max {
+				t.Errorf("range = %+v, want {%v %v}", *got, tt.min, tt.max)
+			}
+		})
+	}
+}
+
 // A condition glyph that will not load must not take the rest of the
 // cell with it: the temperatures and the chart are still worth drawing.
 func TestRenderWeatherBand_IconFailureStillDrawsTheRest(t *testing.T) {

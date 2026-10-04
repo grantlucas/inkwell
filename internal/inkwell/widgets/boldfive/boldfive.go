@@ -75,13 +75,20 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	fetched := daygrid.Fetch(ctx, widgetName, w.cal, w.weather, days, w.config.Weather.Location())
 	events, forecastDays := fetched.Events, fetched.Days()
 
+	forecasts := make([]weather.DailyForecast, len(days))
+	for i, day := range days {
+		forecasts[i] = daygrid.FindForecast(forecastDays, day)
+	}
+	tempRange := sharedTempRange(forecasts)
+
 	for i, col := range computeColumns(w.bounds) {
 		day := days[i]
 
 		renderDayHeader(frame, col.Header, day.Start)
 
-		renderWeatherBand(frame, col.Weather, daygrid.FindForecast(forecastDays, day), weatherOptions{
-			TempUnit: w.config.Weather.TempUnit,
+		renderWeatherBand(frame, col.Weather, forecasts[i], weatherOptions{
+			TempUnit:  w.config.Weather.TempUnit,
+			TempRange: tempRange,
 			// Today is always the leftmost column, so the marker goes
 			// there and nowhere else — "now" is not a point on any
 			// other day's axis.

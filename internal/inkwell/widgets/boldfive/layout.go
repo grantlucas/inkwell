@@ -17,10 +17,13 @@ const (
 	columns = 5
 
 	// headerH covers the weekday abbreviation and the date numeral.
-	// 112 is what the two scaled runs need: the weekday's 2x baseline
-	// sits at 12+28 and the numeral's 3x baseline at 52+42, whose
-	// descent lands exactly on the band's bottom edge.
-	headerH = 112
+	// The weekday's 2x baseline sits at 8+28 and the numeral's 3x
+	// baseline at 44+42; a numeral has no descender, so the band ends a
+	// few pixels under the digits' dilated base rather than reserving
+	// the descent. Those pixels are what let a column placed under a
+	// fuzzy_clock header band still fit three wrapped events and the
+	// "+N MORE" line beneath them.
+	headerH = 92
 
 	// weatherH covers the condition icon, the hi/lo pair and the
 	// precipitation chart. It is the height the hourly temperature

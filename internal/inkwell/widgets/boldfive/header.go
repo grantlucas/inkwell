@@ -19,9 +19,11 @@ const (
 	dateScale    = 3
 
 	// Top offsets of each run within the header band; the baseline is
-	// this plus the scaled ascent.
-	weekdayTop = 12
-	dateTop    = 52
+	// this plus the scaled ascent. Both runs are capitals and digits,
+	// which carry no descenders, so the numeral sits on its baseline
+	// rather than on a descent nothing below it uses.
+	weekdayTop = 8
+	dateTop    = 44
 )
 
 // renderDayHeader draws one column's header: the weekday abbreviation

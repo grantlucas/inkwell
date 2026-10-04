@@ -182,6 +182,83 @@ func TestRenderEvents_DrawsUpToMaxEvents(t *testing.T) {
 	}
 }
 
+// wrappedEvents builds n events whose titles each wrap to two lines in a
+// 160 px column, so every one costs three rows.
+func wrappedEvents(n int) []calendar.Event {
+	var out []calendar.Event
+	for i := range n {
+		out = append(out, timedEvent("Platform architecture review", 8+i))
+	}
+	return out
+}
+
+// moreLineAt reports whether the band of rows around baseline y in
+// bounds carries exactly the pixels of want drawn as the overflow line.
+// The column's last pixel is left out: in a full render it carries the
+// divider to the next day.
+func moreLineAt(frame *image.Paletted, bounds image.Rectangle, y int, want string) bool {
+	ref := newTestFrame(frame.Bounds().Dx(), frame.Bounds().Dy())
+	daygrid.DrawText(ref, bounds.Min.X+eventsPadX, y, want, daygrid.BodyBoldFace, widget.PaperBlack)
+	rows := image.Rect(bounds.Min.X, y-daygrid.BodyAscent(), bounds.Max.X-1, y+daygrid.BodyLineH()-daygrid.BodyAscent())
+	for yy := rows.Min.Y; yy < rows.Max.Y; yy++ {
+		for x := rows.Min.X; x < rows.Max.X; x++ {
+			if frame.ColorIndexAt(x, yy) != ref.ColorIndexAt(x, yy) {
+				return false
+			}
+		}
+	}
+	return countIndexIn(ref, rows, widget.PaperBlack) > 0
+}
+
+// A day with more events than fit always says how many are hidden. When
+// the last event that fits would leave no room for the "+N MORE" line,
+// that event gives its place up to the line, so the count is never
+// silently dropped — and the count includes it.
+func TestRenderEvents_HiddenEventsAreAlwaysCounted(t *testing.T) {
+	lineH, ascent := daygrid.BodyLineH(), daygrid.BodyAscent()
+	descent := lineH - ascent
+	eventH := 3*lineH + eventsGap
+	firstBaseline := eventsTopPad + ascent
+	// Exactly tall enough for three wrapped events and nothing more.
+	threeExactly := firstBaseline + 2*eventH + 2*lineH + descent
+
+	tests := []struct {
+		label     string
+		height    int
+		events    int
+		maxEvents int
+		wantDrawn int
+		wantMore  string
+	}{
+		{"room for the line after the cap", 480 - 216, 5, 3, 3, "+2 MORE"},
+		{"last event gives way to the line", threeExactly, 5, 3, 2, "+3 MORE"},
+		{"events that fit need no line", threeExactly, 3, 3, 3, ""},
+		{"overflow past the bounds is counted", threeExactly, 4, 9, 2, "+2 MORE"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			rect := image.Rect(0, 216, 160, 216+tt.height)
+			frame := newTestFrame(160, 480)
+			opts := defaultEventOpts()
+			opts.MaxEvents = tt.maxEvents
+			got := renderEvents(frame, rect, wrappedEvents(tt.events), opts)
+			if got != tt.wantDrawn {
+				t.Errorf("drawn = %d, want %d", got, tt.wantDrawn)
+			}
+			moreY := rect.Min.Y + firstBaseline + got*eventH
+			if tt.wantMore == "" {
+				if n := countIndexIn(frame, image.Rect(0, moreY-ascent, 160, 480), widget.PaperBlack); n != 0 {
+					t.Errorf("%d px drawn below the last event with nothing hidden", n)
+				}
+				return
+			}
+			if !moreLineAt(frame, rect, moreY, tt.wantMore) {
+				t.Errorf("no %q line at baseline %d", tt.wantMore, moreY)
+			}
+		})
+	}
+}
+
 // A column too narrow to carry a title draws nothing rather than a
 // stack of ellipses, which reads as a fault rather than as content.
 func TestRenderEvents_TooNarrow(t *testing.T) {
@@ -196,8 +273,10 @@ func TestRenderEvents_TooNarrow(t *testing.T) {
 // all: a time with no name under it reads as a broken row.
 func TestRenderEvents_DoesNotClipAnEventInHalf(t *testing.T) {
 	events := []calendar.Event{timedEvent("One", 9), timedEvent("Two", 10)}
-	// Room for one event's three rows but not two.
-	short := image.Rect(0, 216, 160, 216+eventsTopPad+3*daygrid.BodyLineH())
+	// Room for one event and the "+1 MORE" line under it, but not for
+	// the second event's two rows.
+	lineH := daygrid.BodyLineH()
+	short := image.Rect(0, 216, 160, 216+eventsTopPad+3*lineH+eventsGap+lineH/2)
 	frame := newTestFrame(160, 480)
 	if got := renderEvents(frame, short, events, defaultEventOpts()); got != 1 {
 		t.Errorf("drawn = %d, want 1", got)
