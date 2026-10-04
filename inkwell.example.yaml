@@ -174,17 +174,18 @@ dashboard:
     # today, and the week is a glance you take once you have walked up
     # to it — so the panel is spent unevenly rather than evenly.
     #
-    # It has the best precipitation chart of the three new screens (15 px
-    # bars with a marker at the current hour, wide enough that an
-    # afternoon band reads as a band), and today's agenda shows only
-    # what is left of the day — "DONE FOR TODAY" once nothing is.
+    # Every chart is a combined chart (precipitation bars with the
+    # temperature line over them) on one temperature range shared by
+    # all five days. Today's is the widest of any screen, with a marker
+    # at the current hour; each day row has a small one under its date.
+    # Today's agenda shows only what is left of the day — "DONE FOR
+    # TODAY" once nothing is. There is no filled block marking today:
+    # the date is plain text above a rule, so nothing burns in.
     #
-    # What it gives up: there is no precipitation chart in the day rows.
-    # A 462 px row cannot carry a legible bar chart and a legible title
-    # at the same time. Future-day rain is the condition icon and
-    # nothing more, so this is the one screen where the week's rain
-    # timing is genuinely missing — if that matters, bold-five is the
-    # screen that keeps it.
+    # What it gives up: the day rows' charts are small (164 px), because
+    # a row cannot carry a legible chart and a legible title side by
+    # side. They show the shape of the day, not hour-by-hour detail; if
+    # that matters for the whole week, bold-five is the screen for it.
     #
     # - name: today-hero
     #   widgets:
