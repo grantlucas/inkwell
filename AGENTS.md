@@ -53,9 +53,13 @@ will show.
 2. **Soft accents must be expressed as solid `PaperBlack` strokes,
    not as gray fills.** A `PaperGray20` background tint vanishes in
    Gray4's light bucket and snaps to white under the BW threshold —
-   it reads on neither mode. Use inversion (`PaperBlack` fill +
-   `PaperWhite` text) for highlights and 1–2 px `PaperBlack` strokes
-   for indicators. `PaperGrayNN` fills are only useful when the region
+   it reads on neither mode. Use 1–2 px `PaperBlack` strokes for
+   indicators. **Burn-in:** don't fill a large area in a fixed position
+   — a black block that lands in the same place every refresh invites
+   ghosting on the panel. Today is shown by position (first column or
+   first row), never by a fill or outline. A filled shape is fine when
+   it moves with the content, such as an upcoming-event block on the
+   day-timeline. `PaperGrayNN` fills are only useful when the region
    is large enough for the Gray4 bucket to read (precip-bar
    interiors are the canonical case — they land `PaperGray70` so
    Gray4 gets dark gray and BW gets solid black).
