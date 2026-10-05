@@ -263,13 +263,26 @@ func TestWidget_DryDayStillDrawsAChart(t *testing.T) {
 
 	for i, col := range computeColumns(image.Rect(0, 0, 800, 480)) {
 		chart := columnChart(col)
-		// Above the baseline and its ticks, so the axis alone does not
-		// count: only the temperature line can ink the plot of a dry day.
-		plot := image.Rect(chart.Min.X, chart.Min.Y, chart.Max.X, chart.Max.Y-chartLabelH-4)
+		// Above the baseline, so the axis alone does not count: only the
+		// temperature line can ink the plot of a dry day.
+		plot := image.Rect(chart.Min.X, chart.Min.Y, chart.Max.X, chartBaseline(t, frame, chart))
 		if countIndexIn(frame, plot, widget.PaperBlack) == 0 {
 			t.Errorf("column %d: a dry day drew nothing in its chart plot", i)
 		}
 	}
+}
+
+// chartBaseline is the first row of chart that is solid PaperBlack from
+// edge to edge: the rule the bars stand on.
+func chartBaseline(t *testing.T, frame *image.Paletted, chart image.Rectangle) int {
+	t.Helper()
+	for y := chart.Min.Y; y < chart.Max.Y; y++ {
+		if countIndexIn(frame, image.Rect(chart.Min.X, y, chart.Max.X, y+1), widget.PaperBlack) == chart.Dx() {
+			return y
+		}
+	}
+	t.Fatalf("no baseline in chart %v", chart)
+	return -1
 }
 
 // topInkRow is the first row in r carrying PaperBlack in column x, or -1.

@@ -7,37 +7,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"golang.org/x/image/font"
 )
-
-// PrecipChartOptions controls precipitation-only chart rendering.
-type PrecipChartOptions struct {
-	// LabelFace draws the hour labels. A nil face falls back to the
-	// package default.
-	LabelFace font.Face
-	// LabelHeight reserves a band at the bottom of the cell for the hour
-	// labels. Zero draws no labels and gives the bars the whole cell.
-	LabelHeight int
-	// NowHour is the hour the now-marker is drawn at, when ShowNowMarker
-	// is set and the hour falls inside the window.
-	NowHour int
-	// ShowNowMarker draws a 2 px solid PaperBlack stroke at NowHour.
-	ShowNowMarker bool
-	// ShowGuide draws a dashed 50% reference line. Off by default: only
-	// the wide hero cell has the room for it.
-	ShowGuide bool
-	// DryText is drawn centred when the day is dry. Empty draws nothing,
-	// which is what the narrow cells want — a wide hero cell passes
-	// something like "NO RAIN TODAY".
-	DryText string
-	// TempRange turns the precipitation chart into the combined chart:
-	// the temperature line is drawn over the bars, scaled to this range.
-	// Nil draws precipitation only, exactly as before, so adoption is
-	// opt-in per screen. A day with a range is never blank: when it is
-	// dry the baseline, ticks and line are still drawn, with no bars,
-	// and DryText is dropped because the line already fills the cell.
-	TempRange *TempRange
-}
 
 const (
 	precipStartHour = 6
@@ -69,82 +39,22 @@ const (
 	// metre; three starts competing with the bars it sits behind.
 	precipMarkerW = 2
 
-	// The guide's dash pattern: precipDashOn pixels of ink every
-	// precipDashPeriod.
-	precipDashOn     = 2
-	precipDashPeriod = 5
+	// precipLabelGap is the paper between the ticks and the top of the
+	// hour labels.
+	precipLabelGap = 2
 )
+
+// precipLabelH is the band the hour labels take at the bottom of the
+// cell: the gap under the ticks plus the label face's full height, so a
+// glyph's descent stays inside the cell. The chart sizes it from its own
+// face, so no caller has to know which font tier that is.
+var precipLabelH = precipLabelGap + defaultFace.Metrics().Ascent.Ceil() + defaultFace.Metrics().Descent.Ceil()
 
 // precipLabelHours are the marks on the hour axis. Three 24-hour labels
 // rather than the live chart's "6 9 12 3 8", which mixes morning and
 // afternoon on one axis and has to be worked out at exactly the moment
 // you are trying not to.
 var precipLabelHours = []int{6, 12, 18}
-
-// RenderPrecipChart draws precipitation probability as bars across
-// 06:00–21:00, taking the whole of bounds. Unlike RenderHourlyChart the
-// temperature polyline is optional: without opts.TempRange the curve is
-// dropped, which is what buys the bars enough height to read from across
-// the room. With one it is drawn over the bars as the combined chart.
-//
-// The caller supplies the rect, the label face and the label band height,
-// so one renderer serves a 312 px hero cell and a 110 px row badge.
-func RenderPrecipChart(frame *image.Paletted, bounds image.Rectangle, hourly []weather.HourlyPoint, opts PrecipChartOptions) {
-	// A cell this small cannot carry a legible bar, and a partial render
-	// reads as a broken widget rather than as no data.
-	if bounds.Dx() < precipMinW || bounds.Dy() < precipMinH {
-		return
-	}
-
-	// No points in the window is absent data, not a dry day — drawing
-	// DryText here would assert something the forecast never said.
-	filtered := filterHours(hourly, precipStartHour, precipEndHour)
-	if len(filtered) == 0 {
-		return
-	}
-
-	dry := peakProb(filtered) < dryThreshold
-	if dry && opts.TempRange == nil {
-		drawDryDay(frame, bounds, opts)
-		return
-	}
-
-	l, ok := newPrecipLayout(bounds, opts.LabelHeight)
-	if !ok {
-		return
-	}
-
-	// Baseline: a solid PaperBlack rule the bars sit on. Solid rather
-	// than a gray hairline because a PaperGrayNN rule snaps to white
-	// under the BW threshold and vanishes into Gray4's light bucket.
-	drawHLine(frame, bounds.Min.X, bounds.Max.X, l.baselineY, widget.PaperBlack)
-
-	if opts.ShowGuide {
-		drawPrecipGuide(frame, l)
-	}
-	if opts.ShowNowMarker {
-		drawPrecipNowMarker(frame, l, opts.NowHour)
-	}
-
-	if !dry {
-		drawPrecipBars(frame, l, filtered)
-	}
-	drawPrecipAxis(frame, l, opts)
-	if opts.TempRange != nil {
-		drawTempLine(frame, l, filtered, *opts.TempRange)
-	}
-}
-
-// drawDryDay renders the dry-day state: the caller's text centred, or
-// nothing at all. A flat row of stubs reads as a broken widget from
-// across the room; silence reads as a dry day.
-func drawDryDay(frame *image.Paletted, bounds image.Rectangle, opts PrecipChartOptions) {
-	if opts.DryText == "" {
-		return
-	}
-	drawTextCenteredWithFace(frame, bounds.Min.X, bounds.Max.X,
-		bounds.Min.Y+bounds.Dy()/2, opts.DryText, precipFace(opts))
-}
 
 // precipLayout is the resolved geometry of one chart cell: everything the
 // drawing steps need to place a bar, a tick or a label.
@@ -163,11 +73,8 @@ type precipLayout struct {
 // the frame rather than to bounds, so on a real panel — where every
 // widget shares one 800x480 frame — that means painting over whichever
 // widget sits above this one.
-func newPrecipLayout(bounds image.Rectangle, labelH int) (precipLayout, bool) {
-	if labelH < 0 {
-		return precipLayout{}, false
-	}
-	baselineY := bounds.Max.Y - labelH - precipTickH - 1
+func newPrecipLayout(bounds image.Rectangle) (precipLayout, bool) {
+	baselineY := bounds.Max.Y - precipLabelH - precipTickH - 1
 	barMaxH := baselineY - bounds.Min.Y
 	if barMaxH <= 0 {
 		return precipLayout{}, false
@@ -209,18 +116,6 @@ func (l precipLayout) barHeight(prob float64) int {
 	return h
 }
 
-// drawPrecipGuide draws the 50% reference, dashed so it reads as a guide
-// rather than a second baseline. The dashes are solid PaperBlack pixels —
-// a gray hairline would not survive either packer.
-func drawPrecipGuide(frame *image.Paletted, l precipLayout) {
-	y := l.baselineY - l.barMaxH/2
-	for x := l.bounds.Min.X; x < l.bounds.Max.X; x++ {
-		if (x-l.bounds.Min.X)%precipDashPeriod < precipDashOn {
-			setPixel(frame, x, y, widget.PaperBlack)
-		}
-	}
-}
-
 // drawPrecipNowMarker draws a 2-px solid PaperBlack vertical stroke at
 // the given hour. Drawn before the bars so they overlay it — the reader
 // still sees one clear vertical mark that intersects the data at the
@@ -252,9 +147,8 @@ func drawPrecipBars(frame *image.Paletted, l precipLayout, points []weather.Hour
 	}
 }
 
-// drawPrecipAxis draws the base ticks and, when the caller reserved a
-// label band, the hour marks.
-func drawPrecipAxis(frame *image.Paletted, l precipLayout, opts PrecipChartOptions) {
+// drawPrecipAxis draws the base ticks and the hour marks under them.
+func drawPrecipAxis(frame *image.Paletted, l precipLayout) {
 	// One tick per hour slot, whether or not that hour drew a bar, so the
 	// axis still reads as an axis on a mostly-dry day. Single pixels
 	// survive only as on/off, so they stay PaperBlack.
@@ -263,17 +157,13 @@ func drawPrecipAxis(frame *image.Paletted, l precipLayout, opts PrecipChartOptio
 		drawVLine(frame, tx, l.baselineY+1, l.baselineY+1+precipTickH, widget.PaperBlack)
 	}
 
-	if opts.LabelHeight <= 0 {
-		return
-	}
-	face := precipFace(opts)
-	y := l.baselineY + precipTickH + face.Metrics().Ascent.Ceil() + 2
+	y := l.baselineY + precipTickH + defaultFace.Metrics().Ascent.Ceil() + precipLabelGap
 	for _, hour := range precipLabelHours {
 		// Hour labels in solid PaperBlack: the glyphs are 1-bit bitmap
 		// masks, so black paints pixels that read on both the Gray4 and
 		// BW paths.
 		x := l.slotX(hour)
-		drawTextCenteredWithFace(frame, x, x+int(l.step), y, strconv.Itoa(hour), face)
+		drawTextCenteredWithFace(frame, x, x+int(l.step), y, strconv.Itoa(hour), defaultFace)
 	}
 }
 
@@ -285,13 +175,4 @@ func peakProb(points []weather.HourlyPoint) float64 {
 		peak = math.Max(peak, hp.PrecipitationProb)
 	}
 	return peak
-}
-
-// precipFace resolves the caller's label face, falling back to the
-// package default so a zero-valued PrecipChartOptions still renders.
-func precipFace(opts PrecipChartOptions) font.Face {
-	if opts.LabelFace != nil {
-		return opts.LabelFace
-	}
-	return defaultFace
 }

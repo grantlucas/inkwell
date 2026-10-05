@@ -30,7 +30,9 @@ const (
 	identityH  = 116 // date, month and fuzzy clock above a rule
 	weatherTop = identityH
 	chartTop   = 202
-	chartBot   = 276
+	// The chart sizes its own label band now; the 10 px of paper
+	// between it and the agenda rule is the layout's, not the chart's.
+	chartBot   = 270
 	agendaRule = 280
 
 	// dayRows is how many days follow today, one row each. Four rows

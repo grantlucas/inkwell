@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"log"
 	"unicode/utf8"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
@@ -38,8 +39,20 @@ var newOpenTypeFace = opentype.NewFace
 
 // DrawIcon renders a weather icon for the given condition at (x, y) with
 // the specified pixel size. The icon is drawn centered horizontally and
-// vertically within a size×size box at (x, y).
-func DrawIcon(frame *image.Paletted, x, y, size int, cond weather.Condition) error {
+// vertically within a size×size box at (x, y). An unknown condition draws
+// the clear-sky glyph.
+//
+// A glyph that will not draw is logged rather than returned: the rest of
+// the cell — its temperatures and its chart — is still worth drawing, so
+// there is nothing a caller could do with the error but log it, and the
+// font seam that makes the failure reachable in tests stays in here.
+func DrawIcon(frame *image.Paletted, x, y, size int, cond weather.Condition) {
+	if err := drawIcon(frame, x, y, size, cond); err != nil {
+		log.Printf("weatherview: draw icon for condition %d: %v", cond, err)
+	}
+}
+
+func drawIcon(frame *image.Paletted, x, y, size int, cond weather.Condition) error {
 	glyph, ok := conditionGlyphs[cond]
 	if !ok {
 		glyph = conditionGlyphs[weather.Clear]

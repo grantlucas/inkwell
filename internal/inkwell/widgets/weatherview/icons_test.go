@@ -1,7 +1,11 @@
 package weatherview
 
 import (
+	"bytes"
 	"errors"
+	"log"
+	"os"
+	"strings"
 	"testing"
 
 	"golang.org/x/image/font"
@@ -25,11 +29,7 @@ func TestDrawIcon_AllConditions(t *testing.T) {
 
 	for _, cond := range conditions {
 		frame := newTestFrame(40, 40)
-		err := DrawIcon(frame, 2, 2, 24, cond)
-		if err != nil {
-			t.Errorf("DrawIcon(cond=%d): %v", cond, err)
-			continue
-		}
+		DrawIcon(frame, 2, 2, 24, cond)
 
 		// Look up the semantic black index instead of hardcoding
 		// `1`; the palette layout is allowed to shift and tests
@@ -52,11 +52,16 @@ func TestDrawIcon_AllConditions(t *testing.T) {
 	}
 }
 
+// An unknown condition falls back to the clear-sky glyph rather than
+// leaving the cell empty.
 func TestDrawIcon_UnknownCondition(t *testing.T) {
-	frame := newTestFrame(40, 40)
-	err := DrawIcon(frame, 2, 2, 24, weather.Condition(99))
-	if err != nil {
-		t.Errorf("unexpected error for unknown condition: %v", err)
+	unknown := newTestFrame(40, 40)
+	DrawIcon(unknown, 2, 2, 24, weather.Condition(99))
+	clear := newTestFrame(40, 40)
+	DrawIcon(clear, 2, 2, 24, weather.Clear)
+
+	if !bytes.Equal(unknown.Pix, clear.Pix) {
+		t.Error("unknown condition did not draw the clear-sky glyph")
 	}
 }
 
@@ -64,10 +69,58 @@ func TestDrawIcon_DifferentSizes(t *testing.T) {
 	sizes := []int{12, 16, 24, 32}
 	for _, size := range sizes {
 		frame := newTestFrame(size+10, size+10)
-		err := DrawIcon(frame, 2, 2, size, weather.Clear)
-		if err != nil {
-			t.Errorf("DrawIcon(size=%d): %v", size, err)
+		DrawIcon(frame, 2, 2, size, weather.Clear)
+		if !chartHasInk(frame) {
+			t.Errorf("DrawIcon(size=%d) drew nothing", size)
 		}
+	}
+}
+
+// captureLog redirects the standard logger for the rest of the test and
+// returns what it wrote.
+func captureLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	return &buf
+}
+
+// A glyph that will not draw is logged, not returned: the rest of the
+// cell — the temperatures and the chart — is still worth drawing, so no
+// caller has anything to do with the error but log it.
+func TestDrawIcon_FailureIsLoggedAndDrawsNothing(t *testing.T) {
+	cases := []struct {
+		label     string
+		breakIcon func(t *testing.T)
+	}{
+		{"bad font data", func(t *testing.T) {
+			orig := fontData
+			fontData = []byte("not a font")
+			t.Cleanup(func() { fontData = orig })
+		}},
+		{"glyph not found", func(t *testing.T) {
+			orig := conditionGlyphs[weather.Clear]
+			conditionGlyphs[weather.Clear] = 0x0001
+			t.Cleanup(func() { conditionGlyphs[weather.Clear] = orig })
+		}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			tc.breakIcon(t)
+			logged := captureLog(t)
+
+			frame := newTestFrame(40, 40)
+			DrawIcon(frame, 2, 2, 24, weather.Clear)
+
+			if chartHasInk(frame) {
+				t.Error("drew ink for a glyph that failed")
+			}
+			if !strings.Contains(logged.String(), "weatherview: draw icon") {
+				t.Errorf("log = %q, want a weatherview draw icon message", logged.String())
+			}
+		})
 	}
 }
 
@@ -78,18 +131,6 @@ func TestIconFace(t *testing.T) {
 	}
 	if cerr := f.Close(); cerr != nil {
 		t.Errorf("close face: %v", cerr)
-	}
-}
-
-func TestDrawIcon_BadFontData(t *testing.T) {
-	orig := fontData
-	fontData = []byte("not a font")
-	defer func() { fontData = orig }()
-
-	frame := newTestFrame(40, 40)
-	err := DrawIcon(frame, 2, 2, 24, weather.Clear)
-	if err == nil {
-		t.Fatal("expected error with bad font data")
 	}
 }
 
@@ -136,17 +177,5 @@ func TestIconFace_OpenTypeNewFaceError(t *testing.T) {
 	_, err := iconFace(24)
 	if err == nil {
 		t.Fatal("expected error from injected NewFace stub")
-	}
-}
-
-func TestDrawIcon_GlyphNotFound(t *testing.T) {
-	orig := conditionGlyphs[weather.Clear]
-	conditionGlyphs[weather.Clear] = 0x0001
-	defer func() { conditionGlyphs[weather.Clear] = orig }()
-
-	frame := newTestFrame(40, 40)
-	err := DrawIcon(frame, 2, 2, 24, weather.Clear)
-	if err == nil {
-		t.Fatal("expected glyph not found error")
 	}
 }

@@ -3,8 +3,6 @@ package todayhero
 import (
 	"fmt"
 	"image"
-	"log"
-	"math"
 	"strings"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
@@ -36,12 +34,10 @@ const (
 	rowNumeralEnd = 54
 
 	// The chart fills the gutter under that line and stops short of the
-	// agenda column. The 14 px label band is bold-five's and
-	// row-agenda's, sized for the chart's own 12 px tier.
+	// agenda column.
 	rowChartTop    = 64
 	rowChartRight  = 176
 	rowChartBottom = 4
-	rowChartLabelH = 14
 
 	// Where the agenda starts. Unchanged: the events keep their room.
 	rowAgendaDX = 186
@@ -108,26 +104,16 @@ func renderRowWeather(frame *image.Paletted, bounds image.Rectangle, forecast we
 		return
 	}
 	top := bounds.Min.Y
-	hi, lo := forecast.High, forecast.Low
-	if unit == "F" {
-		hi, lo = weather.CelsiusToFahrenheit(hi), weather.CelsiusToFahrenheit(lo)
-	}
-	hiLo := fmt.Sprintf("%d° %d°", int(math.Round(hi)), int(math.Round(lo)))
+	hiLo := weatherview.NewHighLow(forecast, unit).Pair()
 	tempX := bounds.Min.X + rowChartRight - daygrid.TextWidth(daygrid.BodyFace, hiLo)
 	daygrid.DrawText(frame, tempX, top+rowTempBaseline, hiLo, daygrid.BodyFace, widget.PaperBlack)
 
 	iconX := (bounds.Min.X + rowNumeralEnd + tempX - rowIconSize) / 2
-	if err := drawIcon(frame, iconX, top+rowIconDY, rowIconSize, forecast.Condition); err != nil {
-		log.Printf("todayhero: draw row icon for condition %d: %v", forecast.Condition, err)
-	}
+	weatherview.DrawIcon(frame, iconX, top+rowIconDY, rowIconSize, forecast.Condition)
 
-	// No now-marker, guide or dry caption: the marker belongs to today's
-	// chart alone, and at 164 px the guide's dashes would compete with
-	// the bars. A dry day still draws its temperature line.
-	weatherview.RenderPrecipChart(frame, rowChart(bounds), forecast.Hourly, weatherview.PrecipChartOptions{
-		LabelHeight: rowChartLabelH,
-		TempRange:   &rng,
-	})
+	// No now-marker: it belongs to today's chart alone. A dry day still
+	// draws its temperature line.
+	weatherview.RenderCombinedChart(frame, rowChart(bounds), forecast.Hourly, rng, weatherview.CombinedOptions{})
 }
 
 // rowChart is the rect a row's combined chart takes: the lower half of
