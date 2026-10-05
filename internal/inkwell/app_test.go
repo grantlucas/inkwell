@@ -852,52 +852,54 @@ weather:
 	}
 }
 
-// Without an injected client the app supplies one itself; widgets never
-// pick their own.
-func TestNewApp_SuppliesAnHTTPClient(t *testing.T) {
-	cfg, err := LoadConfig(strings.NewReader("display: waveshare_7in5_v2\nbackend: preview\n"))
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	cfg.Dashboard = DashboardConfig{Screens: []ScreenConfig{{Name: "main", Widgets: []WidgetConfig{{Type: "probe", Bounds: [4]int{0, 0, 10, 10}}}}}}
-	reg := widget.NewRegistry()
-	var got widget.Deps
-	reg.Register("probe", func(b image.Rectangle, _ map[string]any, d widget.Deps) (widget.Widget, error) {
-		got = d
-		return &stubWidget{bounds: b}, nil
-	})
-
-	if _, err := NewApp(cfg, WithHardware(&MockHardware{}), WithInterval(time.Millisecond), WithRegistry(reg)); err != nil {
-		t.Fatalf("NewApp: %v", err)
-	}
-	if got.HTTPClient == nil || got.Weather == nil {
-		t.Errorf("deps = %+v, want an HTTP client and a weather provider", got)
-	}
-}
-
-// A caller may hand in its own weather provider; the app uses it rather
-// than building a second one.
-func TestNewApp_KeepsAnInjectedWeatherProvider(t *testing.T) {
-	cfg, err := LoadConfig(strings.NewReader("display: waveshare_7in5_v2\nbackend: preview\n"))
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	cfg.Dashboard = DashboardConfig{Screens: []ScreenConfig{{Name: "main", Widgets: []WidgetConfig{{Type: "probe", Bounds: [4]int{0, 0, 10, 10}}}}}}
-	reg := widget.NewRegistry()
-	var got widget.Deps
-	reg.Register("probe", func(b image.Rectangle, _ map[string]any, d widget.Deps) (widget.Widget, error) {
-		got = d
-		return &stubWidget{bounds: b}, nil
-	})
-
+// Whatever the caller leaves out, the app supplies; whatever it injects,
+// the app keeps. Widgets never pick their own dependencies.
+func TestNewApp_FillsMissingDeps(t *testing.T) {
 	provider := weather.NewProvider(&recordingHTTPClient{}, time.Hour, time.Now, weather.Settings{})
-	_, err = NewApp(cfg, WithHardware(&MockHardware{}), WithInterval(time.Millisecond),
-		WithRegistry(reg), WithDeps(widget.Deps{Weather: provider}))
-	if err != nil {
-		t.Fatalf("NewApp: %v", err)
+	tests := []struct {
+		label    string
+		injected widget.Deps
+		check    func(*testing.T, widget.Deps)
+	}{
+		{
+			label: "supplies an HTTP client and a weather provider",
+			check: func(t *testing.T, got widget.Deps) {
+				if got.HTTPClient == nil || got.Weather == nil {
+					t.Errorf("deps = %+v, want an HTTP client and a weather provider", got)
+				}
+			},
+		},
+		{
+			label:    "keeps an injected weather provider",
+			injected: widget.Deps{Weather: provider},
+			check: func(t *testing.T, got widget.Deps) {
+				if got.Weather != provider {
+					t.Error("the injected weather provider was replaced")
+				}
+			},
+		},
 	}
-	if got.Weather != provider {
-		t.Error("the injected weather provider was replaced")
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			cfg, err := LoadConfig(strings.NewReader("display: waveshare_7in5_v2\nbackend: preview\n"))
+			if err != nil {
+				t.Fatalf("LoadConfig: %v", err)
+			}
+			cfg.Dashboard = DashboardConfig{Screens: []ScreenConfig{{Name: "main", Widgets: []WidgetConfig{{Type: "probe", Bounds: [4]int{0, 0, 10, 10}}}}}}
+			reg := widget.NewRegistry()
+			var got widget.Deps
+			reg.Register("probe", func(b image.Rectangle, _ map[string]any, d widget.Deps) (widget.Widget, error) {
+				got = d
+				return &stubWidget{bounds: b}, nil
+			})
+
+			_, err = NewApp(cfg, WithHardware(&MockHardware{}), WithInterval(time.Millisecond),
+				WithRegistry(reg), WithDeps(tt.injected))
+			if err != nil {
+				t.Fatalf("NewApp: %v", err)
+			}
+			tt.check(t, got)
+		})
 	}
 }
 

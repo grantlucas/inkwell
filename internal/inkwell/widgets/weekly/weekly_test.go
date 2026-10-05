@@ -315,25 +315,27 @@ func typedDeps(client calendar.HTTPClient) widget.Deps {
 	}
 }
 
-func TestFactory_Minimal(t *testing.T) {
-	w, err := Factory(image.Rect(0, 0, 800, 480), minimalConfig(), typedDeps(&stubHTTPClient{}))
-	if err != nil {
-		t.Fatalf("Factory: %v", err)
+// The factory builds from typed deps with or without an injected clock.
+func TestFactory_Builds(t *testing.T) {
+	tests := []struct {
+		label string
+		now   func() time.Time
+	}{
+		{label: "injected clock", now: fixedClock(testTime)},
+		{label: "no clock", now: nil},
 	}
-	if w == nil {
-		t.Fatal("Factory returned nil widget")
-	}
-}
-
-func TestFactory_NilNow(t *testing.T) {
-	deps := typedDeps(&stubHTTPClient{})
-	deps.Now = nil
-	w, err := Factory(image.Rect(0, 0, 800, 480), minimalConfig(), deps)
-	if err != nil {
-		t.Fatalf("Factory: %v", err)
-	}
-	if w == nil {
-		t.Fatal("Factory returned nil widget")
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			deps := typedDeps(&stubHTTPClient{})
+			deps.Now = tt.now
+			w, err := Factory(image.Rect(0, 0, 800, 480), minimalConfig(), deps)
+			if err != nil {
+				t.Fatalf("Factory: %v", err)
+			}
+			if w == nil {
+				t.Fatal("Factory returned nil widget")
+			}
+		})
 	}
 }
 
