@@ -41,7 +41,11 @@ func Parse(r io.Reader) ([]Event, error) {
 			hasDuration = false
 			cancelled = false
 		case line == "END:VEVENT":
-			if inEvent && cur != nil && !cur.Start.IsZero() && !cancelled {
+			// A cancelled override is kept, marked, because it is what
+			// removes its occurrence from the series; any other
+			// cancelled event is dropped here.
+			if inEvent && cur != nil && !cur.Start.IsZero() && (!cancelled || !cur.RecurrenceID.IsZero()) {
+				cur.Cancelled = cancelled
 				// EXDATE without RRULE would otherwise leave a
 				// Recurrence with Freq=0; Occurrences would route the
 				// event through expand(), the switch on Freq would
@@ -85,7 +89,8 @@ func Parse(r io.Reader) ([]Event, error) {
 				// league team feeds routinely keep cancelled practices
 				// in the feed alongside live ones. TENTATIVE and
 				// CONFIRMED are both still happening, so only
-				// CANCELLED is dropped.
+				// CANCELLED is dropped — or, on an override, kept as
+				// the marker that removes its occurrence.
 				cancelled = strings.EqualFold(value, "CANCELLED")
 			case "DTSTART":
 				t, allDay, err := parseDateTime(line, zones)
@@ -94,6 +99,12 @@ func Parse(r io.Reader) ([]Event, error) {
 				}
 				cur.Start = t
 				cur.AllDay = allDay
+			case "RECURRENCE-ID":
+				t, _, err := parseDateTime(line, zones)
+				if err != nil {
+					return nil, fmt.Errorf("parse RECURRENCE-ID: %w", err)
+				}
+				cur.RecurrenceID = t
 			case "DTEND":
 				t, _, err := parseDateTime(line, zones)
 				if err != nil {

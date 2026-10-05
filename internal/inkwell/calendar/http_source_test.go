@@ -104,27 +104,6 @@ func TestHTTPSource_MultipleFeeds(t *testing.T) {
 	}
 }
 
-func TestHTTPSource_DeduplicatesByUID(t *testing.T) {
-	client := &mockHTTPClient{
-		responses: map[string]*http.Response{
-			"https://example.com/a.ics": newMockResponse(testICS),
-			"https://example.com/b.ics": newMockResponse(testICS), // same event
-		},
-	}
-	src := NewHTTPSource(FeedsFromURLs([]string{
-		"https://example.com/a.ics",
-		"https://example.com/b.ics",
-	}), client)
-
-	events, err := src.Fetch(context.Background())
-	if err != nil {
-		t.Fatalf("Fetch: %v", err)
-	}
-	if len(events) != 1 {
-		t.Fatalf("got %d events, want 1 (deduplicated)", len(events))
-	}
-}
-
 func TestHTTPSource_HTTPError(t *testing.T) {
 	client := &mockHTTPClient{
 		errors: map[string]error{

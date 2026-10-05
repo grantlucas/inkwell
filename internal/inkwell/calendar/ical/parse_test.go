@@ -771,3 +771,89 @@ END:VCALENDAR
 		t.Errorf("Start = %v, want %v", events[0].Start, want)
 	}
 }
+
+// An override is the VEVENT that edits one instance of a series: it
+// carries the series' UID and a RECURRENCE-ID naming the instance. A
+// cancelled override survives the parse, marked, because removing its
+// instance is its whole job; a cancelled event that edits nothing is
+// still dropped (TestParse_StatusFiltering).
+func TestParse_Overrides(t *testing.T) {
+	toronto, err := time.LoadLocation("America/Toronto")
+	if err != nil {
+		t.Fatalf("LoadLocation: %v", err)
+	}
+
+	cases := []struct {
+		label         string
+		recurrenceID  string
+		status        string
+		wantID        time.Time
+		wantCancelled bool
+	}{
+		{
+			label:        "UTC instance",
+			recurrenceID: "RECURRENCE-ID:20261005T090000Z",
+			wantID:       utc(2026, 10, 5, 9, 0),
+		},
+		{
+			label:        "zoned instance",
+			recurrenceID: "RECURRENCE-ID;TZID=America/Toronto:20261005T090000",
+			wantID:       time.Date(2026, 10, 5, 9, 0, 0, 0, toronto),
+		},
+		{
+			label:        "all-day instance",
+			recurrenceID: "RECURRENCE-ID;VALUE=DATE:20261005",
+			wantID:       utc(2026, 10, 5, 0, 0),
+		},
+		{
+			label:         "cancelled instance is kept and marked",
+			recurrenceID:  "RECURRENCE-ID:20261005T090000Z",
+			status:        "STATUS:CANCELLED\r\n",
+			wantID:        utc(2026, 10, 5, 9, 0),
+			wantCancelled: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			feed := "BEGIN:VCALENDAR\r\n" +
+				"BEGIN:VEVENT\r\n" +
+				"UID:weekly@example.com\r\n" +
+				tc.recurrenceID + "\r\n" +
+				"DTSTART:20261006T150000Z\r\n" +
+				"DTEND:20261006T153000Z\r\n" +
+				tc.status +
+				"SUMMARY:Weekly Sync\r\n" +
+				"END:VEVENT\r\n" +
+				"END:VCALENDAR\r\n"
+
+			events, err := Parse(strings.NewReader(feed))
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if len(events) != 1 {
+				t.Fatalf("got %d events, want 1", len(events))
+			}
+			if got := events[0].RecurrenceID; !got.Equal(tc.wantID) {
+				t.Errorf("RecurrenceID = %v, want %v", got, tc.wantID)
+			}
+			if got := events[0].Cancelled; got != tc.wantCancelled {
+				t.Errorf("Cancelled = %v, want %v", got, tc.wantCancelled)
+			}
+		})
+	}
+}
+
+func TestParse_InvalidRecurrenceID(t *testing.T) {
+	feed := "BEGIN:VCALENDAR\r\n" +
+		"BEGIN:VEVENT\r\n" +
+		"UID:weekly@example.com\r\n" +
+		"RECURRENCE-ID:not-a-date\r\n" +
+		"DTSTART:20261006T150000Z\r\n" +
+		"END:VEVENT\r\n" +
+		"END:VCALENDAR\r\n"
+
+	if _, err := Parse(strings.NewReader(feed)); err == nil {
+		t.Fatal("expected an error for an unparseable RECURRENCE-ID")
+	}
+}

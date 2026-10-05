@@ -7,14 +7,21 @@ import "time"
 // master event expands into concrete occurrences; Occurrences walks
 // the rule at filter time and produces flat Event values for each
 // concrete instance (with Recurrence set to nil on the result).
+//
+// An event with a RecurrenceID is an override: it stands in for the
+// occurrence of the series sharing its UID that would have started at
+// RecurrenceID, wherever the override itself now starts. A Cancelled
+// override removes that occurrence and is never shown itself.
 type Event struct {
-	UID        string
-	Summary    string
-	Start      time.Time
-	End        time.Time
-	AllDay     bool
-	Location   string
-	Recurrence *Recurrence
+	UID          string
+	Summary      string
+	Start        time.Time
+	End          time.Time
+	AllDay       bool
+	Location     string
+	Recurrence   *Recurrence
+	RecurrenceID time.Time
+	Cancelled    bool
 }
 
 // Frequency is the FREQ= value of an RRULE. Only the three the issue

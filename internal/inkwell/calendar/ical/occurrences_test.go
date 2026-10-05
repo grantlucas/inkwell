@@ -1,6 +1,8 @@
 package ical
 
 import (
+	"fmt"
+	"slices"
 	"testing"
 	"time"
 )
@@ -659,5 +661,136 @@ func TestOccurrences_NoDriftPastNonexistentTime(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestOccurrences_Overrides pins how an override (an event carrying a
+// RecurrenceID) edits the series that shares its UID.
+func TestOccurrences_Overrides(t *testing.T) {
+	toronto, err := time.LoadLocation("America/Toronto")
+	if err != nil {
+		t.Fatalf("LoadLocation: %v", err)
+	}
+	weekly := Event{
+		UID:        "weekly",
+		Summary:    "Weekly Sync",
+		Start:      utc(2026, 10, 5, 9, 0),
+		End:        utc(2026, 10, 5, 9, 30),
+		Recurrence: &Recurrence{Freq: FreqWeekly},
+	}
+	// override returns a copy of weekly's instance at id moved to start.
+	override := func(id, start time.Time) Event {
+		return Event{UID: "weekly", Summary: "Weekly Sync", Start: start, End: start.Add(30 * time.Minute), RecurrenceID: id}
+	}
+	cancel := func(e Event) Event {
+		e.Cancelled = true
+		return e
+	}
+	counted := weekly
+	counted.Recurrence = &Recurrence{Freq: FreqWeekly, Count: 2}
+	zoned := weekly
+	zoned.Start = time.Date(2026, 10, 5, 9, 0, 0, 0, toronto)
+	zoned.End = zoned.Start.Add(30 * time.Minute)
+	allDay := Event{
+		UID:        "weekly",
+		Summary:    "Bins",
+		Start:      utc(2026, 10, 5, 0, 0),
+		End:        utc(2026, 10, 6, 0, 0),
+		AllDay:     true,
+		Recurrence: &Recurrence{Freq: FreqWeekly},
+	}
+
+	cases := []struct {
+		label  string
+		events []Event
+		want   []time.Time
+	}{
+		{
+			label:  "a moved instance replaces its occurrence",
+			events: []Event{weekly, override(utc(2026, 10, 5, 9, 0), utc(2026, 10, 6, 15, 0))},
+			want:   []time.Time{utc(2026, 10, 6, 15, 0), utc(2026, 10, 12, 9, 0)},
+		},
+		{
+			label:  "a cancelled instance removes its occurrence and is not shown",
+			events: []Event{weekly, cancel(override(utc(2026, 10, 5, 9, 0), utc(2026, 10, 5, 9, 0)))},
+			want:   []time.Time{utc(2026, 10, 12, 9, 0)},
+		},
+		{
+			label: "several overrides edit one series",
+			events: []Event{
+				weekly,
+				override(utc(2026, 10, 5, 9, 0), utc(2026, 10, 6, 15, 0)),
+				cancel(override(utc(2026, 10, 12, 9, 0), utc(2026, 10, 12, 9, 0))),
+			},
+			want: []time.Time{utc(2026, 10, 6, 15, 0)},
+		},
+		{
+			label:  "an override without its series shows on its own",
+			events: []Event{override(utc(2026, 10, 5, 9, 0), utc(2026, 10, 6, 15, 0))},
+			want:   []time.Time{utc(2026, 10, 6, 15, 0)},
+		},
+		{
+			label:  "an overridden instance still counts toward COUNT",
+			events: []Event{counted, cancel(override(utc(2026, 10, 5, 9, 0), utc(2026, 10, 5, 9, 0)))},
+			want:   []time.Time{utc(2026, 10, 12, 9, 0)},
+		},
+		{
+			label:  "a zoned series matches an override naming the same instant in UTC",
+			events: []Event{zoned, cancel(override(utc(2026, 10, 5, 13, 0), utc(2026, 10, 5, 13, 0)))},
+			want:   []time.Time{time.Date(2026, 10, 12, 9, 0, 0, 0, toronto)},
+		},
+		{
+			label: "an all-day series matches an override naming its date",
+			events: []Event{allDay, func() Event {
+				e := override(utc(2026, 10, 5, 0, 0), utc(2026, 10, 7, 0, 0))
+				e.End, e.AllDay = utc(2026, 10, 8, 0, 0), true
+				return e
+			}()},
+			want: []time.Time{utc(2026, 10, 7, 0, 0), utc(2026, 10, 12, 0, 0)},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			got := Occurrences(tc.events, utc(2026, 10, 5, 0, 0), utc(2026, 10, 19, 0, 0))
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %d occurrences %v, want %d", len(got), got, len(tc.want))
+			}
+			for i, want := range tc.want {
+				if !got[i].Start.Equal(want) {
+					t.Errorf("occ[%d].Start = %v, want %v", i, got[i].Start, want)
+				}
+			}
+		})
+	}
+}
+
+// Occurrences that start together keep the order they came in, so the
+// copy of a duplicate that survives collapsing downstream is the one
+// from the first feed, not whichever the sort happened to leave first.
+func TestOccurrences_EqualStartsKeepInputOrder(t *testing.T) {
+	// Two start times interleaved, so the sort has real work to do.
+	var events []Event
+	for i := range 40 {
+		start := utc(2026, 10, 5, 9, 0)
+		if i%2 == 1 {
+			start = utc(2026, 10, 5, 8, 0)
+		}
+		events = append(events, Event{UID: fmt.Sprintf("e%02d", i), Start: start, End: start.Add(time.Hour)})
+	}
+	got := Occurrences(events, utc(2026, 10, 5, 0, 0), utc(2026, 10, 6, 0, 0))
+
+	var uids []string
+	for _, e := range got {
+		uids = append(uids, e.UID)
+	}
+	var want []string
+	for _, parity := range []int{1, 0} {
+		for i := parity; i < 40; i += 2 {
+			want = append(want, fmt.Sprintf("e%02d", i))
+		}
+	}
+	if !slices.Equal(uids, want) {
+		t.Errorf("order = %v, want %v", uids, want)
 	}
 }

@@ -70,10 +70,11 @@ func (c *CachedSource) Events(ctx context.Context, start, end time.Time) ([]Even
 	return c.filterEvents(start, end), nil
 }
 
-// filterEvents returns cached events overlapping [start, end). Both
-// non-recurring overlap and recurring-event expansion happen inside
-// ical.Occurrences; the returned slice is freshly allocated so callers
-// can mutate it without affecting subsequent cache reads.
+// filterEvents returns the occurrences of the cached events overlapping
+// [start, end), with duplicates collapsed. Both non-recurring overlap
+// and recurring-event expansion happen inside ical.Occurrences; the
+// returned slice is freshly allocated so callers can mutate it without
+// affecting subsequent cache reads.
 func (c *CachedSource) filterEvents(start, end time.Time) []Event {
-	return ical.Occurrences(c.events, start, end)
+	return collapse(ical.Occurrences(c.events, start, end))
 }

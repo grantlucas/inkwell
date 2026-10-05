@@ -1,6 +1,7 @@
 package ical
 
 import (
+	"maps"
 	"slices"
 	"sort"
 	"time"
@@ -24,20 +25,48 @@ var occurrenceSafetyCap = 50_000
 // the window, sorted by start time. Returned Events have Recurrence
 // set to nil so downstream code can treat each occurrence as a plain
 // event; the source event is unchanged.
+//
+// An override (an event with a RecurrenceID) replaces the occurrence of
+// its series that would have started at RecurrenceID, so that
+// occurrence never comes back and the override is windowed as a plain
+// event at its own time. A cancelled override removes the occurrence
+// and is not returned.
 func Occurrences(events []Event, start, end time.Time) []Event {
+	overridden := overriddenInstances(events)
 	var out []Event
 	for _, e := range events {
-		if e.Recurrence == nil {
+		if e.Cancelled {
+			continue
+		}
+		if e.Recurrence == nil || !e.RecurrenceID.IsZero() {
 			if e.End.After(start) && e.Start.Before(end) {
 				out = append(out, e)
 			}
 			continue
 		}
-		out = append(out, expand(e, start, end)...)
+		out = append(out, expand(e, start, end, overridden[e.UID])...)
 	}
-	sort.Slice(out, func(i, j int) bool {
+	// Stable, so occurrences that start together stay in feed order and
+	// the first feed's copy of a duplicate is the one that survives.
+	sort.SliceStable(out, func(i, j int) bool {
 		return out[i].Start.Before(out[j].Start)
 	})
+	return out
+}
+
+// overriddenInstances maps each UID to the instants of its series'
+// occurrences that an override stands in for, keyed like EXDATEs.
+func overriddenInstances(events []Event) map[string]map[int64]struct{} {
+	out := make(map[string]map[int64]struct{})
+	for _, e := range events {
+		if e.RecurrenceID.IsZero() {
+			continue
+		}
+		if out[e.UID] == nil {
+			out[e.UID] = make(map[int64]struct{})
+		}
+		out[e.UID][e.RecurrenceID.Unix()] = struct{}{}
+	}
 	return out
 }
 
@@ -71,7 +100,11 @@ func Occurrences(events []Event, start, end time.Time) []Event {
 // unresolvable TZID lands in the same bucket. That is a deliberate
 // simplification, not conformance — worth knowing before treating the
 // behaviour as a specification.
-func expand(master Event, winStart, winEnd time.Time) []Event {
+//
+// overridden holds the instants of occurrences an override replaces;
+// they are skipped like EXDATEs, and count toward COUNT like them too,
+// since the override is still that instance of the series.
+func expand(master Event, winStart, winEnd time.Time, overridden map[int64]struct{}) []Event {
 	r := master.Recurrence
 	interval := r.Interval
 	if interval == 0 {
@@ -81,7 +114,8 @@ func expand(master Event, winStart, winEnd time.Time) []Event {
 
 	// EXDATEs match an occurrence by instant. Unix seconds is enough
 	// precision for iCal datetimes (no sub-second values).
-	exdates := make(map[int64]struct{}, len(r.ExDates))
+	exdates := make(map[int64]struct{}, len(r.ExDates)+len(overridden))
+	maps.Copy(exdates, overridden)
 	for _, t := range r.ExDates {
 		exdates[t.Unix()] = struct{}{}
 	}
