@@ -1612,11 +1612,11 @@ func TestNewApp_WeatherAsksForTheDashboardZone(t *testing.T) {
 	var provider *weather.Provider
 	reg := widget.NewRegistry()
 	reg.Register("capture", func(bounds image.Rectangle, _ map[string]any, deps widget.Deps) (widget.Widget, error) {
-		provider, _ = deps.DataSources["weather"].(*weather.Provider)
+		provider = deps.Weather
 		return &changingWidget{bounds: bounds}, nil
 	})
 	client := &urlRecorder{}
-	deps := widget.Deps{DataSources: map[string]any{"http_client": client}}
+	deps := widget.Deps{HTTPClient: client}
 
 	if _, err := NewApp(cfg, WithHardware(&MockHardware{}), WithRegistry(reg), WithDeps(deps)); err != nil {
 		t.Fatalf("NewApp: %v", err)
