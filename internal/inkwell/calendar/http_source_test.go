@@ -94,7 +94,8 @@ func TestHTTPSource_MultipleFeeds(t *testing.T) {
 	if len(events) != 2 {
 		t.Fatalf("got %d events, want 2", len(events))
 	}
-	// Should be sorted by start time.
+	// Both feeds' events come back, in feed order. Fetch doesn't sort:
+	// CachedSource sorts the occurrences it expands.
 	if events[0].Summary != "Standup" {
 		t.Errorf("first event = %q, want %q", events[0].Summary, "Standup")
 	}
