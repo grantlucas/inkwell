@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
@@ -798,6 +799,115 @@ backend: preview
 	if !got.Equal(fixedTime) {
 		t.Errorf("deps.Now propagated time = %v, want %v", got, fixedTime)
 	}
+}
+
+// The app builds one set of dependencies and hands the same values to every
+// widget on every screen, so widgets that share a feed or a forecast share
+// one cache. The weather provider fetches through the injected client and
+// carries the top-level weather settings.
+func TestNewApp_HandsEveryWidgetTheSameDeps(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+weather:
+  latitude: 43.25
+  longitude: -79.87
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	probe := []WidgetConfig{{Type: "probe", Bounds: [4]int{0, 0, 10, 10}}}
+	cfg.Dashboard = DashboardConfig{Screens: []ScreenConfig{
+		{Name: "one", Widgets: probe},
+		{Name: "two", Widgets: probe},
+	}}
+	reg := widget.NewRegistry()
+	var got []widget.Deps
+	reg.Register("probe", func(b image.Rectangle, _ map[string]any, d widget.Deps) (widget.Widget, error) {
+		got = append(got, d)
+		return &stubWidget{bounds: b}, nil
+	})
+
+	client := &recordingHTTPClient{}
+	_, err = NewApp(cfg, WithHardware(&MockHardware{}), WithInterval(time.Millisecond),
+		WithRegistry(reg), WithDeps(widget.Deps{HTTPClient: client}))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	if len(got) != 2 {
+		t.Fatalf("built %d widgets, want 2", len(got))
+	}
+	if got[0].HTTPClient != client || got[1].HTTPClient != client {
+		t.Error("a widget did not receive the injected HTTP client")
+	}
+	if got[0].Weather == nil || got[0].Weather != got[1].Weather {
+		t.Fatal("widgets did not share one weather provider")
+	}
+
+	p := got[0].Weather
+	_, _ = p.Forecast(context.Background(), p.Defaults().Location, p.Defaults().Model, 1)
+	if !strings.Contains(client.lastURL, "latitude=43.2500") {
+		t.Errorf("forecast request %q did not go through the injected client at the top-level location", client.lastURL)
+	}
+}
+
+// Without an injected client the app supplies one itself; widgets never
+// pick their own.
+func TestNewApp_SuppliesAnHTTPClient(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader("display: waveshare_7in5_v2\nbackend: preview\n"))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	cfg.Dashboard = DashboardConfig{Screens: []ScreenConfig{{Name: "main", Widgets: []WidgetConfig{{Type: "probe", Bounds: [4]int{0, 0, 10, 10}}}}}}
+	reg := widget.NewRegistry()
+	var got widget.Deps
+	reg.Register("probe", func(b image.Rectangle, _ map[string]any, d widget.Deps) (widget.Widget, error) {
+		got = d
+		return &stubWidget{bounds: b}, nil
+	})
+
+	if _, err := NewApp(cfg, WithHardware(&MockHardware{}), WithInterval(time.Millisecond), WithRegistry(reg)); err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if got.HTTPClient == nil || got.Weather == nil {
+		t.Errorf("deps = %+v, want an HTTP client and a weather provider", got)
+	}
+}
+
+// A caller may hand in its own weather provider; the app uses it rather
+// than building a second one.
+func TestNewApp_KeepsAnInjectedWeatherProvider(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader("display: waveshare_7in5_v2\nbackend: preview\n"))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	cfg.Dashboard = DashboardConfig{Screens: []ScreenConfig{{Name: "main", Widgets: []WidgetConfig{{Type: "probe", Bounds: [4]int{0, 0, 10, 10}}}}}}
+	reg := widget.NewRegistry()
+	var got widget.Deps
+	reg.Register("probe", func(b image.Rectangle, _ map[string]any, d widget.Deps) (widget.Widget, error) {
+		got = d
+		return &stubWidget{bounds: b}, nil
+	})
+
+	provider := weather.NewProvider(&recordingHTTPClient{}, time.Hour, time.Now, weather.Settings{})
+	_, err = NewApp(cfg, WithHardware(&MockHardware{}), WithInterval(time.Millisecond),
+		WithRegistry(reg), WithDeps(widget.Deps{Weather: provider}))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if got.Weather != provider {
+		t.Error("the injected weather provider was replaced")
+	}
+}
+
+// recordingHTTPClient remembers the last URL it was asked for and answers
+// nothing, so no test reaches the network.
+type recordingHTTPClient struct{ lastURL string }
+
+func (c *recordingHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	c.lastURL = req.URL.String()
+	return nil, context.DeadlineExceeded
 }
 
 func TestNewApp_WithDashboardConfig(t *testing.T) {

@@ -131,20 +131,18 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 	}
 	base := deps.Now
 	deps.Now = func() time.Time { return base().In(loc) }
-	if deps.DataSources == nil {
-		deps.DataSources = make(map[string]any)
+	// Build each shared dependency once and hand the same value to every
+	// widget, so widgets that fetch the same feed or forecast share one
+	// cache. A caller may inject either (e.g. tests); widgets never pick
+	// their own.
+	if deps.HTTPClient == nil {
+		deps.HTTPClient = http.DefaultClient
 	}
-	if _, ok := deps.DataSources["http_client"]; !ok {
-		deps.DataSources["http_client"] = http.DefaultClient
-	}
-	// Build the shared weather Provider once from the top-level weather config
-	// and inject it so every weather widget deduplicates fetches through one
-	// cache. Widgets resolve their per-widget overrides against the Provider's
-	// defaults. A caller may pre-inject "weather" to override it (e.g. tests).
-	if _, ok := deps.DataSources["weather"]; !ok {
-		httpClient, _ := deps.DataSources["http_client"].(weather.HTTPClient)
-		deps.DataSources["weather"] = weather.NewProvider(
-			httpClient, weatherCacheTTL, deps.Now,
+	// The weather Provider carries the top-level weather config; widgets
+	// resolve their per-widget overrides against its defaults.
+	if deps.Weather == nil {
+		deps.Weather = weather.NewProvider(
+			deps.HTTPClient, weatherCacheTTL, deps.Now,
 			weather.Settings{
 				Location: weather.Location{Latitude: cfg.Weather.Latitude, Longitude: cfg.Weather.Longitude},
 				Model:    weather.Model(cfg.Weather.Model),

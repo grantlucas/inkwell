@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar/ical"
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
@@ -304,9 +305,18 @@ func minimalConfig() map[string]any {
 	}
 }
 
+// typedDeps is what the app hands every widget: one transport behind both
+// the calendar fetch and the shared weather provider.
+func typedDeps(client calendar.HTTPClient) widget.Deps {
+	return widget.Deps{
+		Now:        fixedClock(testTime),
+		HTTPClient: client,
+		Weather:    weather.NewProvider(client, time.Hour, fixedClock(testTime), weather.Settings{TempUnit: "C"}),
+	}
+}
+
 func TestFactory_Minimal(t *testing.T) {
-	deps := widget.Deps{Now: fixedClock(testTime)}
-	w, err := Factory(image.Rect(0, 0, 800, 480), minimalConfig(), deps)
+	w, err := Factory(image.Rect(0, 0, 800, 480), minimalConfig(), typedDeps(&stubHTTPClient{}))
 	if err != nil {
 		t.Fatalf("Factory: %v", err)
 	}
@@ -316,7 +326,8 @@ func TestFactory_Minimal(t *testing.T) {
 }
 
 func TestFactory_NilNow(t *testing.T) {
-	deps := widget.Deps{}
+	deps := typedDeps(&stubHTTPClient{})
+	deps.Now = nil
 	w, err := Factory(image.Rect(0, 0, 800, 480), minimalConfig(), deps)
 	if err != nil {
 		t.Fatalf("Factory: %v", err)
@@ -326,45 +337,24 @@ func TestFactory_NilNow(t *testing.T) {
 	}
 }
 
-func TestFactory_WithHTTPClient(t *testing.T) {
-	deps := widget.Deps{
-		Now:         fixedClock(testTime),
-		DataSources: map[string]any{"http_client": &stubHTTPClient{}},
-	}
-	w, err := Factory(image.Rect(0, 0, 800, 480), minimalConfig(), deps)
-	if err != nil {
-		t.Fatalf("Factory: %v", err)
-	}
-	if w == nil {
-		t.Fatal("Factory returned nil widget")
-	}
-}
-
-func TestFactory_WithWeatherSource(t *testing.T) {
-	deps := widget.Deps{
-		Now: fixedClock(testTime),
-		DataSources: map[string]any{
-			"weather_source": &stubWeatherSource{forecast: sampleForecast()},
-		},
-	}
-	cfg := minimalConfig()
-	cfg["show_weather"] = true
-	w, err := Factory(image.Rect(0, 0, 800, 480), cfg, deps)
-	if err != nil {
-		t.Fatalf("Factory: %v", err)
-	}
-	if w == nil {
-		t.Fatal("Factory returned nil widget")
+// A widget built without its dependencies fails instead of falling back
+// to a default HTTP client the app never chose.
+func TestFactory_MissingDeps(t *testing.T) {
+	_, err := Factory(image.Rect(0, 0, 800, 480), minimalConfig(), widget.Deps{Now: fixedClock(testTime)})
+	if err == nil || !strings.Contains(err.Error(), "weekly-calendar: no HTTP client") {
+		t.Errorf("error = %v, want a missing HTTP client error", err)
 	}
 }
 
 func TestFactory_WeatherDisabled(t *testing.T) {
-	deps := widget.Deps{Now: fixedClock(testTime)}
 	cfg := minimalConfig()
 	cfg["show_weather"] = false
-	_, err := Factory(image.Rect(0, 0, 800, 480), cfg, deps)
+	w, err := Factory(image.Rect(0, 0, 800, 480), cfg, typedDeps(&stubHTTPClient{}))
 	if err != nil {
 		t.Fatalf("Factory: %v", err)
+	}
+	if w.(*Widget).weather != nil {
+		t.Error("show_weather off still wired a weather source")
 	}
 }
 
@@ -795,8 +785,9 @@ func TestFactory_WeatherSourceQueriesResolvedModel(t *testing.T) {
 			prov := weather.NewProvider(rec, time.Hour, fixedClock(testTime),
 				weather.Settings{Model: weather.ModelGEM, TempUnit: "C"})
 			deps := widget.Deps{
-				Now:         fixedClock(testTime),
-				DataSources: map[string]any{"weather": prov},
+				Now:        fixedClock(testTime),
+				HTTPClient: rec,
+				Weather:    prov,
 			}
 			cfg := minimalConfig()
 			cfg["show_weather"] = true
@@ -820,15 +811,17 @@ func TestFactory_WeatherSourceQueriesResolvedModel(t *testing.T) {
 }
 
 func TestFactory_ResolvesWeatherFromProvider(t *testing.T) {
-	prov := weather.NewProvider(&recordingHTTPClient{}, time.Hour, fixedClock(testTime),
+	rec := &recordingHTTPClient{}
+	prov := weather.NewProvider(rec, time.Hour, fixedClock(testTime),
 		weather.Settings{
 			Location: weather.Location{Latitude: 43.244, Longitude: -79.837},
 			Model:    weather.ModelGEM,
 			TempUnit: "C",
 		})
 	deps := widget.Deps{
-		Now:         fixedClock(testTime),
-		DataSources: map[string]any{"weather": prov},
+		Now:        fixedClock(testTime),
+		HTTPClient: rec,
+		Weather:    prov,
 	}
 
 	t.Run("inherits provider defaults when unset", func(t *testing.T) {

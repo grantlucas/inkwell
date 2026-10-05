@@ -1,10 +1,14 @@
 package widget_test
 
 import (
+	"context"
 	"image"
+	"net/http"
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
@@ -119,7 +123,7 @@ func TestRegistry_CreatePassesConfigAndDeps(t *testing.T) {
 	}
 }
 
-func TestRegistry_CreatePassesDataSources(t *testing.T) {
+func TestRegistry_CreatePassesTypedDeps(t *testing.T) {
 	r := widget.NewRegistry()
 
 	var gotDeps widget.Deps
@@ -128,21 +132,44 @@ func TestRegistry_CreatePassesDataSources(t *testing.T) {
 		return &stubWidget{bounds: bounds}, nil
 	})
 
-	ds := map[string]any{"http_client": "fake-client"}
-	deps := widget.Deps{
-		Now:         time.Now,
-		DataSources: ds,
-	}
-
-	_, err := r.Create("spy", image.Rectangle{}, nil, deps)
+	client := &stubHTTPClient{}
+	provider := weather.NewProvider(client, time.Hour, time.Now, weather.Settings{})
+	_, err := r.Create("spy", image.Rectangle{}, nil, widget.Deps{
+		Now:        time.Now,
+		HTTPClient: client,
+		Weather:    provider,
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if gotDeps.DataSources == nil {
-		t.Fatal("DataSources was nil, expected it to be forwarded")
+	if gotDeps.HTTPClient != client {
+		t.Errorf("HTTPClient = %v, want the injected client", gotDeps.HTTPClient)
 	}
-	if got := gotDeps.DataSources["http_client"]; got != "fake-client" {
-		t.Errorf("DataSources[http_client] = %v, want %q", got, "fake-client")
+	if gotDeps.Weather != provider {
+		t.Errorf("Weather = %v, want the injected provider", gotDeps.Weather)
+	}
+}
+
+// stubHTTPClient never answers; the registry only forwards it.
+type stubHTTPClient struct{}
+
+func (*stubHTTPClient) Do(*http.Request) (*http.Response, error) {
+	return nil, context.DeadlineExceeded
+}
+
+func TestRegistry_TypesListsRegisteredNamesSorted(t *testing.T) {
+	r := widget.NewRegistry()
+	f := func(b image.Rectangle, _ map[string]any, _ widget.Deps) (widget.Widget, error) {
+		return &stubWidget{bounds: b}, nil
+	}
+	r.Register("zeta", f)
+	r.Register("alpha", f)
+	r.Register("mid", f)
+
+	got := r.Types()
+	want := []string{"alpha", "mid", "zeta"}
+	if !slices.Equal(got, want) {
+		t.Errorf("Types() = %v, want %v", got, want)
 	}
 }
