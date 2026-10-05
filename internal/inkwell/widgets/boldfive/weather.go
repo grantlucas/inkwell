@@ -45,6 +45,26 @@ type weatherOptions struct {
 	// assert something meaningless.
 	ShowNowMarker bool
 	NowHour       int
+	// TempRange is the temperature scale shared by all five columns.
+	// It turns the precipitation chart into the combined chart, so a
+	// dry day still draws its temperature line rather than an empty
+	// band, and a cold day sits visibly lower than a warm one.
+	TempRange *weatherview.TempRange
+}
+
+// sharedTempRange is the one temperature scale every column's chart is
+// drawn against. Only the days the forecast actually reached count: a
+// missing day is a zero DailyForecast, and its 0°C would drag the scale
+// down to a temperature nobody forecast.
+func sharedTempRange(days []weather.DailyForecast) *weatherview.TempRange {
+	var known []weather.DailyForecast
+	for _, d := range days {
+		if !d.Date.IsZero() {
+			known = append(known, d)
+		}
+	}
+	lo, hi := weatherview.GlobalTempRange(known)
+	return &weatherview.TempRange{Min: lo, Max: hi}
 }
 
 // renderWeatherBand draws one column's weather: condition icon, the
@@ -101,8 +121,9 @@ func renderWeatherBand(frame *image.Paletted, bounds image.Rectangle, day weathe
 		// with the bars they are meant to measure. Only the hero cell
 		// in today-hero has the room for it.
 		ShowGuide: false,
-		// No dry-day text either — a 144 px cell cannot carry a legible
-		// phrase, and an empty cell already reads as a dry day.
-		DryText: "",
+		// The shared range makes this the combined chart: a dry day
+		// draws its temperature line with no bars, so no column's chart
+		// is blank and there is no dry-day caption to fit.
+		TempRange: opts.TempRange,
 	})
 }

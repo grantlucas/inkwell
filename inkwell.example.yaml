@@ -127,26 +127,39 @@ dashboard:
     # it, and set `rotate_interval` on the dashboard, to put it into the
     # rotation alongside the weekly view and compare them over time.
     #
-    # It takes the whole panel: the header band carries its own date, so
-    # there is no separate `date` widget above it. What it trades away is
-    # the hourly temperature curve — that is the height the precipitation
-    # bars borrowed to become legible. Event titles get ~14 characters a
-    # line, the ceiling for a 160 px column; if titles are the problem,
-    # row-agenda is the screen that fixes them.
+    # Every column carries the combined chart — precipitation bars with
+    # the temperature line over them — on one temperature scale shared by
+    # the five days, so a dry day still shows its line and a cold day
+    # sits visibly lower than a warm one. The columns carry their own
+    # dates, so there is no separate `date` widget; the screen's clock is
+    # a large fuzzy_clock in a header band above them. Event titles get
+    # ~14 characters a line, the ceiling for a 160 px column; if titles
+    # are the problem, row-agenda is the screen that fixes them.
     #
     # - name: bold-five
     #   widgets:
+    #     # The header band: the fuzzy clock at twice the body size. 2 is
+    #     # the largest scale whose longest phrase fits 800 px; the size
+    #     # is set here rather than guessed from the bounds, so it does
+    #     # not change as the phrase changes length.
+    #     - type: fuzzy_clock
+    #       bounds: [0, 0, 800, 46]
+    #       refresh: "5m"    # fuzzy time only changes every ~5 minutes
+    #       config:
+    #         scale: 2
+    #     - type: separator
+    #       bounds: [0, 46, 800, 48]
+    #       refresh: "static"
     #     - type: bold-five
-    #       bounds: [0, 0, 800, 480]
+    #       bounds: [0, 48, 800, 480]
     #       refresh: "15m"   # how often it may refresh the panel
     #       config:
     #         # Same keys as weekly-calendar, so a screen can be swapped
     #         # between the two without rewriting its config.
     #         feeds:
     #           - "https://example.com/my-calendar.ics"
-    #         max_events: 4        # four events a column; the taller
-    #                              # line height costs one against
-    #                              # weekly-calendar's five
+    #         max_events: 3        # three a column under the clock band;
+    #                              # a day with more says "+N MORE"
     #         show_location: false
     #         refresh: "15m"       # calendar cache TTL, NOT the panel
     #                              # refresh cadence above

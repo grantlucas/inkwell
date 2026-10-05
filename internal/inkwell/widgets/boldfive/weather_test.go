@@ -103,9 +103,9 @@ func TestRenderWeatherBand_TempUnit(t *testing.T) {
 	}
 }
 
-// A dry day draws no bars at all. A flat row of stubs reads as a broken
-// widget from across the room; silence reads as a dry day. There is no
-// dry-day caption in this cell either — 144 px cannot carry one.
+// A dry day draws no bars at all: a flat row of stubs reads as a broken
+// widget from across the room. Its chart still carries the temperature
+// line, which TestWidget_DryDayStillDrawsAChart pins.
 func TestRenderWeatherBand_DryDayDrawsNoBars(t *testing.T) {
 	rect := weatherRect()
 	wet := newTestFrame(160, 480)
@@ -173,6 +173,32 @@ func TestRenderWeatherBand_RealZeroDegreesIsDrawn(t *testing.T) {
 
 	if countIndexIn(frame, weatherRect(), widget.PaperBlack) == 0 {
 		t.Error("a real 0°C forecast drew nothing")
+	}
+}
+
+// The shared scale spans only the days the forecast reached. A day it did
+// not reach is a zero DailyForecast, and counting its 0°C would squash a
+// summer week's lines against the top of every chart.
+func TestSharedTempRange(t *testing.T) {
+	warm := dryDay(30, 20)
+	for i := range warm.Hourly {
+		warm.Hourly[i].Temperature = 25
+	}
+	tests := []struct {
+		label    string
+		days     []weather.DailyForecast
+		min, max float64
+	}{
+		{"spans the forecast days", []weather.DailyForecast{warm, dryDay(12, 4)}, 4, 30},
+		{"ignores days the forecast missed", []weather.DailyForecast{warm, {}, {}}, 20, 30},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			got := sharedTempRange(tt.days)
+			if got.Min != tt.min || got.Max != tt.max {
+				t.Errorf("range = %+v, want {%v %v}", *got, tt.min, tt.max)
+			}
+		})
 	}
 }
 
