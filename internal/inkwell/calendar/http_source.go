@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sort"
-	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar/ical"
 )
@@ -23,10 +21,16 @@ type HTTPClient interface {
 var newRequestWithContext = http.NewRequestWithContext
 
 // HTTPSource fetches and parses iCal feeds from a list of Feeds.
-// It merges events from all feeds, deduplicates by UID, and filters
-// to the requested time range. Each feed's rules are applied to its own
-// events as they are parsed, so everything downstream — dedup, caching,
-// rendering — only ever sees cleaned-up events.
+// It merges events from all feeds and deduplicates by UID. Each feed's
+// rules are applied to its own events as they are parsed, so everything
+// downstream — dedup, caching, rendering — only ever sees cleaned-up
+// events.
+//
+// It does not window. A recurring event comes back as its series, and
+// only expanding the series says which of its occurrences fall in a
+// window; filtering on the series' first instance threw away every
+// series that began before the window. CachedSource expands and
+// windows what this returns.
 type HTTPSource struct {
 	feeds  []Feed
 	client HTTPClient
@@ -37,30 +41,26 @@ func NewHTTPSource(feeds []Feed, client HTTPClient) *HTTPSource {
 	return &HTTPSource{feeds: feeds, client: client}
 }
 
-// Events fetches all feeds, merges, deduplicates, filters to [start, end),
-// and returns events sorted by start time. ctx bounds each fetch.
-func (s *HTTPSource) Events(ctx context.Context, start, end time.Time) ([]Event, error) {
+// Fetch fetches all feeds, merges and deduplicates them, and returns
+// every event and series. ctx bounds each fetch.
+func (s *HTTPSource) Fetch(ctx context.Context) ([]Event, error) {
 	seen := make(map[string]bool)
 	var all []Event
 
 	for _, feed := range s.feeds {
-		if err := s.fetchFeed(ctx, feed, start, end, seen, &all); err != nil {
+		if err := s.fetchFeed(ctx, feed, seen, &all); err != nil {
 			return nil, err
 		}
 	}
-
-	sort.Slice(all, func(i, j int) bool {
-		return all[i].Start.Before(all[j].Start)
-	})
 
 	return all, nil
 }
 
 // fetchFeed handles a single URL's request lifecycle so that resp.Body
 // is closed at the end of each iteration rather than lingering until
-// Events returns. Close errors are surfaced when no other error
+// Fetch returns. Close errors are surfaced when no other error
 // preceded them.
-func (s *HTTPSource) fetchFeed(ctx context.Context, feed Feed, start, end time.Time, seen map[string]bool, all *[]Event) (retErr error) {
+func (s *HTTPSource) fetchFeed(ctx context.Context, feed Feed, seen map[string]bool, all *[]Event) (retErr error) {
 	url := feed.URL
 	req, err := newRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -93,11 +93,8 @@ func (s *HTTPSource) fetchFeed(ctx context.Context, feed Feed, start, end time.T
 		if !keep {
 			continue
 		}
-		// Filter: event overlaps [start, end) if event.Start < end && event.End > start.
-		if e.Start.Before(end) && e.End.After(start) {
-			seen[e.UID] = true
-			*all = append(*all, e)
-		}
+		seen[e.UID] = true
+		*all = append(*all, e)
 	}
 	return nil
 }

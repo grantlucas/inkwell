@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-	"time"
 )
 
 // mockHTTPClient implements HTTPClient for testing.
@@ -64,11 +63,9 @@ func TestHTTPSource_SingleFeed(t *testing.T) {
 	}
 	src := NewHTTPSource(FeedsFromURLs([]string{"https://example.com/cal.ics"}), client)
 
-	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
-	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
-	events, err := src.Events(context.Background(), start, end)
+	events, err := src.Fetch(context.Background())
 	if err != nil {
-		t.Fatalf("Events: %v", err)
+		t.Fatalf("Fetch: %v", err)
 	}
 	if len(events) != 1 {
 		t.Fatalf("got %d events, want 1", len(events))
@@ -90,16 +87,15 @@ func TestHTTPSource_MultipleFeeds(t *testing.T) {
 		"https://example.com/b.ics",
 	}), client)
 
-	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
-	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
-	events, err := src.Events(context.Background(), start, end)
+	events, err := src.Fetch(context.Background())
 	if err != nil {
-		t.Fatalf("Events: %v", err)
+		t.Fatalf("Fetch: %v", err)
 	}
 	if len(events) != 2 {
 		t.Fatalf("got %d events, want 2", len(events))
 	}
-	// Should be sorted by start time.
+	// Both feeds' events come back, in feed order. Fetch doesn't sort:
+	// CachedSource sorts the occurrences it expands.
 	if events[0].Summary != "Standup" {
 		t.Errorf("first event = %q, want %q", events[0].Summary, "Standup")
 	}
@@ -120,51 +116,12 @@ func TestHTTPSource_DeduplicatesByUID(t *testing.T) {
 		"https://example.com/b.ics",
 	}), client)
 
-	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
-	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
-	events, err := src.Events(context.Background(), start, end)
+	events, err := src.Fetch(context.Background())
 	if err != nil {
-		t.Fatalf("Events: %v", err)
+		t.Fatalf("Fetch: %v", err)
 	}
 	if len(events) != 1 {
 		t.Fatalf("got %d events, want 1 (deduplicated)", len(events))
-	}
-}
-
-func TestHTTPSource_FiltersToRange(t *testing.T) {
-	ics := `BEGIN:VCALENDAR
-BEGIN:VEVENT
-UID:in-range
-DTSTART:20260425T090000Z
-DTEND:20260425T100000Z
-SUMMARY:In Range
-END:VEVENT
-BEGIN:VEVENT
-UID:out-range
-DTSTART:20260426T090000Z
-DTEND:20260426T100000Z
-SUMMARY:Out of Range
-END:VEVENT
-END:VCALENDAR
-`
-	client := &mockHTTPClient{
-		responses: map[string]*http.Response{
-			"https://example.com/cal.ics": newMockResponse(ics),
-		},
-	}
-	src := NewHTTPSource(FeedsFromURLs([]string{"https://example.com/cal.ics"}), client)
-
-	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
-	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
-	events, err := src.Events(context.Background(), start, end)
-	if err != nil {
-		t.Fatalf("Events: %v", err)
-	}
-	if len(events) != 1 {
-		t.Fatalf("got %d events, want 1", len(events))
-	}
-	if events[0].Summary != "In Range" {
-		t.Errorf("Summary = %q, want %q", events[0].Summary, "In Range")
 	}
 }
 
@@ -176,9 +133,7 @@ func TestHTTPSource_HTTPError(t *testing.T) {
 	}
 	src := NewHTTPSource(FeedsFromURLs([]string{"https://example.com/cal.ics"}), client)
 
-	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
-	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
-	_, err := src.Events(context.Background(), start, end)
+	_, err := src.Fetch(context.Background())
 	if err == nil {
 		t.Fatal("expected error for HTTP failure")
 	}
@@ -200,9 +155,7 @@ END:VCALENDAR
 	}
 	src := NewHTTPSource(FeedsFromURLs([]string{"https://example.com/cal.ics"}), client)
 
-	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
-	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
-	_, err := src.Events(context.Background(), start, end)
+	_, err := src.Fetch(context.Background())
 	if err == nil {
 		t.Fatal("expected error for invalid ICS content")
 	}
@@ -227,9 +180,7 @@ func TestHTTPSource_BodyCloseErrorSurfaced(t *testing.T) {
 	}
 	src := NewHTTPSource(FeedsFromURLs([]string{"https://example.com/cal.ics"}), client)
 
-	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
-	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
-	_, err := src.Events(context.Background(), start, end)
+	_, err := src.Fetch(context.Background())
 	if err == nil {
 		t.Fatal("expected error from failing Body.Close")
 	}
@@ -253,9 +204,7 @@ func TestHTTPSource_BuildRequestError(t *testing.T) {
 	client := &mockHTTPClient{}
 	src := NewHTTPSource(FeedsFromURLs([]string{"https://example.com/cal.ics"}), client)
 
-	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
-	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
-	_, err := src.Events(context.Background(), start, end)
+	_, err := src.Fetch(context.Background())
 	if err == nil {
 		t.Fatal("expected build-request error")
 	}
@@ -274,9 +223,7 @@ func TestHTTPSource_HonorsContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
-	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
-	_, err := src.Events(ctx, start, end)
+	_, err := src.Fetch(ctx)
 	if err == nil {
 		t.Fatal("expected ctx cancellation error")
 	}
@@ -302,9 +249,7 @@ func TestHTTPSource_Non200Status(t *testing.T) {
 	}
 	src := NewHTTPSource(FeedsFromURLs([]string{"https://example.com/cal.ics"}), client)
 
-	start := time.Date(2026, 4, 25, 0, 0, 0, 0, time.UTC)
-	end := time.Date(2026, 4, 26, 0, 0, 0, 0, time.UTC)
-	_, err := src.Events(context.Background(), start, end)
+	_, err := src.Fetch(context.Background())
 	if err == nil {
 		t.Fatal("expected error for non-200 status")
 	}

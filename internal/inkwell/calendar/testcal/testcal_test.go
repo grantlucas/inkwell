@@ -127,6 +127,12 @@ func TestGenerate_DatesRelativeToNow(t *testing.T) {
 
 	otherDay := time.Date(2025, 1, 15, 0, 0, 0, 0, time.UTC)
 	for _, e := range events {
+		// A series starts wherever it started; what lands in the week
+		// is its occurrences, which TestGenerate_IncludesSeriesThatBeganEarlier
+		// checks.
+		if e.Recurrence != nil {
+			continue
+		}
 		if e.Start.Before(otherDay) || e.Start.After(otherDay.AddDate(0, 0, 7)) {
 			t.Errorf("event %q at %v is outside 7-day window starting %v", e.Summary, e.Start, otherDay)
 		}
@@ -148,5 +154,27 @@ func TestGenerate_SpansSevenDays(t *testing.T) {
 		if !covered[d] {
 			t.Errorf("no events on day %d (%s)", d, today.AddDate(0, 0, d).Format("Mon Jan 2"))
 		}
+	}
+}
+
+// A weekly series that began weeks before the generated week must still
+// show in it. Feeds are full of these, and a fetch that windows on a
+// series' first instance drops every one (issue #137), so the manual
+// test calendar carries one to make that visible in the web preview.
+func TestGenerate_IncludesSeriesThatBeganEarlier(t *testing.T) {
+	events := parse(t)
+	today := refTime.Truncate(24 * time.Hour)
+
+	var series []ical.Event
+	for _, e := range events {
+		if e.Recurrence != nil && e.Start.Before(today.AddDate(0, 0, -7)) {
+			series = append(series, e)
+		}
+	}
+	if len(series) == 0 {
+		t.Fatal("expected a recurring series that began before the generated week")
+	}
+	if got := ical.Occurrences(series, today, today.AddDate(0, 0, 7)); len(got) == 0 {
+		t.Errorf("series %q has no occurrence in the generated week", series[0].Summary)
 	}
 }

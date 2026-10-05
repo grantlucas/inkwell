@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-	"time"
 )
 
 const teamICS = `BEGIN:VCALENDAR
@@ -38,11 +37,9 @@ func TestHTTPSource_ReplaceRuleRewritesSummary(t *testing.T) {
 	}
 	src := NewHTTPSource([]Feed{{URL: "https://team.example/cal.ics", Rules: []Rule{rule}}}, client)
 
-	events, err := src.Events(context.Background(),
-		time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC),
-		time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC))
+	events, err := src.Fetch(context.Background())
 	if err != nil {
-		t.Fatalf("Events: %v", err)
+		t.Fatalf("Fetch: %v", err)
 	}
 	if len(events) != 1 {
 		t.Fatalf("got %d events, want 1", len(events))
@@ -52,15 +49,13 @@ func TestHTTPSource_ReplaceRuleRewritesSummary(t *testing.T) {
 	}
 }
 
-// eventsFrom runs a one-feed source over a day-wide window.
+// eventsFrom fetches a one-feed source.
 func eventsFrom(t *testing.T, feeds []Feed, responses map[string]*http.Response) []Event {
 	t.Helper()
 	src := NewHTTPSource(feeds, &mockHTTPClient{responses: responses})
-	events, err := src.Events(context.Background(),
-		time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC),
-		time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC))
+	events, err := src.Fetch(context.Background())
 	if err != nil {
-		t.Fatalf("Events: %v", err)
+		t.Fatalf("Fetch: %v", err)
 	}
 	return events
 }
