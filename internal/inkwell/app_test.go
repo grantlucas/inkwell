@@ -8,6 +8,7 @@ import (
 	"image/color"
 	"net"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -1590,6 +1591,56 @@ func TestNewApp_TimezoneZonesTheWidgetClock(t *testing.T) {
 	if name := got().Location().String(); name != "America/Toronto" {
 		t.Errorf("widget clock zone = %q, want %q", name, "America/Toronto")
 	}
+}
+
+// TestNewApp_WeatherAsksForTheDashboardZone pins the other half of the
+// dashboard-wide timezone: the shared weather Provider asks for forecasts in
+// it, so a forecast's dates and hours land on the same Today and now marker as
+// the zoned widget clock, whatever zone the forecast location is in.
+func TestNewApp_WeatherAsksForTheDashboardZone(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Timezone = "Asia/Tokyo"
+	cfg.Dashboard.Screens = []ScreenConfig{{
+		Name: "s",
+		Widgets: []WidgetConfig{{
+			Type:    "capture",
+			Bounds:  [4]int{0, 0, 10, 10},
+			Refresh: WidgetRefresh{set: true, every: time.Minute},
+		}},
+	}}
+
+	var provider *weather.Provider
+	reg := widget.NewRegistry()
+	reg.Register("capture", func(bounds image.Rectangle, _ map[string]any, deps widget.Deps) (widget.Widget, error) {
+		provider = deps.Weather
+		return &changingWidget{bounds: bounds}, nil
+	})
+	client := &urlRecorder{}
+	deps := widget.Deps{HTTPClient: client}
+
+	if _, err := NewApp(cfg, WithHardware(&MockHardware{}), WithRegistry(reg), WithDeps(deps)); err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if provider == nil {
+		t.Fatal("widget factory never received the weather Provider")
+	}
+	_, _ = provider.Forecast(context.Background(), provider.Defaults().Location, weather.ModelGEM, 1)
+
+	if len(client.urls) != 1 {
+		t.Fatalf("got %d weather requests, want 1", len(client.urls))
+	}
+	if tz := client.urls[0].Query().Get("timezone"); tz != "Asia/Tokyo" {
+		t.Errorf("forecast requested in %q, want the dashboard zone %q", tz, "Asia/Tokyo")
+	}
+}
+
+// urlRecorder records each request's URL and answers it with a 503, for
+// tests that care what was asked rather than what came back.
+type urlRecorder struct{ urls []*url.URL }
+
+func (r *urlRecorder) Do(req *http.Request) (*http.Response, error) {
+	r.urls = append(r.urls, req.URL)
+	return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: http.NoBody}, nil
 }
 
 // TestNewApp_InvalidTimezone covers a Config built in code rather than through

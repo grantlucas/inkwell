@@ -527,6 +527,17 @@ func TestParseConfig_DaysRange(t *testing.T) {
 	}
 }
 
+// The shared weather Provider answers every span from one forecast of
+// ForecastHorizon days, and once the cache has outlived midnight the first of
+// those days is gone. The longest span this widget accepts has to fit in what
+// remains, or its last column loses its weather.
+func TestMaxDaysFitTheForecastHorizon(t *testing.T) {
+	if defaultDays > weather.ForecastHorizon-1 {
+		t.Errorf("weekly-calendar accepts %d days, but a forecast of %d days covers only %d after midnight",
+			defaultDays, weather.ForecastHorizon, weather.ForecastHorizon-1)
+	}
+}
+
 func TestParseConfig_ShowLocation(t *testing.T) {
 	cfg := minimalConfig()
 

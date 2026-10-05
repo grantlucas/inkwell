@@ -59,12 +59,14 @@ type OpenMeteoSource struct {
 	model   Model
 	baseURL string
 	client  HTTPClient
+	zone    *time.Location
 }
 
-// NewOpenMeteoSource creates a source for the given model. A nil client
-// falls through to http.DefaultClient so a caller-forgotten dependency
-// doesn't surface as a nil-pointer panic from the first request.
-func NewOpenMeteoSource(model Model, client HTTPClient) *OpenMeteoSource {
+// NewOpenMeteoSource creates a source for the given model whose forecasts
+// are dated and hourly-labelled in zone. A nil client falls through to
+// http.DefaultClient so a caller-forgotten dependency doesn't surface as a
+// nil-pointer panic from the first request.
+func NewOpenMeteoSource(model Model, client HTTPClient, zone *time.Location) *OpenMeteoSource {
 	base, ok := modelBaseURLs[model]
 	if !ok {
 		base = modelBaseURLs[ModelGFS]
@@ -72,7 +74,7 @@ func NewOpenMeteoSource(model Model, client HTTPClient) *OpenMeteoSource {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	return &OpenMeteoSource{model: model, baseURL: base, client: client}
+	return &OpenMeteoSource{model: model, baseURL: base, client: client, zone: zone}
 }
 
 // Forecast fetches a weather forecast for the given location. The request
@@ -123,7 +125,7 @@ func (s *OpenMeteoSource) buildURL(loc Location, days int) (string, error) {
 	q.Set("hourly", "temperature_2m,precipitation_probability")
 	q.Set("daily", "temperature_2m_max,temperature_2m_min,weather_code")
 	q.Set("forecast_days", strconv.Itoa(days))
-	q.Set("timezone", "auto")
+	q.Set("timezone", zoneName(s.zone))
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }
