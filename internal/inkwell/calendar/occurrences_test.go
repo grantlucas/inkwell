@@ -147,7 +147,8 @@ SUMMARY:Weekly Sync
 END:VEVENT
 `
 
-func feed(events ...string) string {
+// icsCalendar wraps VEVENT blocks in a VCALENDAR.
+func icsCalendar(events ...string) string {
 	return "BEGIN:VCALENDAR\r\n" + strings.Join(events, "") + "END:VCALENDAR\r\n"
 }
 
@@ -159,7 +160,7 @@ func TestCachedSource_OverridesAndDuplicates(t *testing.T) {
 		urlA = "https://a.example/cal.ics"
 		urlB = "https://b.example/cal.ics"
 	)
-	mon := func(day, hour int) time.Time { return time.Date(2026, 10, day, hour, 0, 0, 0, time.UTC) }
+	oct := func(day, hour int) time.Time { return time.Date(2026, 10, day, hour, 0, 0, 0, time.UTC) }
 
 	movedOct5 := `BEGIN:VEVENT
 UID:weekly-sync@example.com
@@ -210,88 +211,88 @@ END:VEVENT
 	}{
 		{
 			label: "a moved instance shows at its new time and not its usual one",
-			feeds: map[string]string{urlA: feed(weeklySeries, movedOct5)},
+			feeds: map[string]string{urlA: icsCalendar(weeklySeries, movedOct5)},
 			want: []occurrence{
-				{Summary: "Weekly Sync", Start: mon(6, 15)},
-				{Summary: "Weekly Sync", Start: mon(12, 9)},
+				{Summary: "Weekly Sync", Start: oct(6, 15)},
+				{Summary: "Weekly Sync", Start: oct(12, 9)},
 			},
 		},
 		{
 			label: "an override listed before its series does not hide the series",
-			feeds: map[string]string{urlA: feed(movedOct5, weeklySeries)},
+			feeds: map[string]string{urlA: icsCalendar(movedOct5, weeklySeries)},
 			want: []occurrence{
-				{Summary: "Weekly Sync", Start: mon(6, 15)},
-				{Summary: "Weekly Sync", Start: mon(12, 9)},
+				{Summary: "Weekly Sync", Start: oct(6, 15)},
+				{Summary: "Weekly Sync", Start: oct(12, 9)},
 			},
 		},
 		{
 			label: "an instance moved out of the window leaves it",
-			feeds: map[string]string{urlA: feed(weeklySeries, movedOutOct5)},
+			feeds: map[string]string{urlA: icsCalendar(weeklySeries, movedOutOct5)},
 			want: []occurrence{
-				{Summary: "Weekly Sync", Start: mon(12, 9)},
+				{Summary: "Weekly Sync", Start: oct(12, 9)},
 			},
 		},
 		{
 			label: "an instance moved into the window joins it",
-			feeds: map[string]string{urlA: feed(weeklySeries, movedInOct19)},
+			feeds: map[string]string{urlA: icsCalendar(weeklySeries, movedInOct19)},
 			want: []occurrence{
-				{Summary: "Weekly Sync", Start: mon(5, 9)},
-				{Summary: "Weekly Sync", Start: mon(12, 9)},
-				{Summary: "Weekly Sync", Start: mon(16, 9)},
+				{Summary: "Weekly Sync", Start: oct(5, 9)},
+				{Summary: "Weekly Sync", Start: oct(12, 9)},
+				{Summary: "Weekly Sync", Start: oct(16, 9)},
 			},
 		},
 		{
 			label: "a cancelled instance disappears and the rest of the series stays",
-			feeds: map[string]string{urlA: feed(weeklySeries, cancelledOct5)},
+			feeds: map[string]string{urlA: icsCalendar(weeklySeries, cancelledOct5)},
 			want: []occurrence{
-				{Summary: "Weekly Sync", Start: mon(12, 9)},
+				{Summary: "Weekly Sync", Start: oct(12, 9)},
 			},
 		},
 		{
 			label: "one event in two feeds shows once",
 			feeds: map[string]string{
-				urlA: feed(oneOff("kickoff@a.example", "Kickoff", 13)),
-				urlB: feed(oneOff("kickoff@b.example", "Kickoff", 13)),
+				urlA: icsCalendar(oneOff("kickoff@a.example", "Kickoff", 13)),
+				urlB: icsCalendar(oneOff("kickoff@b.example", "Kickoff", 13)),
 			},
 			want: []occurrence{
-				{Summary: "Kickoff", Start: mon(6, 13)},
+				{Summary: "Kickoff", Start: oct(6, 13)},
 			},
 		},
 		{
 			label: "the same title at different times stays separate",
 			feeds: map[string]string{
-				urlA: feed(oneOff("kickoff@a.example", "Kickoff", 13)),
-				urlB: feed(oneOff("kickoff@b.example", "Kickoff", 15)),
+				urlA: icsCalendar(oneOff("kickoff@a.example", "Kickoff", 13)),
+				urlB: icsCalendar(oneOff("kickoff@b.example", "Kickoff", 15)),
 			},
 			want: []occurrence{
-				{Summary: "Kickoff", Start: mon(6, 13)},
-				{Summary: "Kickoff", Start: mon(6, 15)},
+				{Summary: "Kickoff", Start: oct(6, 13)},
+				{Summary: "Kickoff", Start: oct(6, 15)},
 			},
 		},
 		{
 			label: "two feeds whose rules rewrite to the same title collapse",
 			feeds: map[string]string{
-				urlA: feed(oneOff("practice@a.example", `Jane Doe\nPractice`, 13)),
-				urlB: feed(oneOff("practice@b.example", `John Doe\nPractice`, 13)),
+				urlA: icsCalendar(oneOff("practice@a.example", `Jane Doe\nPractice`, 13)),
+				urlB: icsCalendar(oneOff("practice@b.example", `John Doe\nPractice`, 13)),
 			},
 			rules: map[string][]Rule{
 				urlA: {mustRule(t, `^Jane Doe\n`, "", false)},
 				urlB: {mustRule(t, `^John Doe\n`, "", false)},
 			},
 			want: []occurrence{
-				{Summary: "Practice", Start: mon(6, 13)},
+				{Summary: "Practice", Start: oct(6, 13)},
 			},
 		},
 		{
 			label: "an override an exclude rule drops still replaces its occurrence",
 			feeds: map[string]string{
-				urlA: feed(weeklySeries, strings.ReplaceAll(movedOct5, "SUMMARY:Weekly Sync", "SUMMARY:Weekly Sync (skipped)")),
+				urlA: icsCalendar(weeklySeries, strings.ReplaceAll(movedOct5, "SUMMARY:Weekly Sync", "SUMMARY:Weekly Sync (skipped)")),
 			},
 			rules: map[string][]Rule{
 				urlA: {mustRule(t, `skipped`, "", true)},
 			},
 			want: []occurrence{
-				{Summary: "Weekly Sync", Start: mon(12, 9)},
+				{Summary: "Weekly Sync", Start: oct(12, 9)},
 			},
 		},
 	}
@@ -309,7 +310,7 @@ END:VEVENT
 				feeds = append(feeds, Feed{URL: url, Rules: tc.rules[url]})
 			}
 			client := &mockHTTPClient{responses: responses}
-			start, end := mon(5, 0), mon(19, 0)
+			start, end := oct(5, 0), oct(19, 0)
 			src := NewCachedSource(NewHTTPSource(feeds, client), 15*time.Minute, func() time.Time { return start })
 
 			got, err := src.Events(context.Background(), start, end)

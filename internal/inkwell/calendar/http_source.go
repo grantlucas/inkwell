@@ -44,8 +44,8 @@ func NewHTTPSource(feeds []Feed, client HTTPClient) *HTTPSource {
 	return &HTTPSource{feeds: feeds, client: client}
 }
 
-// Fetch fetches all feeds, merges them, and returns
-// every event and series. ctx bounds each fetch.
+// Fetch fetches all feeds, merges them, and returns every event and
+// series. ctx bounds each fetch.
 func (s *HTTPSource) Fetch(ctx context.Context) ([]Event, error) {
 	var all []Event
 
@@ -90,7 +90,7 @@ func (s *HTTPSource) fetchFeed(ctx context.Context, feed Feed, all *[]Event) (re
 	for _, e := range events {
 		e, keep := applyRules(e, feed.Rules)
 		if !keep {
-			if e.RecurrenceID.IsZero() {
+			if !e.IsOverride() {
 				continue
 			}
 			// An excluded override still stands in for its occurrence;

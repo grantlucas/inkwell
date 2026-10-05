@@ -53,3 +53,9 @@ type Recurrence struct {
 	ByDay    []time.Weekday
 	ExDates  []time.Time
 }
+
+// IsOverride reports whether e edits one instance of a series rather
+// than standing alone or being the series itself.
+func (e Event) IsOverride() bool {
+	return !e.RecurrenceID.IsZero()
+}

@@ -38,7 +38,7 @@ func Occurrences(events []Event, start, end time.Time) []Event {
 		if e.Cancelled {
 			continue
 		}
-		if e.Recurrence == nil || !e.RecurrenceID.IsZero() {
+		if e.Recurrence == nil || e.IsOverride() {
 			if e.End.After(start) && e.Start.Before(end) {
 				out = append(out, e)
 			}
@@ -59,7 +59,7 @@ func Occurrences(events []Event, start, end time.Time) []Event {
 func overriddenInstances(events []Event) map[string]map[int64]struct{} {
 	out := make(map[string]map[int64]struct{})
 	for _, e := range events {
-		if e.RecurrenceID.IsZero() {
+		if !e.IsOverride() {
 			continue
 		}
 		if out[e.UID] == nil {

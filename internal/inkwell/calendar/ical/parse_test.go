@@ -250,56 +250,40 @@ END:VCALENDAR
 	}
 }
 
-func TestParse_InvalidDTSTART(t *testing.T) {
-	input := `BEGIN:VCALENDAR
-BEGIN:VEVENT
-UID:bad
-DTSTART:not-a-date
-SUMMARY:Bad
-END:VEVENT
-END:VCALENDAR
-`
-	_, err := Parse(strings.NewReader(input))
-	if err == nil {
-		t.Fatal("expected error for invalid DTSTART")
+// A property whose value can't be parsed fails the whole feed, and the
+// error names the property so a broken feed points at its bad line.
+func TestParse_InvalidPropertyValue(t *testing.T) {
+	cases := []struct {
+		label    string
+		property string
+	}{
+		{label: "DTSTART", property: "DTSTART:not-a-date"},
+		{label: "DTEND", property: "DTEND:not-a-date"},
+		{label: "DURATION", property: "DURATION:not-a-duration"},
+		{label: "RECURRENCE-ID", property: "RECURRENCE-ID:not-a-date"},
 	}
-	if !strings.Contains(err.Error(), "DTSTART") {
-		t.Errorf("error = %q, want mention of DTSTART", err.Error())
-	}
-}
 
-func TestParse_InvalidDTEND(t *testing.T) {
-	input := `BEGIN:VCALENDAR
-BEGIN:VEVENT
-UID:bad
-DTSTART:20260425T090000Z
-DTEND:not-a-date
-SUMMARY:Bad
-END:VEVENT
-END:VCALENDAR
-`
-	_, err := Parse(strings.NewReader(input))
-	if err == nil {
-		t.Fatal("expected error for invalid DTEND")
-	}
-	if !strings.Contains(err.Error(), "DTEND") {
-		t.Errorf("error = %q, want mention of DTEND", err.Error())
-	}
-}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			// A valid DTSTART comes first, so the bad DTSTART row
+			// fails on its own line rather than on a missing start.
+			input := "BEGIN:VCALENDAR\r\n" +
+				"BEGIN:VEVENT\r\n" +
+				"UID:bad\r\n" +
+				"DTSTART:20260425T090000Z\r\n" +
+				tc.property + "\r\n" +
+				"SUMMARY:Bad\r\n" +
+				"END:VEVENT\r\n" +
+				"END:VCALENDAR\r\n"
 
-func TestParse_InvalidDuration(t *testing.T) {
-	input := `BEGIN:VCALENDAR
-BEGIN:VEVENT
-UID:bad
-DTSTART:20260425T090000Z
-DURATION:not-a-duration
-SUMMARY:Bad
-END:VEVENT
-END:VCALENDAR
-`
-	_, err := Parse(strings.NewReader(input))
-	if err == nil {
-		t.Fatal("expected error for invalid DURATION")
+			_, err := Parse(strings.NewReader(input))
+			if err == nil {
+				t.Fatalf("expected an error for invalid %s", tc.label)
+			}
+			if !strings.Contains(err.Error(), tc.label) {
+				t.Errorf("error = %q, want mention of %s", err.Error(), tc.label)
+			}
+		})
 	}
 }
 
@@ -841,19 +825,5 @@ func TestParse_Overrides(t *testing.T) {
 				t.Errorf("Cancelled = %v, want %v", got, tc.wantCancelled)
 			}
 		})
-	}
-}
-
-func TestParse_InvalidRecurrenceID(t *testing.T) {
-	feed := "BEGIN:VCALENDAR\r\n" +
-		"BEGIN:VEVENT\r\n" +
-		"UID:weekly@example.com\r\n" +
-		"RECURRENCE-ID:not-a-date\r\n" +
-		"DTSTART:20261006T150000Z\r\n" +
-		"END:VEVENT\r\n" +
-		"END:VCALENDAR\r\n"
-
-	if _, err := Parse(strings.NewReader(feed)); err == nil {
-		t.Fatal("expected an error for an unparseable RECURRENCE-ID")
 	}
 }

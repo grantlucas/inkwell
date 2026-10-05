@@ -44,7 +44,7 @@ func Parse(r io.Reader) ([]Event, error) {
 			// A cancelled override is kept, marked, because it is what
 			// removes its occurrence from the series; any other
 			// cancelled event is dropped here.
-			if inEvent && cur != nil && !cur.Start.IsZero() && (!cancelled || !cur.RecurrenceID.IsZero()) {
+			if inEvent && cur != nil && !cur.Start.IsZero() && (!cancelled || cur.IsOverride()) {
 				cur.Cancelled = cancelled
 				// EXDATE without RRULE would otherwise leave a
 				// Recurrence with Freq=0; Occurrences would route the
