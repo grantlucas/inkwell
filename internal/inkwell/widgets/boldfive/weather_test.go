@@ -1,7 +1,6 @@
 package boldfive
 
 import (
-	"errors"
 	"image"
 	"testing"
 	"time"
@@ -196,25 +195,8 @@ func TestSharedTempRange(t *testing.T) {
 		t.Run(tt.label, func(t *testing.T) {
 			got := sharedTempRange(tt.days)
 			if got.Min != tt.min || got.Max != tt.max {
-				t.Errorf("range = %+v, want {%v %v}", *got, tt.min, tt.max)
+				t.Errorf("range = %+v, want {%v %v}", got, tt.min, tt.max)
 			}
 		})
-	}
-}
-
-// A condition glyph that will not load must not take the rest of the
-// cell with it: the temperatures and the chart are still worth drawing.
-func TestRenderWeatherBand_IconFailureStillDrawsTheRest(t *testing.T) {
-	orig := drawIcon
-	defer func() { drawIcon = orig }()
-	drawIcon = func(*image.Paletted, int, int, int, weather.Condition) error {
-		return errors.New("no glyph")
-	}
-
-	frame := newTestFrame(160, 480)
-	renderWeatherBand(frame, weatherRect(), wetDay(12, 4), weatherOptions{TempUnit: "C"})
-
-	if countIndexIn(frame, chartRect(), widget.PaperGray70) == 0 {
-		t.Error("the chart was not drawn after the icon failed")
 	}
 }

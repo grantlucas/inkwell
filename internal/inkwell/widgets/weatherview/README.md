@@ -36,62 +36,58 @@ black under the `bw` threshold:
 
 ![Weatherview in the weekly dashboard](docs/in-context.png)
 
-### Precipitation-only chart
+### Combined chart
 
-`RenderPrecipChart` is a second rendering mode beside `RenderHourlyChart`,
-added for the redesigned screens. It drops the temperature polyline and gives
-the precipitation bars the **whole cell**, which roughly doubles their height
-— in a 114 px day column the split chart leaves the bars about 20 px tall,
-which reads as a grey smudge at any distance.
+`RenderCombinedChart` is a second renderer beside `RenderHourlyChart`, used by
+the redesigned screens (bold-five, today-hero and row-agenda). It draws
+precipitation bars with the temperature line over them, and gives the bars far
+more height than the split chart does — in a 114 px day column the split chart
+leaves them about 20 px tall, which reads as a grey smudge at any distance.
 
 It is deliberately **not** used by `weekly-calendar`: the live weekly view
-keeps `RenderHourlyChart` exactly as it is, so it stays usable as a control.
+keeps `RenderHourlyChart` exactly as it is.
 
 - **Hours 06:00–21:00 inclusive**, one hour wider than the live chart so an
   evening shower lands on the chart rather than off the end of it.
 - **Hour axis `6 12 18`** — 24-hour marks matching the `format: "15:04"` the
   rest of the panel is set in, rather than the live chart's `6 9 12 3 8`,
   which mixes morning and afternoon on one axis.
-- **A dry day draws nothing at all.** Below a 15% peak across the window the
-  cell is left blank, or carries `DryText` centred. A flat row of stubs reads
-  as a broken widget from across the room; silence does not.
-
-The caller supplies the rect, the label face and the label band height, so one
-renderer serves a 312 px hero cell and a 110 px row badge.
-
-<!-- markdownlint-disable MD013 -->
-| `PrecipChartOptions` field | Description                                                                  |
-|----------------------------|------------------------------------------------------------------------------|
-| `LabelFace`                | Face for the hour labels; `nil` falls back to the package default.            |
-| `LabelHeight`              | Height of the label band. `0` draws no labels and gives the bars the band.    |
-| `NowHour` / `ShowNowMarker`| Draws a 2 px solid `PaperBlack` stroke at the current hour.                   |
-| `ShowGuide`                | Dashed 50% reference line. Off by default; only the wide hero cell wants it.  |
-| `DryText`                  | Drawn centred on a dry day. Empty draws nothing. Ignored with a `TempRange`.  |
-| `TempRange`                | Optional `*TempRange` (°C). Draws the temperature line: the combined chart.   |
-<!-- markdownlint-enable MD013 -->
-
-### Combined chart
-
-Set `PrecipChartOptions.TempRange` and the same renderer draws the **combined
-chart**: the temperature line over the precipitation bars. A nil range leaves
-the precipitation-only chart byte-for-byte as it was, so a screen opts in by
-passing a range and nothing else changes.
-
-- **One range per screen.** The caller computes a shared temperature range
-  across every day it shows (`GlobalTempRange` is the starting point) and
-  hands the same `TempRange` to each chart, so a cold day sits lower than a
-  warm one. The warmest value in the range touches the top of the plot and the
-  coldest the row above the baseline; temperatures outside it clamp to the
+- **The caller supplies only the rect.** The chart takes its own band for the
+  hour labels at the bottom of the cell, sized from its own label face, so one
+  renderer serves a 312 px hero cell and a 106 px row badge.
+- **One range per screen, and it is required.** The caller computes a shared
+  `TempRange` (°C) across every day it shows (`GlobalTempRange` is the starting
+  point) and hands the same range to each chart, so a cold day sits lower than
+  a warm one. The warmest value in the range touches the top of the plot and
+  the coldest the row above the baseline; temperatures outside it clamp to the
   edge, and a collapsed range widens to one degree.
 - **The line is black over paper and white over a bar.** Each pixel is chosen
   from what is already drawn underneath it — bar fill, bar cap or now marker
   give a white pixel, bare paper a black one — so the same rule reads in BW
   (solid black bar, white line) and Gray4 (dark-gray bar, white line) without
-  asking which mode is active. The line is 2 px thick.
-- **A dry day is never blank.** With a range the baseline, ticks and line are
-  drawn and the bars are not; `DryText` is dropped because the line already
-  fills the cell. Absent data (no hourly points in the window) still draws
-  nothing.
+  asking which mode is active. The line is 2 px thick. `DrawContrastLine`
+  exposes the rule for other drawing code that lays a line over its own fills.
+- **A dry day is never blank.** Below a 15% peak across the window the bars
+  are dropped, since a flat row of stubs reads as a broken widget, but the
+  baseline, ticks and line are still drawn. Absent data (no hourly points in
+  the window) draws nothing.
+
+<!-- markdownlint-disable MD013 -->
+| `CombinedOptions` field     | Description                                                       |
+|-----------------------------|-------------------------------------------------------------------|
+| `NowHour` / `ShowNowMarker` | Draws a 2 px solid `PaperBlack` stroke at the current hour.       |
+<!-- markdownlint-enable MD013 -->
+
+### Shared pieces
+
+The redesigned screens draw their weather badges from the same parts, so a day
+reads the same on every screen:
+
+- `DrawIcon` draws the condition glyph. A glyph that will not draw is logged
+  and the rest of the cell carries on, so callers have no error to handle.
+- `NewHighLow(day, unit)` writes a day's high and low rounded in the
+  configured unit: `High()` is `17°C`, `Low()` is `9°`, and `Pair()` is
+  `17° 9°` for a cell too narrow to name the unit.
 
 ## Configuration
 
@@ -118,7 +114,10 @@ widget are the user-facing controls for this component.
 
 - `RenderDayWeather(frame, bounds, day, opts)` — draw a full day cell.
 - `RenderHourlyChart(frame, bounds, hourly, chartOpts)` — just the chart.
-- `RenderPrecipChart(frame, bounds, hourly, precipOpts)` — precipitation-only
-  bars taking the whole cell (see above).
+- `RenderCombinedChart(frame, bounds, hourly, rng, combinedOpts)` — bars with
+  the temperature line over them (see above).
+- `DrawContrastLine(frame, points)` — a 2 px line, black over paper and white
+  over anything drawn.
 - `DrawIcon(frame, x, y, size, condition)` — just the condition glyph.
+- `NewHighLow(day, unit)` — the day's high and low as text.
 - `GlobalTempRange(days)` — compute the shared min/max for chart normalization.

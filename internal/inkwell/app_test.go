@@ -8,11 +8,13 @@ import (
 	"image/color"
 	"net"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
@@ -800,6 +802,117 @@ backend: preview
 	}
 }
 
+// The app builds one set of dependencies and hands the same values to every
+// widget on every screen, so widgets that share a feed or a forecast share
+// one cache. The weather provider fetches through the injected client and
+// carries the top-level weather settings.
+func TestNewApp_HandsEveryWidgetTheSameDeps(t *testing.T) {
+	cfg, err := LoadConfig(strings.NewReader(`
+display: waveshare_7in5_v2
+backend: preview
+weather:
+  latitude: 43.25
+  longitude: -79.87
+`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	probe := []WidgetConfig{{Type: "probe", Bounds: [4]int{0, 0, 10, 10}}}
+	cfg.Dashboard = DashboardConfig{Screens: []ScreenConfig{
+		{Name: "one", Widgets: probe},
+		{Name: "two", Widgets: probe},
+	}}
+	reg := widget.NewRegistry()
+	var got []widget.Deps
+	reg.Register("probe", func(b image.Rectangle, _ map[string]any, d widget.Deps) (widget.Widget, error) {
+		got = append(got, d)
+		return &stubWidget{bounds: b}, nil
+	})
+
+	client := &recordingHTTPClient{}
+	_, err = NewApp(cfg, WithHardware(&MockHardware{}), WithInterval(time.Millisecond),
+		WithRegistry(reg), WithDeps(widget.Deps{HTTPClient: client}))
+	if err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+
+	if len(got) != 2 {
+		t.Fatalf("built %d widgets, want 2", len(got))
+	}
+	if got[0].HTTPClient != client || got[1].HTTPClient != client {
+		t.Error("a widget did not receive the injected HTTP client")
+	}
+	if got[0].Weather == nil || got[0].Weather != got[1].Weather {
+		t.Fatal("widgets did not share one weather provider")
+	}
+
+	p := got[0].Weather
+	_, _ = p.Forecast(context.Background(), p.Defaults().Location, p.Defaults().Model, 1)
+	if !strings.Contains(client.lastURL, "latitude=43.2500") {
+		t.Errorf("forecast request %q did not go through the injected client at the top-level location", client.lastURL)
+	}
+}
+
+// Whatever the caller leaves out, the app supplies; whatever it injects,
+// the app keeps. Widgets never pick their own dependencies.
+func TestNewApp_FillsMissingDeps(t *testing.T) {
+	provider := weather.NewProvider(&recordingHTTPClient{}, time.Hour, time.Now, weather.Settings{})
+	tests := []struct {
+		label    string
+		injected widget.Deps
+		check    func(*testing.T, widget.Deps)
+	}{
+		{
+			label: "supplies an HTTP client and a weather provider",
+			check: func(t *testing.T, got widget.Deps) {
+				if got.HTTPClient == nil || got.Weather == nil {
+					t.Errorf("deps = %+v, want an HTTP client and a weather provider", got)
+				}
+			},
+		},
+		{
+			label:    "keeps an injected weather provider",
+			injected: widget.Deps{Weather: provider},
+			check: func(t *testing.T, got widget.Deps) {
+				if got.Weather != provider {
+					t.Error("the injected weather provider was replaced")
+				}
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			cfg, err := LoadConfig(strings.NewReader("display: waveshare_7in5_v2\nbackend: preview\n"))
+			if err != nil {
+				t.Fatalf("LoadConfig: %v", err)
+			}
+			cfg.Dashboard = DashboardConfig{Screens: []ScreenConfig{{Name: "main", Widgets: []WidgetConfig{{Type: "probe", Bounds: [4]int{0, 0, 10, 10}}}}}}
+			reg := widget.NewRegistry()
+			var got widget.Deps
+			reg.Register("probe", func(b image.Rectangle, _ map[string]any, d widget.Deps) (widget.Widget, error) {
+				got = d
+				return &stubWidget{bounds: b}, nil
+			})
+
+			_, err = NewApp(cfg, WithHardware(&MockHardware{}), WithInterval(time.Millisecond),
+				WithRegistry(reg), WithDeps(tt.injected))
+			if err != nil {
+				t.Fatalf("NewApp: %v", err)
+			}
+			tt.check(t, got)
+		})
+	}
+}
+
+// recordingHTTPClient remembers the last URL it was asked for and answers
+// nothing, so no test reaches the network.
+type recordingHTTPClient struct{ lastURL string }
+
+func (c *recordingHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	c.lastURL = req.URL.String()
+	return nil, context.DeadlineExceeded
+}
+
 func TestNewApp_WithDashboardConfig(t *testing.T) {
 	cfg, err := LoadConfig(strings.NewReader(`
 display: waveshare_7in5_v2
@@ -1478,6 +1591,56 @@ func TestNewApp_TimezoneZonesTheWidgetClock(t *testing.T) {
 	if name := got().Location().String(); name != "America/Toronto" {
 		t.Errorf("widget clock zone = %q, want %q", name, "America/Toronto")
 	}
+}
+
+// TestNewApp_WeatherAsksForTheDashboardZone pins the other half of the
+// dashboard-wide timezone: the shared weather Provider asks for forecasts in
+// it, so a forecast's dates and hours land on the same Today and now marker as
+// the zoned widget clock, whatever zone the forecast location is in.
+func TestNewApp_WeatherAsksForTheDashboardZone(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Timezone = "Asia/Tokyo"
+	cfg.Dashboard.Screens = []ScreenConfig{{
+		Name: "s",
+		Widgets: []WidgetConfig{{
+			Type:    "capture",
+			Bounds:  [4]int{0, 0, 10, 10},
+			Refresh: WidgetRefresh{set: true, every: time.Minute},
+		}},
+	}}
+
+	var provider *weather.Provider
+	reg := widget.NewRegistry()
+	reg.Register("capture", func(bounds image.Rectangle, _ map[string]any, deps widget.Deps) (widget.Widget, error) {
+		provider = deps.Weather
+		return &changingWidget{bounds: bounds}, nil
+	})
+	client := &urlRecorder{}
+	deps := widget.Deps{HTTPClient: client}
+
+	if _, err := NewApp(cfg, WithHardware(&MockHardware{}), WithRegistry(reg), WithDeps(deps)); err != nil {
+		t.Fatalf("NewApp: %v", err)
+	}
+	if provider == nil {
+		t.Fatal("widget factory never received the weather Provider")
+	}
+	_, _ = provider.Forecast(context.Background(), provider.Defaults().Location, weather.ModelGEM, 1)
+
+	if len(client.urls) != 1 {
+		t.Fatalf("got %d weather requests, want 1", len(client.urls))
+	}
+	if tz := client.urls[0].Query().Get("timezone"); tz != "Asia/Tokyo" {
+		t.Errorf("forecast requested in %q, want the dashboard zone %q", tz, "Asia/Tokyo")
+	}
+}
+
+// urlRecorder records each request's URL and answers it with a 503, for
+// tests that care what was asked rather than what came back.
+type urlRecorder struct{ urls []*url.URL }
+
+func (r *urlRecorder) Do(req *http.Request) (*http.Response, error) {
+	r.urls = append(r.urls, req.URL)
+	return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: http.NoBody}, nil
 }
 
 // TestNewApp_InvalidTimezone covers a Config built in code rather than through

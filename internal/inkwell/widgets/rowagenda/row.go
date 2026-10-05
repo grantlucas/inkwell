@@ -3,8 +3,6 @@ package rowagenda
 import (
 	"fmt"
 	"image"
-	"log"
-	"math"
 	"strings"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
@@ -48,7 +46,6 @@ const (
 	chartDX      = 112
 	chartW       = 106
 	chartPadY    = 4
-	chartLabelH  = 14
 )
 
 // renderGutter draws the date block: the numeral at 3x with the weekday
@@ -77,9 +74,7 @@ func renderGutter(frame *image.Paletted, bounds image.Rectangle, day daygrid.Day
 //
 // The chart is on every row whether or not rain is due, so a dry day
 // still shows the shape of its temperature rather than a blank cell,
-// and a cold day visibly sits lower than a warm one. The bars are the
-// narrowest of the screens that carry them, so the 50% guide stays off:
-// the dashes would compete with the bars they are meant to measure.
+// and a cold day visibly sits lower than a warm one.
 func renderBadge(frame *image.Paletted, bounds image.Rectangle, forecast weather.DailyForecast, unit string, isToday, marker bool, nowHour int, rng weatherview.TempRange) {
 	if forecast.Date.IsZero() {
 		// A zero DailyForecast is indistinguishable from a real
@@ -88,18 +83,9 @@ func renderBadge(frame *image.Paletted, bounds image.Rectangle, forecast weather
 	}
 	top := bounds.Min.Y
 
-	if err := drawIcon(frame, bounds.Min.X+badgeIconX, top+badgeIconY, badgeIconSz, forecast.Condition); err != nil {
-		// Logged, not bubbled: the temperatures and the chart are
-		// still worth drawing when the glyph will not load.
-		log.Printf("rowagenda: draw icon for condition %d: %v", forecast.Condition, err)
-	}
+	weatherview.DrawIcon(frame, bounds.Min.X+badgeIconX, top+badgeIconY, badgeIconSz, forecast.Condition)
 
-	hi, lo := forecast.High, forecast.Low
-	label := "C"
-	if unit == "F" {
-		hi, lo = weather.CelsiusToFahrenheit(hi), weather.CelsiusToFahrenheit(lo)
-		label = "F"
-	}
+	temps := weatherview.NewHighLow(forecast, unit)
 	// Body size, not scaled. A 2x high is 120 px at its widest, which
 	// runs straight through the chart — the badge is 222 px and cannot
 	// hold a 38 px icon, a display-sized temperature and a legible
@@ -107,24 +93,15 @@ func renderBadge(frame *image.Paletted, bounds image.Rectangle, forecast weather
 	// at distance, and this is the same compressed-day shape as
 	// today-hero's rows, which are 1x too.
 	x := bounds.Min.X + hiDX
-	daygrid.DrawText(frame, x, top+hiBaseline,
-		fmt.Sprintf("%d°%s", int(math.Round(hi)), label), daygrid.BodyBoldFace, widget.PaperBlack)
-	daygrid.DrawText(frame, x, top+loBaseline,
-		fmt.Sprintf("%d°", int(math.Round(lo))), daygrid.BodyFace, widget.PaperBlack)
+	daygrid.DrawText(frame, x, top+hiBaseline, temps.High(), daygrid.BodyBoldFace, widget.PaperBlack)
+	daygrid.DrawText(frame, x, top+loBaseline, temps.Low(), daygrid.BodyFace, widget.PaperBlack)
 
 	chart := image.Rect(
 		bounds.Min.X+chartDX, top+chartPadY,
 		bounds.Min.X+chartDX+chartW, bounds.Max.Y-chartPadY,
 	)
-	weatherview.RenderPrecipChart(frame, chart, forecast.Hourly, weatherview.PrecipChartOptions{
-		LabelHeight:   chartLabelH,
+	weatherview.RenderCombinedChart(frame, chart, forecast.Hourly, rng, weatherview.CombinedOptions{
 		NowHour:       nowHour,
 		ShowNowMarker: isToday && marker,
-		ShowGuide:     false,
-		TempRange:     &rng,
 	})
 }
-
-// drawIcon is indirected through a var so the failure branch above is
-// reachable from tests; weatherview's own font seam is package-private.
-var drawIcon = weatherview.DrawIcon

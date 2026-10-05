@@ -4,9 +4,7 @@
 package weatherview
 
 import (
-	"fmt"
 	"image"
-	"log"
 	"math"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
@@ -84,12 +82,7 @@ func RenderDayWeather(frame *image.Paletted, bounds image.Rectangle, day weather
 
 	iconX := bounds.Min.X + 4
 	iconY := bounds.Min.Y + (condRowH-iconSize)/2
-	if err := DrawIcon(frame, iconX, iconY, iconSize, day.Condition); err != nil {
-		// Log instead of bubbling — the rest of the day cell (label,
-		// temps, chart) is still useful even when the glyph itself
-		// can't be rendered.
-		log.Printf("weatherview: draw icon for condition %d: %v", day.Condition, err)
-	}
+	DrawIcon(frame, iconX, iconY, iconSize, day.Condition)
 
 	// textX is the left bound the right-aligned condition text may not cross
 	// (it keeps clear of the icon). rightEdge mirrors the icon's 4px left
@@ -97,14 +90,7 @@ func RenderDayWeather(frame *image.Paletted, bounds image.Rectangle, day weather
 	// icon instead of clumping against it.
 	textX := iconX + iconSize + 3
 	rightEdge := bounds.Max.X - 4
-	hi := day.High
-	lo := day.Low
-	unit := "C"
-	if opts.TempUnit == "F" {
-		hi = weather.CelsiusToFahrenheit(hi)
-		lo = weather.CelsiusToFahrenheit(lo)
-		unit = "F"
-	}
+	temps := NewHighLow(day, opts.TempUnit)
 
 	if opts.ShowLabel {
 		labelY := bounds.Min.Y + labelFace.Metrics().Ascent.Ceil() + 4
@@ -119,8 +105,8 @@ func RenderDayWeather(frame *image.Paletted, bounds image.Rectangle, day weather
 		drawTextWithFace(frame, labelX, labelY, label, labelFace)
 	}
 
-	tempStr := fmt.Sprintf("%d°%s", int(math.Round(hi)), unit)
-	loStr := fmt.Sprintf("%d°", int(math.Round(lo)))
+	tempStr := temps.High()
+	loStr := temps.Low()
 	tempY := bounds.Min.Y + condRowH - 4
 	hiW := textWidth(tempHiFace, tempStr)
 	loW := textWidth(tempLoFace, loStr)

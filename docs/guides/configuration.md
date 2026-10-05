@@ -120,6 +120,8 @@ reason.
 
 The zone every widget renders in — clock and date text, the calendar's
 day columns and event times, and the hour the weather chart highlights.
+Forecasts are requested in this zone too, so a forecast for a location in
+another zone still lines up its days and hours with the panel's Today.
 
 ```yaml
 timezone: "America/Toronto"

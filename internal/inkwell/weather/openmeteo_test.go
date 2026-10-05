@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 type mockHTTPClient struct {
@@ -44,7 +45,7 @@ func TestOpenMeteoSource_Forecast(t *testing.T) {
 		},
 	}
 
-	src := NewOpenMeteoSource(ModelGFS, client)
+	src := NewOpenMeteoSource(ModelGFS, client, time.UTC)
 	loc := Location{Latitude: 45.4215, Longitude: -75.6972}
 	fc, err := src.Forecast(context.Background(), loc, 1)
 	if err != nil {
@@ -87,7 +88,11 @@ func TestOpenMeteoSource_BuildURL(t *testing.T) {
 		},
 	}
 
-	src := NewOpenMeteoSource(ModelECMWF, client)
+	toronto, err := time.LoadLocation("America/Toronto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := NewOpenMeteoSource(ModelECMWF, client, toronto)
 	loc := Location{Latitude: 45.4215, Longitude: -75.6972}
 	_, _ = src.Forecast(context.Background(), loc, 7)
 
@@ -100,7 +105,7 @@ func TestOpenMeteoSource_BuildURL(t *testing.T) {
 	if !strings.Contains(client.lastURL, "forecast_days=7") {
 		t.Errorf("URL = %q, missing forecast_days", client.lastURL)
 	}
-	if !strings.Contains(client.lastURL, "timezone=auto") {
+	if !strings.Contains(client.lastURL, "timezone=America%2FToronto") {
 		t.Errorf("URL = %q, missing timezone", client.lastURL)
 	}
 }
@@ -110,7 +115,7 @@ func TestOpenMeteoSource_HTTPError(t *testing.T) {
 		err: errors.New("network error"),
 	}
 
-	src := NewOpenMeteoSource(ModelGFS, client)
+	src := NewOpenMeteoSource(ModelGFS, client, time.UTC)
 	_, err := src.Forecast(context.Background(), Location{}, 1)
 	if err == nil {
 		t.Fatal("expected error")
@@ -128,7 +133,7 @@ func TestOpenMeteoSource_BadStatus(t *testing.T) {
 		},
 	}
 
-	src := NewOpenMeteoSource(ModelGFS, client)
+	src := NewOpenMeteoSource(ModelGFS, client, time.UTC)
 	_, err := src.Forecast(context.Background(), Location{}, 1)
 	if err == nil {
 		t.Fatal("expected error")
@@ -146,7 +151,7 @@ func TestOpenMeteoSource_BadJSON(t *testing.T) {
 		},
 	}
 
-	src := NewOpenMeteoSource(ModelGFS, client)
+	src := NewOpenMeteoSource(ModelGFS, client, time.UTC)
 	_, err := src.Forecast(context.Background(), Location{}, 1)
 	if err == nil {
 		t.Fatal("expected error")
@@ -164,7 +169,7 @@ func TestOpenMeteoSource_UnknownModel(t *testing.T) {
 		},
 	}
 
-	src := NewOpenMeteoSource(Model("unknown"), client)
+	src := NewOpenMeteoSource(Model("unknown"), client, time.UTC)
 	if src.baseURL != modelBaseURLs[ModelGFS] {
 		t.Errorf("baseURL = %q, want GFS fallback", src.baseURL)
 	}
@@ -178,7 +183,7 @@ func TestOpenMeteoSource_EmptyResponse(t *testing.T) {
 		},
 	}
 
-	src := NewOpenMeteoSource(ModelGFS, client)
+	src := NewOpenMeteoSource(ModelGFS, client, time.UTC)
 	fc, err := src.Forecast(context.Background(), Location{}, 1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -197,7 +202,7 @@ func TestOpenMeteoSource_Location(t *testing.T) {
 	}
 
 	loc := Location{Latitude: 45.4215, Longitude: -75.6972}
-	src := NewOpenMeteoSource(ModelGFS, client)
+	src := NewOpenMeteoSource(ModelGFS, client, time.UTC)
 	fc, err := src.Forecast(context.Background(), loc, 1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -222,7 +227,7 @@ func TestOpenMeteoSource_BadBaseURL(t *testing.T) {
 // deadline.
 func TestOpenMeteoSource_ForecastHonorsContextCancellation(t *testing.T) {
 	client := &ctxAwareHTTPClient{}
-	src := NewOpenMeteoSource(ModelGFS, client)
+	src := NewOpenMeteoSource(ModelGFS, client, time.UTC)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -244,7 +249,7 @@ func TestOpenMeteoSource_BuildRequestError(t *testing.T) {
 	}
 	defer func() { newRequestWithContext = orig }()
 
-	src := NewOpenMeteoSource(ModelGFS, &mockHTTPClient{})
+	src := NewOpenMeteoSource(ModelGFS, &mockHTTPClient{}, time.UTC)
 	_, err := src.Forecast(context.Background(), Location{}, 1)
 	if err == nil {
 		t.Fatal("expected error from build request")
@@ -268,7 +273,7 @@ func (c *ctxAwareHTTPClient) Do(req *http.Request) (*http.Response, error) {
 // A nil client passed to NewOpenMeteoSource must not panic; the
 // constructor should fall back to http.DefaultClient.
 func TestNewOpenMeteoSource_NilClientUsesDefault(t *testing.T) {
-	src := NewOpenMeteoSource(ModelGFS, nil)
+	src := NewOpenMeteoSource(ModelGFS, nil, time.UTC)
 	if src.client == nil {
 		t.Fatal("client = nil, want http.DefaultClient")
 	}
@@ -285,7 +290,7 @@ func TestOpenMeteoSource_ReadBodyError(t *testing.T) {
 		},
 	}
 
-	src := NewOpenMeteoSource(ModelGFS, client)
+	src := NewOpenMeteoSource(ModelGFS, client, time.UTC)
 	_, err := src.Forecast(context.Background(), Location{}, 1)
 	if err == nil {
 		t.Fatal("expected error")
@@ -307,7 +312,7 @@ func TestOpenMeteoSource_BadDailyDate(t *testing.T) {
 		},
 	}
 
-	src := NewOpenMeteoSource(ModelGFS, client)
+	src := NewOpenMeteoSource(ModelGFS, client, time.UTC)
 	fc, err := src.Forecast(context.Background(), Location{}, 1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -329,7 +334,7 @@ func TestOpenMeteoSource_BadHourlyTime(t *testing.T) {
 		},
 	}
 
-	src := NewOpenMeteoSource(ModelGFS, client)
+	src := NewOpenMeteoSource(ModelGFS, client, time.UTC)
 	fc, err := src.Forecast(context.Background(), Location{}, 1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -351,7 +356,7 @@ func TestOpenMeteoSource_HourlyForUnknownDay(t *testing.T) {
 		},
 	}
 
-	src := NewOpenMeteoSource(ModelGFS, client)
+	src := NewOpenMeteoSource(ModelGFS, client, time.UTC)
 	fc, err := src.Forecast(context.Background(), Location{}, 1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -373,7 +378,7 @@ func TestOpenMeteoSource_SparseArrays(t *testing.T) {
 		},
 	}
 
-	src := NewOpenMeteoSource(ModelGFS, client)
+	src := NewOpenMeteoSource(ModelGFS, client, time.UTC)
 	fc, err := src.Forecast(context.Background(), Location{}, 1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -403,7 +408,7 @@ func TestOpenMeteoSource_GEMModel(t *testing.T) {
 		},
 	}
 
-	src := NewOpenMeteoSource(ModelGEM, client)
+	src := NewOpenMeteoSource(ModelGEM, client, time.UTC)
 	_, _ = src.Forecast(context.Background(), Location{}, 1)
 	if !strings.Contains(client.lastURL, "api.open-meteo.com/v1/gem") {
 		t.Errorf("URL = %q, want gem endpoint", client.lastURL)

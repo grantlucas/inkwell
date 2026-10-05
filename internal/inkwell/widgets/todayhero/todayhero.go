@@ -3,7 +3,6 @@ package todayhero
 import (
 	"image"
 	"log"
-	"net/http"
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
@@ -128,42 +127,23 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 	if err != nil {
 		return nil, err
 	}
+	if err := daygrid.RequireDeps("today-hero", deps); err != nil {
+		return nil, err
+	}
 
 	now := deps.Now
 	if now == nil {
 		now = time.Now
 	}
 
-	var httpClient calendar.HTTPClient
-	if deps.DataSources != nil {
-		if c, ok := deps.DataSources["http_client"].(calendar.HTTPClient); ok {
-			httpClient = c
-		}
-	}
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
-
 	cachedCal := calendar.NewCachedSource(
-		calendar.NewHTTPSource(cfg.Feeds, httpClient), cfg.Refresh, now,
+		calendar.NewHTTPSource(cfg.Feeds, deps.HTTPClient), cfg.Refresh, now,
 	)
 
-	var provider *weather.Provider
-	if deps.DataSources != nil {
-		provider, _ = deps.DataSources["weather"].(*weather.Provider)
-	}
-	daygrid.ResolveDefaults(&cfg.Weather, provider)
-
-	// A caller-injected weather_source (tests, custom transports) wins;
-	// otherwise draw from the shared Provider bound to the resolved
-	// model, so every weather widget deduplicates through one cache.
-	var ws weather.Source
-	switch src, ok := deps.DataSources["weather_source"].(weather.Source); {
-	case ok:
-		ws = src
-	case provider != nil:
-		ws = provider.SourceForModel(cfg.Weather.Model)
-	}
+	// Draw from the shared Provider bound to the resolved model, so every
+	// weather widget deduplicates through one cache.
+	daygrid.ResolveDefaults(&cfg.Weather, deps.Weather)
+	ws := deps.Weather.SourceForModel(cfg.Weather.Model)
 
 	return New(bounds, cachedCal, ws, now, cfg), nil
 }

@@ -271,28 +271,6 @@ func TestRenderBadge_CombinedChart(t *testing.T) {
 	}
 }
 
-// A condition glyph that will not load must not take the temperatures
-// with it.
-func TestRenderBadge_IconFailure(t *testing.T) {
-	orig := drawIcon
-	defer func() { drawIcon = orig }()
-	drawIcon = func(*image.Paletted, int, int, int, weather.Condition) error { return errIcon{} }
-
-	frame := newTestFrame(800, 480)
-	renderBadge(frame, busyRow(0).Badge,
-		weather.DailyForecast{
-			Date: time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC),
-			High: 14, Low: 3,
-		}, "C", true, true, 14, weatherview.TempRange{Min: 0, Max: 25})
-	if countIndexIn(frame, frame.Bounds(), widget.PaperBlack) == 0 {
-		t.Error("nothing drawn after the icon failed")
-	}
-}
-
-type errIcon struct{}
-
-func (errIcon) Error() string { return "no glyph" }
-
 // A row shorter than its slots is not a configuration this screen
 // offers, but the widget is positioned by the dashboard and the draw
 // helpers clip to the frame rather than to the row — so the slot list

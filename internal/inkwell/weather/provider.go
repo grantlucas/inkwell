@@ -34,9 +34,18 @@ type Provider struct {
 
 // NewProvider creates a Provider that fetches with client, caches each
 // (model, location) forecast for ttl, and exposes defaults as the baseline
-// Settings for widgets. A nil client / now fall through to the wrapped
-// constructors' defaults (http.DefaultClient / time.Now).
+// Settings for widgets. A nil client falls through to http.DefaultClient and a
+// nil now to time.Now.
+//
+// Forecasts are asked for in now's zone. The dashboard hands widgets a clock
+// already in its display zone, and that clock decides Today and the now
+// marker, so taking the forecast's zone from it keeps a forecast's dates and
+// hours on the same days and hours as everything else on the panel — even when
+// the forecast location sits in another zone.
 func NewProvider(client HTTPClient, ttl time.Duration, now func() time.Time, defaults Settings) *Provider {
+	if now == nil {
+		now = time.Now
+	}
 	return &Provider{
 		client:   client,
 		ttl:      ttl,
@@ -50,26 +59,56 @@ func NewProvider(client HTTPClient, ttl time.Duration, now func() time.Time, def
 // against.
 func (p *Provider) Defaults() Settings { return p.defaults }
 
-// Forecast returns a forecast for loc from the given model, cached per
-// (model, location, days). Concurrent callers requesting the same key share a
-// single cache entry and therefore a single upstream fetch.
+// ForecastHorizon is how many days the Provider fetches for every location,
+// whatever span a widget asks for. It must exceed the longest span any widget
+// can be configured for (weekly-calendar's seven columns) by a day: the cache
+// outlives midnight, and once the first fetched day has ended a request is
+// answered from the days that remain.
+const ForecastHorizon = 8
+
+// Forecast returns the first days of a forecast for loc from the given model.
+// Each (model, location) is fetched once at ForecastHorizon and cached, so
+// widgets asking for different spans — and concurrent callers — share a single
+// upstream fetch.
 func (p *Provider) Forecast(ctx context.Context, loc Location, model Model, days int) (*Forecast, error) {
-	return p.cacheFor(model, loc, days).Forecast(ctx, loc, days)
+	fc, err := p.cacheFor(model, loc).Forecast(ctx, loc, ForecastHorizon)
+	return daysFromToday(fc, p.now(), days), err
 }
 
-// cacheFor returns the CachedSource for a (model, location, days) key, lazily
+// daysFromToday returns the n days of fc starting at now's date. The cache outlives
+// midnight, so the forecast may begin on a day that is already over; those
+// days are skipped rather than counted. The cached forecast is shared, so the
+// span is a new Forecast rather than a reslice written back into it.
+func daysFromToday(fc *Forecast, now time.Time, n int) *Forecast {
+	if fc == nil {
+		return nil
+	}
+	// Forecast dates are calendar dates parsed at UTC midnight, so Today is
+	// compared as one too.
+	y, m, d := now.Date()
+	today := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	days := fc.Days
+	for len(days) > 0 && days[0].Date.Before(today) {
+		days = days[1:]
+	}
+	out := *fc
+	out.Days = days[:min(max(n, 0), len(days))]
+	return &out
+}
+
+// cacheFor returns the CachedSource for a (model, location) key, lazily
 // creating it on first use. Each key gets its own cache so different locations
 // or models never evict one another.
-func (p *Provider) cacheFor(model Model, loc Location, days int) *CachedSource {
+func (p *Provider) cacheFor(model Model, loc Location) *CachedSource {
 	// cacheKey rounds the location, so each wrapped CachedSource only ever sees
 	// this one rounded location — its own location-change detection is
 	// intentionally redundant here; the map key is what separates locations.
-	key := string(model) + "|" + cacheKey(loc, days)
+	key := string(model) + "|" + cacheKey(loc, ForecastHorizon)
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	cs, ok := p.caches[key]
 	if !ok {
-		cs = NewCachedSource(NewOpenMeteoSource(model, p.client), p.ttl, p.now)
+		cs = NewCachedSource(NewOpenMeteoSource(model, p.client, p.now().Location()), p.ttl, p.now)
 		p.caches[key] = cs
 	}
 	return cs
