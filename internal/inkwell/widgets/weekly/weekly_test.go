@@ -518,9 +518,6 @@ func TestParseConfig_DaysRange(t *testing.T) {
 		{"zero", 0, true},
 		{"negative", -1, true},
 		{"above range", 8, true},
-		// The shared weather Provider answers every span from one forecast
-		// of ForecastHorizon days, so a longer span would come back short.
-		{"past the forecast horizon", weather.ForecastHorizon + 1, true},
 		{"non-integer", "five", true},
 	}
 	for _, tc := range cases {
@@ -535,6 +532,17 @@ func TestParseConfig_DaysRange(t *testing.T) {
 				t.Errorf("days=%v: unexpected error: %v", tc.days, err)
 			}
 		})
+	}
+}
+
+// The shared weather Provider answers every span from one forecast of
+// ForecastHorizon days, and once the cache has outlived midnight the first of
+// those days is gone. The longest span this widget accepts has to fit in what
+// remains, or its last column loses its weather.
+func TestMaxDaysFitTheForecastHorizon(t *testing.T) {
+	if defaultDays > weather.ForecastHorizon-1 {
+		t.Errorf("weekly-calendar accepts %d days, but a forecast of %d days covers only %d after midnight",
+			defaultDays, weather.ForecastHorizon, weather.ForecastHorizon-1)
 	}
 }
 

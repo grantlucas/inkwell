@@ -60,10 +60,11 @@ func NewProvider(client HTTPClient, ttl time.Duration, now func() time.Time, def
 func (p *Provider) Defaults() Settings { return p.defaults }
 
 // ForecastHorizon is how many days the Provider fetches for every location,
-// whatever span a widget asks for. It must be at least the longest span any
-// widget can be configured for (weekly-calendar's seven columns), since a
-// longer request is answered from the same forecast and would come back short.
-const ForecastHorizon = 7
+// whatever span a widget asks for. It must exceed the longest span any widget
+// can be configured for (weekly-calendar's seven columns) by a day: the cache
+// outlives midnight, and once the first fetched day has ended a request is
+// answered from the days that remain.
+const ForecastHorizon = 8
 
 // Forecast returns the first days of a forecast for loc from the given model.
 // Each (model, location) is fetched once at ForecastHorizon and cached, so
@@ -71,14 +72,14 @@ const ForecastHorizon = 7
 // upstream fetch.
 func (p *Provider) Forecast(ctx context.Context, loc Location, model Model, days int) (*Forecast, error) {
 	fc, err := p.cacheFor(model, loc).Forecast(ctx, loc, ForecastHorizon)
-	return span(fc, p.now(), days), err
+	return daysFromToday(fc, p.now(), days), err
 }
 
-// span returns the n days of fc starting at now's date. The cache outlives
+// daysFromToday returns the n days of fc starting at now's date. The cache outlives
 // midnight, so the forecast may begin on a day that is already over; those
 // days are skipped rather than counted. The cached forecast is shared, so the
 // span is a new Forecast rather than a reslice written back into it.
-func span(fc *Forecast, now time.Time, n int) *Forecast {
+func daysFromToday(fc *Forecast, now time.Time, n int) *Forecast {
 	if fc == nil {
 		return nil
 	}

@@ -1,6 +1,8 @@
 package weather
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"strings"
 	"time"
@@ -16,36 +18,39 @@ var (
 // zoneName is the Open-Meteo timezone parameter for zone: its IANA name.
 //
 // time.Local is the one zone that doesn't carry its name — it is called
-// "Local" whatever it holds — so it is resolved the way Go itself resolves it,
-// from TZ and then the /etc/localtime link. A host whose zone can't be named
-// that way gets "auto", the forecast location's own zone. That is only right
-// when the location shares the host's zone, which is why the timezone config
-// key exists.
+// "Local" whatever it holds — so it is named the way Go resolves it: from TZ,
+// then the /etc/localtime link, and UTC wherever Go gives up. A host zone that
+// is set but can't be named, an /etc/localtime copied in rather than linked,
+// gets "auto", the forecast location's own zone. That is only right when the
+// location shares the host's zone, which is why the timezone config key
+// exists.
 func zoneName(zone *time.Location) string {
 	if zone != time.Local {
 		return zone.String()
 	}
 	if tz, ok := lookupEnv("TZ"); ok {
-		// Go reads TZ="" as UTC, and a leading colon is the POSIX way of
-		// saying "this is a file name".
-		if tz = strings.TrimPrefix(tz, ":"); tz == "" {
+		// A leading colon is the POSIX way of saying "this is a file name".
+		name, _ := zoneinfoName(strings.TrimPrefix(tz, ":"))
+		if _, err := time.LoadLocation(name); name == "" || err != nil {
 			return "UTC"
 		}
-		return zoneinfoName(tz)
+		return name
 	}
-	if target, err := readlink("/etc/localtime"); err == nil {
-		if _, name, ok := strings.Cut(target, "zoneinfo/"); ok {
-			return name
-		}
+	target, err := readlink("/etc/localtime")
+	if errors.Is(err, fs.ErrNotExist) {
+		return "UTC"
+	}
+	if name, ok := zoneinfoName(target); ok && err == nil {
+		return name
 	}
 	return "auto"
 }
 
-// zoneinfoName returns a zone name given either as a name or as a path into
-// a zoneinfo tree.
-func zoneinfoName(s string) string {
+// zoneinfoName returns the zone named by s, which is either a zone name or a
+// path into a zoneinfo tree, and whether s was such a path.
+func zoneinfoName(s string) (string, bool) {
 	if _, name, ok := strings.Cut(s, "zoneinfo/"); ok {
-		return name
+		return name, true
 	}
-	return s
+	return s, false
 }

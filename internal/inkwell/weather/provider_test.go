@@ -3,6 +3,7 @@ package weather
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"net/url"
 	"strings"
 	"sync"
@@ -211,13 +212,19 @@ func TestProvider_HostLocalZoneIsNamed(t *testing.T) {
 		{"TZ with a leading colon", map[string]string{"TZ": ":Asia/Tokyo"}, noLink, "Asia/Tokyo"},
 		{"TZ as a zoneinfo path", map[string]string{"TZ": "/usr/share/zoneinfo/America/Halifax"}, noLink, "America/Halifax"},
 		{"empty TZ is UTC", map[string]string{"TZ": ""}, noLink, "UTC"},
+		// Go falls back to UTC for a TZ it can't load, such as a POSIX
+		// rule string, so the dashboard is on UTC and so is the request.
+		{"unloadable TZ is UTC", map[string]string{"TZ": "EST5EDT,M3.2.0,M11.1.0"}, noLink, "UTC"},
 		{"/etc/localtime links into zoneinfo", nil, func(string) (string, error) {
 			return "/var/db/timezone/zoneinfo/America/Toronto", nil
 		}, "America/Toronto"},
 		{"/etc/localtime links elsewhere", nil, func(string) (string, error) {
 			return "/etc/zones/mine", nil
 		}, "auto"},
-		{"no TZ and no link", nil, noLink, "auto"},
+		{"/etc/localtime is a copied file", nil, noLink, "auto"},
+		{"no /etc/localtime is UTC", nil, func(string) (string, error) {
+			return "", fs.ErrNotExist
+		}, "UTC"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
@@ -250,7 +257,8 @@ func swapHostLookups(t *testing.T, env map[string]string, link func(string) (str
 
 // The cache outlives midnight, so a forecast fetched late in the evening is
 // still being served the next morning. It answers from the new Today, not
-// from the day it was fetched on, and still covers the whole span.
+// from the day it was fetched on, and still covers the whole span — even
+// weekly-calendar's longest, seven days.
 func TestProvider_CachedForecastStartsAtTodayAfterMidnight(t *testing.T) {
 	toronto := mustZone(t, "America/Toronto")
 	evening := time.Date(2026, 10, 5, 23, 0, 0, 0, toronto)
@@ -259,11 +267,11 @@ func TestProvider_CachedForecastStartsAtTodayAfterMidnight(t *testing.T) {
 	p := NewProvider(api, 3*time.Hour, func() time.Time { return now }, Settings{})
 	loc := Location{Latitude: 43.244, Longitude: -79.837}
 
-	if _, err := p.Forecast(context.Background(), loc, ModelGEM, 5); err != nil {
+	if _, err := p.Forecast(context.Background(), loc, ModelGEM, 7); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	now = evening.Add(2 * time.Hour) // 01:00 the next day, cache still fresh
-	fc, err := p.Forecast(context.Background(), loc, ModelGEM, 5)
+	fc, err := p.Forecast(context.Background(), loc, ModelGEM, 7)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -275,7 +283,7 @@ func TestProvider_CachedForecastStartsAtTodayAfterMidnight(t *testing.T) {
 	for _, d := range fc.Days {
 		dates = append(dates, d.Date.Format("01-02"))
 	}
-	want := "10-06 10-07 10-08 10-09 10-10"
+	want := "10-06 10-07 10-08 10-09 10-10 10-11 10-12"
 	if got := strings.Join(dates, " "); got != want {
 		t.Errorf("days = %s, want %s", got, want)
 	}
