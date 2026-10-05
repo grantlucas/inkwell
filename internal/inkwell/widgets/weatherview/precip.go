@@ -48,7 +48,10 @@ const (
 // cell: the gap under the ticks plus the label face's full height, so a
 // glyph's descent stays inside the cell. The chart sizes it from its own
 // face, so no caller has to know which font tier that is.
-var precipLabelH = precipLabelGap + defaultFace.Metrics().Ascent.Ceil() + defaultFace.Metrics().Descent.Ceil()
+var precipLabelH = func() int {
+	m := defaultFace.Metrics()
+	return precipLabelGap + m.Ascent.Ceil() + m.Descent.Ceil()
+}()
 
 // precipLabelHours are the marks on the hour axis. Three 24-hour labels
 // rather than the live chart's "6 9 12 3 8", which mixes morning and

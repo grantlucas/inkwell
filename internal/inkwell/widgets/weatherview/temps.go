@@ -28,11 +28,11 @@ func NewHighLow(day weather.DailyForecast, unit string) HighLow {
 
 // High is the high with its unit, "17°C". It names the unit for the pair,
 // so the low beside it does not repeat it.
-func (t HighLow) High() string { return fmt.Sprintf("%d°%s", t.high, t.unit) }
+func (hl HighLow) High() string { return fmt.Sprintf("%d°%s", hl.high, hl.unit) }
 
 // Low is the bare low, "9°".
-func (t HighLow) Low() string { return fmt.Sprintf("%d°", t.low) }
+func (hl HighLow) Low() string { return fmt.Sprintf("%d°", hl.low) }
 
 // Pair is both on one line with no unit, "17° 9°", for a cell too narrow
 // to name it.
-func (t HighLow) Pair() string { return fmt.Sprintf("%d° %d°", t.high, t.low) }
+func (hl HighLow) Pair() string { return fmt.Sprintf("%d° %d°", hl.high, hl.low) }
