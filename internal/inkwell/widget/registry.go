@@ -3,13 +3,25 @@ package widget
 import (
 	"fmt"
 	"image"
+	"maps"
+	"slices"
 	"time"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
+	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 )
 
-// Deps provides injectable dependencies for widget factories.
+// Deps provides injectable dependencies for widget factories. The app builds
+// one set and hands the same values to every widget, so widgets that share a
+// dependency share its cache.
 type Deps struct {
-	Now         func() time.Time
-	DataSources map[string]any
+	Now func() time.Time
+	// HTTPClient fetches calendar feeds. A calendar widget built without
+	// one fails rather than reaching for a default client.
+	HTTPClient calendar.HTTPClient
+	// Weather is the dashboard's shared forecast provider. It carries the
+	// top-level weather settings that widget-level overrides inherit from.
+	Weather *weather.Provider
 }
 
 // Factory creates a Widget from bounds, a raw config map, and dependencies.
@@ -38,6 +50,11 @@ func (r *Registry) Register(typeName string, f Factory) {
 		panic(fmt.Sprintf("widget type %q already registered", typeName))
 	}
 	r.factories[typeName] = f
+}
+
+// Types returns every registered widget type name, sorted.
+func (r *Registry) Types() []string {
+	return slices.Sorted(maps.Keys(r.factories))
 }
 
 // Create instantiates a widget by type name.

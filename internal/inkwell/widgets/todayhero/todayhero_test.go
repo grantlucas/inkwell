@@ -6,7 +6,9 @@ import (
 	"image"
 	"math"
 	nethttp "net/http"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -66,14 +68,6 @@ type stubWeatherSource struct {
 func (s *stubWeatherSource) Forecast(_ context.Context, _ weather.Location, days int) (*weather.Forecast, error) {
 	s.gotDays = days
 	return s.forecast, s.err
-}
-
-// stubHTTPClient records that the calendar source reached for it.
-type stubHTTPClient struct{ called bool }
-
-func (s *stubHTTPClient) Do(_ *nethttp.Request) (*nethttp.Response, error) {
-	s.called = true
-	return nil, context.DeadlineExceeded
 }
 
 // sampleForecast covers today plus the four rows, with rain today (so
@@ -540,10 +534,23 @@ func TestWidget_Golden(t *testing.T) {
 	}
 }
 
+// typedDeps is what the app hands every widget: one transport behind both
+// the calendar fetch and the shared weather provider.
+func typedDeps(client *recordingTransport) widget.Deps {
+	return widget.Deps{
+		Now:        fixedClock(testTime),
+		HTTPClient: client,
+		Weather: weather.NewProvider(client, time.Hour, fixedClock(testTime), weather.Settings{
+			Location: weather.Location{Latitude: 43.25, Longitude: -79.87},
+			TempUnit: "C",
+			Model:    weather.ModelGEM,
+		}),
+	}
+}
+
 func TestFactory(t *testing.T) {
-	w, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{
-		"feeds": []any{"https://example.com/a.ics"},
-	}, widget.Deps{Now: fixedClock(testTime)})
+	cfg := map[string]any{"feeds": []any{"https://example.com/a.ics"}}
+	w, err := Factory(image.Rect(0, 0, 800, 480), cfg, typedDeps(&recordingTransport{}))
 	if err != nil {
 		t.Fatalf("Factory: %v", err)
 	}
@@ -553,7 +560,7 @@ func TestFactory(t *testing.T) {
 }
 
 func TestFactory_InvalidConfig(t *testing.T) {
-	_, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{}, widget.Deps{})
+	_, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{}, typedDeps(&recordingTransport{}))
 	if err == nil {
 		t.Fatal("expected an error for missing feeds")
 	}
@@ -562,10 +569,25 @@ func TestFactory_InvalidConfig(t *testing.T) {
 	}
 }
 
+// A widget built without its dependencies fails instead of falling back
+// to a default HTTP client the app never chose.
+func TestFactory_MissingDeps(t *testing.T) {
+	_, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{
+		"feeds": []any{"https://example.com/a.ics"},
+	}, widget.Deps{Now: fixedClock(testTime)})
+	if err == nil || !strings.Contains(err.Error(), "today-hero: no HTTP client") {
+		t.Errorf("error = %v, want a missing HTTP client error", err)
+	}
+}
+
+// With no clock injected the widget falls back to the wall clock rather
+// than a zero time, which would render the epoch.
 func TestFactory_DefaultsTheClock(t *testing.T) {
+	deps := typedDeps(&recordingTransport{})
+	deps.Now = nil
 	w, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{
 		"feeds": []any{"https://example.com/a.ics"},
-	}, widget.Deps{})
+	}, deps)
 	if err != nil {
 		t.Fatalf("Factory: %v", err)
 	}
@@ -574,59 +596,50 @@ func TestFactory_DefaultsTheClock(t *testing.T) {
 	}
 }
 
-func TestFactory_UsesInjectedWeatherSource(t *testing.T) {
-	ws := &stubWeatherSource{forecast: sampleForecast()}
+// The calendar feed goes out through the injected client, and the forecast
+// through the shared provider at its default location, so a dashboard sets
+// its location once at the top level.
+func TestFactory_FetchesThroughTypedDeps(t *testing.T) {
+	client := &recordingTransport{}
 	w, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{
 		"feeds": []any{"https://example.com/a.ics"},
-	}, widget.Deps{
-		Now:         fixedClock(testTime),
-		DataSources: map[string]any{"weather_source": weather.Source(ws)},
-	})
-	if err != nil {
-		t.Fatalf("Factory: %v", err)
-	}
-	if w.(*Widget).weather != weather.Source(ws) {
-		t.Error("injected weather_source was not used")
-	}
-}
-
-func TestFactory_UsesSharedProvider(t *testing.T) {
-	provider := weather.NewProvider(nil, time.Hour, time.Now, weather.Settings{
-		Location: weather.Location{Latitude: 43.25, Longitude: -79.87},
-		TempUnit: "C",
-		Model:    weather.ModelGEM,
-	})
-	w, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{
-		"feeds": []any{"https://example.com/a.ics"},
-	}, widget.Deps{
-		Now:         fixedClock(testTime),
-		DataSources: map[string]any{"weather": provider},
-	})
-	if err != nil {
-		t.Fatalf("Factory: %v", err)
-	}
-	th := w.(*Widget)
-	if th.weather == nil {
-		t.Fatal("no weather source taken from the provider")
-	}
-	if th.config.Weather.Latitude != 43.25 {
-		t.Errorf("Latitude = %v, want the provider default", th.config.Weather.Latitude)
-	}
-}
-
-func TestFactory_UsesInjectedHTTPClient(t *testing.T) {
-	client := &stubHTTPClient{}
-	w, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{
-		"feeds": []any{"https://example.com/a.ics"},
-	}, widget.Deps{
-		Now:         fixedClock(testTime),
-		DataSources: map[string]any{"http_client": calendar.HTTPClient(client)},
-	})
+	}, typedDeps(client))
 	if err != nil {
 		t.Fatalf("Factory: %v", err)
 	}
 	renderToFrame(t, w.(*Widget))
-	if !client.called {
-		t.Error("the injected HTTP client was never used")
+
+	if !client.requested("https://example.com/a.ics") {
+		t.Errorf("calendar feed not fetched through the injected client; requests: %v", client.urls())
 	}
+	if !client.requested("api.open-meteo.com/v1/gem", "latitude=43.2500") {
+		t.Errorf("forecast not fetched through the shared provider; requests: %v", client.urls())
+	}
+}
+
+// recordingTransport records every URL it is asked for and answers none,
+// so a test can see what a widget fetched without a network.
+type recordingTransport struct {
+	mu   sync.Mutex
+	seen []string
+}
+
+func (r *recordingTransport) Do(req *nethttp.Request) (*nethttp.Response, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.seen = append(r.seen, req.URL.String())
+	return nil, context.DeadlineExceeded
+}
+
+func (r *recordingTransport) urls() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.seen)
+}
+
+// requested reports whether any one request carried every fragment.
+func (r *recordingTransport) requested(fragments ...string) bool {
+	return slices.ContainsFunc(r.urls(), func(u string) bool {
+		return !slices.ContainsFunc(fragments, func(f string) bool { return !strings.Contains(u, f) })
+	})
 }
