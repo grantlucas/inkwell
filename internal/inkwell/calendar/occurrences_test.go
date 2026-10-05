@@ -270,6 +270,17 @@ END:VEVENT
 			},
 		},
 		{
+			label: "the same title and start with a different end stays separate",
+			feeds: map[string]string{
+				urlA: icsCalendar(oneOff("kickoff@a.example", "Kickoff", 13)),
+				urlB: icsCalendar(strings.ReplaceAll(oneOff("kickoff@b.example", "Kickoff", 13), "DTEND:20261006T133000Z", "DTEND:20261006T140000Z")),
+			},
+			want: []occurrence{
+				{Summary: "Kickoff", Start: oct(6, 13)},
+				{Summary: "Kickoff", Start: oct(6, 13)},
+			},
+		},
+		{
 			label: "two feeds whose rules rewrite to the same title collapse",
 			feeds: map[string]string{
 				urlA: icsCalendar(oneOff("practice@a.example", `Jane Doe\nPractice`, 13)),
