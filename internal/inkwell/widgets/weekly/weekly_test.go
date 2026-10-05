@@ -518,6 +518,9 @@ func TestParseConfig_DaysRange(t *testing.T) {
 		{"zero", 0, true},
 		{"negative", -1, true},
 		{"above range", 8, true},
+		// The shared weather Provider answers every span from one forecast
+		// of ForecastHorizon days, so a longer span would come back short.
+		{"past the forecast horizon", weather.ForecastHorizon + 1, true},
 		{"non-integer", "five", true},
 	}
 	for _, tc := range cases {
