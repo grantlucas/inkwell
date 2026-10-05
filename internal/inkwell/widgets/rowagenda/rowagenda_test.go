@@ -120,21 +120,62 @@ func ev(summary string, day, hour int) ical.Event {
 	return ical.Event{UID: summary, Summary: summary, Start: start, End: start.Add(time.Hour)}
 }
 
+// sampleEvents is a busy week that still fits: five events today, four
+// on Thursday and an empty Friday, with every event getting a line.
 func sampleEvents() []ical.Event {
 	return []ical.Event{
-		ev("Standup", 16, 9),        // finished by 14:30
-		ev("Design review", 16, 16), // still to come
+		ev("Standup", 16, 9), // finished by 14:30
+		ev("Platform architecture review with infra", 16, 16), // still to come
 		ev("1:1", 16, 17),
 		ev("Retro", 16, 18),
 		ev("Grocery run", 16, 19),
-		ev("Dentist", 17, 10),
+		ev("Dentist - Maeve", 17, 10),
 		{
 			UID: "trip", Summary: "Conference", AllDay: true,
 			Start: time.Date(2026, 3, 18, 0, 0, 0, 0, time.UTC),
 			End:   time.Date(2026, 3, 19, 0, 0, 0, 0, time.UTC),
 		},
-		ev("Standup", 19, 9), ev("Planning", 19, 11), ev("Review", 19, 14), ev("Demo", 19, 16),
+		ev("Standup", 19, 9), ev("Quarterly planning", 19, 11), ev("Review", 19, 14), ev("Demo", 19, 16),
 	}
+}
+
+// quietEvents is a week with almost nothing in it, so every row sits
+// at the minimum height plus an even share of the spare room.
+func quietEvents() []ical.Event {
+	return []ical.Event{
+		ev("Sabres @ Stoney Creek", 16, 10),
+		ev("Practice Green", 19, 18),
+	}
+}
+
+// overflowingEvents is more than five rows can hold: Monday, Wednesday
+// and Friday are packed and lose lines, while the quiet Tuesday and
+// Thursday keep every event.
+func overflowingEvents() []ical.Event {
+	var out []ical.Event
+	for h := range 9 {
+		out = append(out, ev("Back-to-back meeting number "+string(rune('A'+h)), 16, 8+h))
+	}
+	out = append(out, ev("Dentist", 17, 10), ev("Book club", 17, 19))
+	for h := range 7 {
+		out = append(out, ev("Workshop session "+string(rune('A'+h)), 18, 9+h))
+	}
+	out = append(out, ev("Swim lessons", 19, 17))
+	for h := range 6 {
+		out = append(out, ev("Interview loop "+string(rune('A'+h)), 20, 9+h))
+	}
+	return out
+}
+
+// withoutToday drops today's events, leaving today's row empty.
+func withoutToday(events []ical.Event) []ical.Event {
+	var out []ical.Event
+	for _, e := range events {
+		if e.Start.Day() != 16 {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 func newWidget(cal calendar.Source, ws weather.Source, clock time.Time) *Widget {
@@ -327,29 +368,23 @@ func TestFactory_UsesInjectedHTTPClient(t *testing.T) {
 	}
 }
 
-// Today's row inverts its gutter. Rows have no "today is leftmost"
-// convention to lean on — unlike bold-five, where position says it —
-// so without the inversion nothing says which row is now.
-func TestWidget_TodayGutterIsInverted(t *testing.T) {
+// Today is shown by position — it is the first row — and never by a
+// fill. The date gutter is the same plain date on every row, so no
+// large black area lands in the same place every refresh and burns into
+// the panel.
+func TestWidget_NoFilledDateGutter(t *testing.T) {
 	frame := renderToFrame(t, newWidget(&stubCalSource{events: sampleEvents()},
 		&stubWeatherSource{forecast: sampleForecast()}, testTime))
 
-	rowsOut := computeRows(image.Rect(0, 0, 800, 480))
-	todayBlack := countIndexIn(frame, rowsOut[0].Gutter, widget.PaperBlack)
-	area := rowsOut[0].Gutter.Dx() * rowsOut[0].Gutter.Dy()
-	if todayBlack < area/2 {
-		t.Errorf("today's gutter is %d/%d black — it does not look inverted", todayBlack, area)
-	}
-	if countIndexIn(frame, rowsOut[0].Gutter, widget.PaperWhite) == 0 {
-		t.Error("no white text on today's inverted gutter")
-	}
-
-	// Every other row's gutter stays on paper.
-	for i, r := range rowsOut[1:] {
-		black := countIndexIn(frame, r.Gutter, widget.PaperBlack)
-		if a := r.Gutter.Dx() * r.Gutter.Dy(); black > a/2 {
-			t.Errorf("row %d's gutter is %d/%d black — only today should invert", i+1, black, a)
+	const band = 48
+	for y := 0; y < 480; y += band {
+		r := image.Rect(0, y, gutterW, y+band)
+		if black := countIndexIn(frame, r, widget.PaperBlack); black > r.Dx()*r.Dy()/4 {
+			t.Errorf("the gutter at y=%d is %d/%d black — a filled block, not a plain date", y, black, r.Dx()*r.Dy())
 		}
+	}
+	if countIndexIn(frame, image.Rect(0, 0, gutterW, 480), widget.PaperWhite) == 0 {
+		t.Error("the gutter has no paper at all")
 	}
 }
 
@@ -361,11 +396,28 @@ func TestWidget_Golden(t *testing.T) {
 		cfg   func(*Config)
 	}{
 		{
-			// Covers the one-column path, the two-column path, the
-			// overflow slot, an empty day and today's inverted gutter
-			// in a single frame.
-			label: "a realistic week",
+			// Every event gets a line: today's row and Thursday's grow,
+			// the rest share the spare room, Friday says it is empty.
+			label: "a busy week that fits",
 			cal:   &stubCalSource{events: sampleEvents()},
+			ws:    &stubWeatherSource{forecast: sampleForecast()},
+		},
+		{
+			label: "a quiet week",
+			cal:   &stubCalSource{events: quietEvents()},
+			ws:    &stubWeatherSource{forecast: sampleForecast()},
+		},
+		{
+			// The packed rows trim toward each other and end in
+			// "+N MORE"; the quiet rows keep everything.
+			label: "a week that overflows",
+			cal:   &stubCalSource{events: overflowingEvents()},
+			ws:    &stubWeatherSource{forecast: sampleForecast()},
+		},
+		{
+			// Today's own row is the empty one.
+			label: "an empty day",
+			cal:   &stubCalSource{events: withoutToday(sampleEvents())},
 			ws:    &stubWeatherSource{forecast: sampleForecast()},
 		},
 		{

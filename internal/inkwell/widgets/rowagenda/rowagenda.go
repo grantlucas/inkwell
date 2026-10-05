@@ -10,6 +10,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
 var _ widget.Widget = (*Widget)(nil)
@@ -75,17 +76,39 @@ func (w *Widget) Render(frame *image.Paletted) error {
 
 	eventOpts := eventOptions{ShowLocation: w.config.ShowLocation, Location: loc}
 
-	for i, row := range computeRows(w.bounds) {
+	// Events are bucketed before anything is drawn because the row
+	// heights depend on every day's count, not just the row's own.
+	perDay := make([][]calendar.Event, len(days))
+	counts := make([]int, len(days))
+	forecasts := make([]weather.DailyForecast, len(days))
+	var shown []weather.DailyForecast
+	for i, day := range days {
+		perDay[i] = daygrid.FilterEventsForDay(events, day)
+		counts[i] = len(perDay[i])
+		forecasts[i] = daygrid.FindForecast(forecastDays, day)
+		if !forecasts[i].Date.IsZero() {
+			shown = append(shown, forecasts[i])
+		}
+	}
+
+	// One temperature range across the five rows, so every chart is
+	// plotted on the same scale and a cold day sits lower than a warm
+	// one. Taken from the days drawn, not from whatever else the
+	// forecast carried.
+	var rng weatherview.TempRange
+	rng.Min, rng.Max = weatherview.GlobalTempRange(shown)
+
+	for i, row := range planRows(w.bounds, counts) {
 		day := days[i]
 		renderGutter(frame, row.Gutter, day)
-		renderBadge(frame, row.Badge, daygrid.FindForecast(forecastDays, day),
-			w.config.Weather.TempUnit, day.IsToday, true, now.Hour())
+		renderBadge(frame, row.Badge, forecasts[i],
+			w.config.Weather.TempUnit, day.IsToday, true, now.Hour(), rng)
 
 		// A hairline between the badge and the agenda, so the two read
 		// as separate columns rather than as one run of text.
 		daygrid.DrawVLine(frame, row.Agenda.Min.X-ruleInset, row.Bounds.Min.Y, row.Bounds.Max.Y, widget.PaperBlack)
 
-		renderAgenda(frame, row.Agenda, daygrid.FilterEventsForDay(events, day), eventOpts)
+		renderAgenda(frame, row.Agenda, perDay[i], row.Lines, eventOpts)
 
 		if !row.IsLast {
 			daygrid.DrawHLine(frame, row.Bounds.Min.X, row.Bounds.Max.X, row.Bounds.Max.Y-1, widget.PaperBlack)
