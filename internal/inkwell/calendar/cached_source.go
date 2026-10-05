@@ -8,12 +8,21 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar/ical"
 )
 
-// CachedSource wraps a Source with a time-based cache. It re-fetches from
-// the inner source when the cache has expired (TTL elapsed). On fetch error
-// after the cache has been populated, it returns stale cached data along
-// with the error.
+// Fetcher fetches every event and series a set of feeds carries,
+// unwindowed. HTTPSource is the production implementation.
+type Fetcher interface {
+	Fetch(ctx context.Context) ([]Event, error)
+}
+
+// CachedSource wraps a Fetcher with a time-based cache and turns what it
+// fetched into the occurrences in a window. It re-fetches when the cache
+// has expired (TTL elapsed). On fetch error after the cache has been
+// populated, it returns stale cached data along with the error.
+//
+// The cache holds series, not occurrences, so every window — whichever
+// one the fetch happened under — is expanded from the same events.
 type CachedSource struct {
-	inner Source
+	inner Fetcher
 	ttl   time.Duration
 	now   func() time.Time
 
@@ -23,7 +32,7 @@ type CachedSource struct {
 }
 
 // NewCachedSource wraps inner with a cache that refreshes after ttl.
-func NewCachedSource(inner Source, ttl time.Duration, now func() time.Time) *CachedSource {
+func NewCachedSource(inner Fetcher, ttl time.Duration, now func() time.Time) *CachedSource {
 	return &CachedSource{
 		inner: inner,
 		ttl:   ttl,
@@ -43,7 +52,7 @@ func (c *CachedSource) Events(ctx context.Context, start, end time.Time) ([]Even
 		return c.filterEvents(start, end), nil
 	}
 
-	events, err := c.inner.Events(ctx, start, end)
+	events, err := c.inner.Fetch(ctx)
 	if err != nil {
 		if c.events != nil {
 			// Return stale data with the error.
@@ -58,10 +67,6 @@ func (c *CachedSource) Events(ctx context.Context, start, end time.Time) ([]Even
 	c.events = append(c.events[:0:0], events...)
 	c.fetched = c.now()
 
-	// Run RRULE expansion + window filter through the same path as
-	// cache hits — otherwise the first call returns master recurrences
-	// while subsequent cache-hit calls return expanded occurrences,
-	// surprising callers who'd see different shapes for the same input.
 	return c.filterEvents(start, end), nil
 }
 

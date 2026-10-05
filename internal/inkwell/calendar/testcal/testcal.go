@@ -6,7 +6,8 @@ import (
 )
 
 // Generate returns valid ICS content with a variety of calendar events
-// spanning 7 days starting from the date of now.
+// spanning 7 days starting from the date of now, plus a weekly series
+// that began five weeks earlier and recurs into those days.
 func Generate(now time.Time) string {
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 
@@ -14,7 +15,7 @@ func Generate(now time.Time) string {
 	b = append(b, "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Inkwell//TestCal//EN\r\n"...)
 
 	uid := 0
-	event := func(summary string, start, end time.Time, allDay bool, location string) {
+	event := func(summary string, start, end time.Time, allDay bool, location, rrule string) {
 		uid++
 		b = append(b, "BEGIN:VEVENT\r\n"...)
 		b = append(b, fmt.Sprintf("UID:testcal-%d@inkwell\r\n", uid)...)
@@ -29,48 +30,56 @@ func Generate(now time.Time) string {
 		if location != "" {
 			b = append(b, fmt.Sprintf("LOCATION:%s\r\n", location)...)
 		}
+		if rrule != "" {
+			b = append(b, fmt.Sprintf("RRULE:%s\r\n", rrule)...)
+		}
 		b = append(b, "END:VEVENT\r\n"...)
 	}
 
 	// Day 0 (today): busy workday
 	d := today
-	event("Team Standup", d.Add(9*time.Hour), d.Add(9*time.Hour+15*time.Minute), false, "")
-	event("Sprint Planning", d.Add(10*time.Hour), d.Add(11*time.Hour+30*time.Minute), false, "Board Room")
-	event("Lunch with Alex", d.Add(12*time.Hour), d.Add(13*time.Hour), false, "Cafe on Main")
-	event("Design Review", d.Add(14*time.Hour), d.Add(15*time.Hour), false, "Room 204")
+	event("Team Standup", d.Add(9*time.Hour), d.Add(9*time.Hour+15*time.Minute), false, "", "")
+	event("Sprint Planning", d.Add(10*time.Hour), d.Add(11*time.Hour+30*time.Minute), false, "Board Room", "")
+	event("Lunch with Alex", d.Add(12*time.Hour), d.Add(13*time.Hour), false, "Cafe on Main", "")
+	event("Design Review", d.Add(14*time.Hour), d.Add(15*time.Hour), false, "Room 204", "")
 
 	// Day 1: overlapping meetings + early morning
 	d = today.AddDate(0, 0, 1)
-	event("Early Gym", d.Add(6*time.Hour), d.Add(7*time.Hour), false, "YMCA")
-	event("Standup", d.Add(9*time.Hour), d.Add(9*time.Hour+15*time.Minute), false, "")
-	event("Project Sync", d.Add(13*time.Hour), d.Add(14*time.Hour+30*time.Minute), false, "Room 101")
-	event("1:1 with Manager", d.Add(14*time.Hour), d.Add(14*time.Hour+30*time.Minute), false, "")
+	event("Early Gym", d.Add(6*time.Hour), d.Add(7*time.Hour), false, "YMCA", "")
+	event("Standup", d.Add(9*time.Hour), d.Add(9*time.Hour+15*time.Minute), false, "", "")
+	event("Project Sync", d.Add(13*time.Hour), d.Add(14*time.Hour+30*time.Minute), false, "Room 101", "")
+	event("1:1 with Manager", d.Add(14*time.Hour), d.Add(14*time.Hour+30*time.Minute), false, "", "")
 
 	// Day 2: all-day event + evening
 	d = today.AddDate(0, 0, 2)
-	event("Company Offsite", d, d.AddDate(0, 0, 1), true, "")
-	event("Dinner Reservation", d.Add(20*time.Hour), d.Add(22*time.Hour), false, "The Keg")
+	event("Company Offsite", d, d.AddDate(0, 0, 1), true, "", "")
+	event("Dinner Reservation", d.Add(20*time.Hour), d.Add(22*time.Hour), false, "The Keg", "")
 
 	// Day 3: light day
 	d = today.AddDate(0, 0, 3)
-	event("Dentist", d.Add(10*time.Hour), d.Add(10*time.Hour+30*time.Minute), false, "123 Health St")
-	event("Focus Time", d.Add(13*time.Hour), d.Add(16*time.Hour), false, "")
+	event("Dentist", d.Add(10*time.Hour), d.Add(10*time.Hour+30*time.Minute), false, "123 Health St", "")
+	event("Focus Time", d.Add(13*time.Hour), d.Add(16*time.Hour), false, "", "")
+	// A weekly series that began five weeks ago. Only its occurrences
+	// land in this week, so it shows only when recurrences are expanded
+	// before the window is applied.
+	began := d.AddDate(0, 0, -35)
+	event("Book Club", began.Add(18*time.Hour), began.Add(19*time.Hour), false, "Library", "FREQ=WEEKLY")
 
 	// Day 4: multi-day event starts + meetings
 	d = today.AddDate(0, 0, 4)
-	event("Conference", d, d.AddDate(0, 0, 2), true, "Metro Convention Centre")
-	event("Standup", d.Add(9*time.Hour), d.Add(9*time.Hour+15*time.Minute), false, "")
-	event("Late Movie", d.Add(21*time.Hour), d.Add(23*time.Hour+30*time.Minute), false, "Cineplex")
+	event("Conference", d, d.AddDate(0, 0, 2), true, "Metro Convention Centre", "")
+	event("Standup", d.Add(9*time.Hour), d.Add(9*time.Hour+15*time.Minute), false, "", "")
+	event("Late Movie", d.Add(21*time.Hour), d.Add(23*time.Hour+30*time.Minute), false, "Cineplex", "")
 
 	// Day 5: conference continues + social
 	d = today.AddDate(0, 0, 5)
-	event("Team Retro", d.Add(11*time.Hour), d.Add(12*time.Hour), false, "Room 301")
-	event("Happy Hour", d.Add(17*time.Hour), d.Add(19*time.Hour), false, "The Pub")
+	event("Team Retro", d.Add(11*time.Hour), d.Add(12*time.Hour), false, "Room 301", "")
+	event("Happy Hour", d.Add(17*time.Hour), d.Add(19*time.Hour), false, "The Pub", "")
 
 	// Day 6: weekend, relaxed
 	d = today.AddDate(0, 0, 6)
-	event("Farmers Market", d.Add(8*time.Hour), d.Add(10*time.Hour), false, "City Square")
-	event("BBQ at Tom's", d.Add(15*time.Hour), d.Add(19*time.Hour), false, "42 Oak Ave")
+	event("Farmers Market", d.Add(8*time.Hour), d.Add(10*time.Hour), false, "City Square", "")
+	event("BBQ at Tom's", d.Add(15*time.Hour), d.Add(19*time.Hour), false, "42 Oak Ave", "")
 
 	b = append(b, "END:VCALENDAR\r\n"...)
 	return string(b)
