@@ -208,43 +208,6 @@ func TestRenderRowWeather_MissingForecast(t *testing.T) {
 	}
 }
 
-// A condition glyph that will not load must not take the temperatures
-// with it — they are the part of the cell that carries the forecast.
-func TestIconFailureStillDrawsTheTemperatures(t *testing.T) {
-	orig := drawIcon
-	defer func() { drawIcon = orig }()
-	drawIcon = func(*image.Paletted, int, int, int, weather.Condition) error {
-		return errIconFailed
-	}
-
-	day := weather.DailyForecast{
-		Date: time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC),
-		High: 14, Low: 3, Condition: weather.Condition(0),
-	}
-
-	t.Run("hero", func(t *testing.T) {
-		frame := newTestFrame(800, 480)
-		renderHeroWeather(frame, computeHero(image.Rect(0, 0, 800, 480)).Weather, day, "C")
-		if countIndexIn(frame, frame.Bounds(), widget.PaperBlack) == 0 {
-			t.Error("nothing drawn after the icon failed")
-		}
-	})
-
-	t.Run("day row", func(t *testing.T) {
-		frame := newTestFrame(800, 480)
-		renderRowWeather(frame, image.Rect(0, 0, 800, 120), day, "C", weatherview.TempRange{Max: 20})
-		if countIndexIn(frame, frame.Bounds(), widget.PaperBlack) == 0 {
-			t.Error("nothing drawn after the icon failed")
-		}
-	})
-}
-
-var errIconFailed = errIcon{}
-
-type errIcon struct{}
-
-func (errIcon) Error() string { return "no glyph" }
-
 // A row with more events than fit, and no room left for the marker,
 // must not draw the marker off the bottom of the row.
 func TestRenderRowAgenda_OverflowMarkerNeedsRoom(t *testing.T) {

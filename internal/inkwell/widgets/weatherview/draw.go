@@ -11,11 +11,9 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
-var defaultFace font.Face
-
-func init() {
-	defaultFace = mustLoadDefaultFace()
-}
+// defaultFace is a package var rather than set in init so that vars
+// derived from it, like precipLabelH, are initialised after it.
+var defaultFace = mustLoadDefaultFace()
 
 // mustLoadDefaultFace is extracted so the font-load panic branch is
 // reachable from tests via fonts.SwapDataForTest.

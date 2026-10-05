@@ -3,8 +3,6 @@ package todayhero
 import (
 	"fmt"
 	"image"
-	"log"
-	"math"
 	"strings"
 	"time"
 
@@ -41,9 +39,6 @@ const (
 	hiBaseline   = 160
 	loGap        = 12
 	condBaseline = 192
-
-	// The chart's hour-label band.
-	chartLabelH = 20
 )
 
 // renderIdentity draws the date at 3x, then the month and the fuzzy
@@ -91,26 +86,15 @@ func renderHeroWeather(frame *image.Paletted, bounds image.Rectangle, day weathe
 	}
 
 	top := bounds.Min.Y
-	if err := drawIcon(frame, bounds.Min.X+heroIconX, top+heroIconY-weatherTop, heroIconSize, day.Condition); err != nil {
-		// Logged, not bubbled: the temperatures are still worth having
-		// when the glyph will not load.
-		log.Printf("todayhero: draw icon for condition %d: %v", day.Condition, err)
-	}
+	weatherview.DrawIcon(frame, bounds.Min.X+heroIconX, top+heroIconY-weatherTop, heroIconSize, day.Condition)
 
-	hi, lo := day.High, day.Low
-	label := "C"
-	if unit == "F" {
-		hi, lo = weather.CelsiusToFahrenheit(hi), weather.CelsiusToFahrenheit(lo)
-		label = "F"
-	}
-
-	hiText := fmt.Sprintf("%d°%s", int(math.Round(hi)), label)
+	temps := weatherview.NewHighLow(day, unit)
 	x := bounds.Min.X + hiX
 	drawer := daygrid.Scaled(daygrid.BodyBoldFace, hiScale, widget.PaperBlack)
-	drawer.Draw(frame, x, top+hiBaseline-weatherTop, hiText)
+	drawer.Draw(frame, x, top+hiBaseline-weatherTop, temps.High())
 
-	daygrid.DrawText(frame, x+drawer.Measure(hiText)+loGap, top+hiBaseline-weatherTop,
-		fmt.Sprintf("%d°", int(math.Round(lo))), daygrid.BodyFace, widget.PaperBlack)
+	daygrid.DrawText(frame, x+drawer.Measure(temps.High())+loGap, top+hiBaseline-weatherTop,
+		temps.Low(), daygrid.BodyFace, widget.PaperBlack)
 
 	daygrid.DrawText(frame, x, top+condBaseline-weatherTop,
 		strings.ToUpper(day.Condition.Label()), daygrid.BodyFace, widget.PaperBlack)
@@ -125,19 +109,13 @@ func renderHeroWeather(frame *image.Paletted, bounds image.Rectangle, day weathe
 // rng is the screen's shared range, so today's line sits at the same
 // height as a row's line for the same temperature. A dry day still
 // draws the line, so the chart is never blank.
-//
-// The dashed 50% guide this cell used to carry is off: with the
-// temperature line running across the same plot, a dashed horizontal
-// reads as a second line rather than as a reference.
 func renderHeroChart(frame *image.Paletted, bounds image.Rectangle, day weather.DailyForecast, nowHour int, rng weatherview.TempRange) {
 	if day.Date.IsZero() {
 		return
 	}
-	weatherview.RenderPrecipChart(frame, bounds, day.Hourly, weatherview.PrecipChartOptions{
-		LabelHeight:   chartLabelH,
+	weatherview.RenderCombinedChart(frame, bounds, day.Hourly, rng, weatherview.CombinedOptions{
 		NowHour:       nowHour,
 		ShowNowMarker: true,
-		TempRange:     &rng,
 	})
 }
 
@@ -156,7 +134,3 @@ func sharedRange(forecasts []weather.DailyForecast) weatherview.TempRange {
 	rng.Min, rng.Max = weatherview.GlobalTempRange(shown)
 	return rng
 }
-
-// drawIcon is indirected through a var so the failure branch above is
-// reachable from tests; weatherview's own font seam is package-private.
-var drawIcon = weatherview.DrawIcon

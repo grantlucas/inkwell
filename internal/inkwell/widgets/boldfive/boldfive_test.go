@@ -6,7 +6,9 @@ import (
 	"image"
 	"math"
 	nethttp "net/http"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -261,13 +263,26 @@ func TestWidget_DryDayStillDrawsAChart(t *testing.T) {
 
 	for i, col := range computeColumns(image.Rect(0, 0, 800, 480)) {
 		chart := columnChart(col)
-		// Above the baseline and its ticks, so the axis alone does not
-		// count: only the temperature line can ink the plot of a dry day.
-		plot := image.Rect(chart.Min.X, chart.Min.Y, chart.Max.X, chart.Max.Y-chartLabelH-4)
+		// Above the baseline, so the axis alone does not count: only the
+		// temperature line can ink the plot of a dry day.
+		plot := image.Rect(chart.Min.X, chart.Min.Y, chart.Max.X, chartBaseline(t, frame, chart))
 		if countIndexIn(frame, plot, widget.PaperBlack) == 0 {
 			t.Errorf("column %d: a dry day drew nothing in its chart plot", i)
 		}
 	}
+}
+
+// chartBaseline is the first row of chart that is solid PaperBlack from
+// edge to edge: the rule the bars stand on.
+func chartBaseline(t *testing.T, frame *image.Paletted, chart image.Rectangle) int {
+	t.Helper()
+	for y := chart.Min.Y; y < chart.Max.Y; y++ {
+		if countIndexIn(frame, image.Rect(chart.Min.X, y, chart.Max.X, y+1), widget.PaperBlack) == chart.Dx() {
+			return y
+		}
+	}
+	t.Fatalf("no baseline in chart %v", chart)
+	return -1
 }
 
 // topInkRow is the first row in r carrying PaperBlack in column x, or -1.
@@ -483,9 +498,23 @@ func TestWidget_Golden(t *testing.T) {
 	}
 }
 
+// typedDeps is what the app hands every widget: one transport behind both
+// the calendar fetch and the shared weather provider.
+func typedDeps(client *recordingTransport) widget.Deps {
+	return widget.Deps{
+		Now:        fixedClock(testTime),
+		HTTPClient: client,
+		Weather: weather.NewProvider(client, time.Hour, fixedClock(testTime), weather.Settings{
+			Location: weather.Location{Latitude: 43.25, Longitude: -79.87},
+			TempUnit: "C",
+			Model:    weather.ModelGEM,
+		}),
+	}
+}
+
 func TestFactory(t *testing.T) {
 	cfg := map[string]any{"feeds": []any{"https://example.com/a.ics"}}
-	w, err := Factory(image.Rect(0, 0, 800, 480), cfg, widget.Deps{Now: fixedClock(testTime)})
+	w, err := Factory(image.Rect(0, 0, 800, 480), cfg, typedDeps(&recordingTransport{}))
 	if err != nil {
 		t.Fatalf("Factory: %v", err)
 	}
@@ -495,7 +524,7 @@ func TestFactory(t *testing.T) {
 }
 
 func TestFactory_InvalidConfig(t *testing.T) {
-	_, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{}, widget.Deps{})
+	_, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{}, typedDeps(&recordingTransport{}))
 	if err == nil {
 		t.Fatal("expected an error for missing feeds")
 	}
@@ -504,12 +533,25 @@ func TestFactory_InvalidConfig(t *testing.T) {
 	}
 }
 
+// A widget built without its dependencies fails instead of falling back
+// to a default HTTP client the app never chose.
+func TestFactory_MissingDeps(t *testing.T) {
+	_, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{
+		"feeds": []any{"https://example.com/a.ics"},
+	}, widget.Deps{Now: fixedClock(testTime)})
+	if err == nil || !strings.Contains(err.Error(), "bold-five: no HTTP client") {
+		t.Errorf("error = %v, want a missing HTTP client error", err)
+	}
+}
+
 // With no clock injected the widget falls back to the wall clock rather
 // than a zero time, which would render the epoch.
 func TestFactory_DefaultsTheClock(t *testing.T) {
+	deps := typedDeps(&recordingTransport{})
+	deps.Now = nil
 	w, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{
 		"feeds": []any{"https://example.com/a.ics"},
-	}, widget.Deps{})
+	}, deps)
 	if err != nil {
 		t.Fatalf("Factory: %v", err)
 	}
@@ -518,78 +560,52 @@ func TestFactory_DefaultsTheClock(t *testing.T) {
 	}
 }
 
-// An injected weather_source wins over the shared provider, which is
-// what lets a test drive the widget without a network.
-func TestFactory_UsesInjectedWeatherSource(t *testing.T) {
-	ws := &stubWeatherSource{forecast: sampleForecast()}
+// The calendar feed goes out through the injected client, and the forecast
+// through the shared provider at its default location, so a dashboard sets
+// its location once at the top level.
+func TestFactory_FetchesThroughTypedDeps(t *testing.T) {
+	client := &recordingTransport{}
 	w, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{
 		"feeds": []any{"https://example.com/a.ics"},
-	}, widget.Deps{
-		Now:         fixedClock(testTime),
-		DataSources: map[string]any{"weather_source": weather.Source(ws)},
-	})
-	if err != nil {
-		t.Fatalf("Factory: %v", err)
-	}
-	if w.(*Widget).weather != weather.Source(ws) {
-		t.Error("injected weather_source was not used")
-	}
-}
-
-// An injected HTTP client must reach the calendar source, or tests and
-// custom transports would silently fall back to http.DefaultClient.
-func TestFactory_UsesInjectedHTTPClient(t *testing.T) {
-	client := &stubHTTPClient{}
-	w, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{
-		"feeds": []any{"https://example.com/a.ics"},
-	}, widget.Deps{
-		Now:         fixedClock(testTime),
-		DataSources: map[string]any{"http_client": calendar.HTTPClient(client)},
-	})
+	}, typedDeps(client))
 	if err != nil {
 		t.Fatalf("Factory: %v", err)
 	}
 	renderToFrame(t, w.(*Widget))
-	if !client.called {
-		t.Error("the injected HTTP client was never used")
+
+	if !client.requested("https://example.com/a.ics") {
+		t.Errorf("calendar feed not fetched through the injected client; requests: %v", client.urls())
+	}
+	if !client.requested("api.open-meteo.com/v1/gem", "latitude=43.2500") {
+		t.Errorf("forecast not fetched through the shared provider; requests: %v", client.urls())
 	}
 }
 
-// stubHTTPClient records that the calendar source reached for it.
-type stubHTTPClient struct{ called bool }
+// recordingTransport records every URL it is asked for and answers none,
+// so a test can see what a widget fetched without a network.
+type recordingTransport struct {
+	mu   sync.Mutex
+	seen []string
+}
 
-func (s *stubHTTPClient) Do(_ *nethttp.Request) (*nethttp.Response, error) {
-	s.called = true
+func (r *recordingTransport) Do(req *nethttp.Request) (*nethttp.Response, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.seen = append(r.seen, req.URL.String())
 	return nil, context.DeadlineExceeded
 }
 
-// With no weather_source injected, the widget draws from the shared
-// provider bound to its resolved model, so every weather widget on the
-// dashboard deduplicates fetches through one cache.
-func TestFactory_UsesSharedProvider(t *testing.T) {
-	provider := weather.NewProvider(nil, time.Hour, time.Now, weather.Settings{
-		Location: weather.Location{Latitude: 43.25, Longitude: -79.87},
-		TempUnit: "C",
-		Model:    weather.ModelGEM,
+func (r *recordingTransport) urls() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.seen)
+}
+
+// requested reports whether any one request carried every fragment.
+func (r *recordingTransport) requested(fragments ...string) bool {
+	return slices.ContainsFunc(r.urls(), func(u string) bool {
+		return !slices.ContainsFunc(fragments, func(f string) bool { return !strings.Contains(u, f) })
 	})
-	w, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{
-		"feeds": []any{"https://example.com/a.ics"},
-	}, widget.Deps{
-		Now:         fixedClock(testTime),
-		DataSources: map[string]any{"weather": provider},
-	})
-	if err != nil {
-		t.Fatalf("Factory: %v", err)
-	}
-	bw := w.(*Widget)
-	if bw.weather == nil {
-		t.Fatal("no weather source taken from the provider")
-	}
-	// The provider's defaults reach the widget, so a dashboard sets
-	// location once at the top level.
-	if bw.config.Weather.Latitude != 43.25 {
-		t.Errorf("Latitude = %v, want the provider default", bw.config.Weather.Latitude)
-	}
 }
 
 // Every renderer places content at a fixed offset from its band's top,
