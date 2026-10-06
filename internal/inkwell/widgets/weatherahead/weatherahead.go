@@ -17,7 +17,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
@@ -86,7 +86,7 @@ var (
 
 // Widget renders the weather for the days after today.
 type Widget struct {
-	daygrid.Base
+	daydata.Base
 	// Config is the widget's parsed settings: the shared ones Base holds
 	// as well, and its own.
 	Config Config
@@ -94,8 +94,8 @@ type Widget struct {
 
 // New creates a weather-ahead Widget listing cfg.Days days after today
 // from days.
-func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg Config) *Widget {
-	return &Widget{Base: daygrid.NewBase(bounds, days, now, cfg.Config), Config: cfg}
+func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg Config) *Widget {
+	return &Widget{Base: daydata.NewBase(bounds, days, now, cfg.Config), Config: cfg}
 }
 
 // Render draws one row per day after today, splitting the bounds' height
@@ -140,7 +140,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 // sharedRange is the temperature range across the rows that have a
 // forecast. It leaves today out: today is another widget's, and its
 // range would squash these charts for a day this widget doesn't show.
-func sharedRange(rows []daygrid.Day) weatherview.TempRange {
+func sharedRange(rows []daydata.Day) weatherview.TempRange {
 	var known []weather.DailyForecast
 	for _, d := range rows {
 		if d.Forecast != nil {
@@ -152,7 +152,7 @@ func sharedRange(rows []daygrid.Day) weatherview.TempRange {
 
 // renderRow draws one day into r: its title, then its weather, with the
 // text block centred down the row.
-func renderRow(frame *image.Paletted, r image.Rectangle, d daygrid.Day, unit string, rng weatherview.TempRange) {
+func renderRow(frame *image.Paletted, r image.Rectangle, d daydata.Day, unit string, rng weatherview.TempRange) {
 	x := r.Min.X + padX
 	top := r.Min.Y + (r.Dy()-tempBaseline)/2
 	drawkit.DrawText(frame, x, top+titleBaseline,

@@ -1,4 +1,4 @@
-package daygrid_test
+package daydata_test
 
 import (
 	"strings"
@@ -6,20 +6,20 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 )
 
 // listing is a calendar widget that lists events, three by default.
-var listing = daygrid.Spec{Widget: "test-widget", MaxEvents: 3}
+var listing = daydata.Spec{Widget: "test-widget", MaxEvents: 3}
 
 // weatherOnly is a widget that draws the forecast and no events.
-var weatherOnly = daygrid.Spec{Widget: "test-widget", WeatherOnly: true}
+var weatherOnly = daydata.Spec{Widget: "test-widget", WeatherOnly: true}
 
 // calendarOnly is a widget that lists events and draws no forecast.
-var calendarOnly = daygrid.Spec{Widget: "test-widget", MaxEvents: 3, CalendarOnly: true}
+var calendarOnly = daydata.Spec{Widget: "test-widget", MaxEvents: 3, CalendarOnly: true}
 
 // oneDay is a widget that draws a single day, today or one after it.
-var oneDay = daygrid.Spec{Widget: "test-widget", WeatherOnly: true, OneDay: true}
+var oneDay = daydata.Spec{Widget: "test-widget", WeatherOnly: true, OneDay: true}
 
 // topLevel is the dashboard's top-level weather settings.
 var topLevel = weather.NewProvider(nil, time.Hour, nil, weather.Settings{
@@ -54,14 +54,14 @@ func withRule(rule map[string]any) map[string]any { return withRules([]any{rule}
 func TestParseConfig_Accepts(t *testing.T) {
 	tests := []struct {
 		label   string
-		spec    daygrid.Spec
+		spec    daydata.Spec
 		raw     map[string]any
 		inherit *weather.Provider
-		check   func(*testing.T, daygrid.Config)
+		check   func(*testing.T, daydata.Config)
 	}{
 		{
 			label: "defaults", spec: listing, raw: feedsAnd("", nil), inherit: topLevel,
-			check: func(t *testing.T, c daygrid.Config) {
+			check: func(t *testing.T, c daydata.Config) {
 				if len(c.Feeds) != 1 || c.Feeds[0].URL != feedA {
 					t.Errorf("Feeds = %+v", c.Feeds)
 				}
@@ -72,7 +72,7 @@ func TestParseConfig_Accepts(t *testing.T) {
 		},
 		{
 			label: "the top-level weather settings are inherited", spec: listing, raw: feedsAnd("", nil), inherit: topLevel,
-			check: func(t *testing.T, c daygrid.Config) {
+			check: func(t *testing.T, c daydata.Config) {
 				w := c.Weather
 				if w.Latitude != 43.25 || w.Longitude != -79.87 || w.TempUnit != "F" || w.Model != weather.ModelGEM {
 					t.Errorf("Weather = %+v, want the top-level settings", w)
@@ -84,7 +84,7 @@ func TestParseConfig_Accepts(t *testing.T) {
 			raw: map[string]any{
 				"feeds": []any{feedA}, "latitude": 0.0, "longitude": 2.5, "temp_unit": "C", "weather_model": "ecmwf",
 			},
-			check: func(t *testing.T, c daygrid.Config) {
+			check: func(t *testing.T, c daydata.Config) {
 				w := c.Weather
 				// Zero is a real latitude, so setting it overrides too.
 				if w.Latitude != 0 || w.Longitude != 2.5 || w.TempUnit != "C" || w.Model != weather.ModelECMWF {
@@ -96,7 +96,7 @@ func TestParseConfig_Accepts(t *testing.T) {
 			// A blank unit would draw a bare number, which says less
 			// than the wrong scale would.
 			label: "Celsius with no top-level settings", spec: listing, raw: feedsAnd("", nil), inherit: nil,
-			check: func(t *testing.T, c daygrid.Config) {
+			check: func(t *testing.T, c daydata.Config) {
 				if c.Weather.TempUnit != "C" {
 					t.Errorf("TempUnit = %q, want C", c.Weather.TempUnit)
 				}
@@ -104,7 +104,7 @@ func TestParseConfig_Accepts(t *testing.T) {
 		},
 		{
 			label: "refresh", spec: listing, raw: feedsAnd("refresh", "30m"), inherit: topLevel,
-			check: func(t *testing.T, c daygrid.Config) {
+			check: func(t *testing.T, c daydata.Config) {
 				if c.Refresh != 30*time.Minute {
 					t.Errorf("Refresh = %v", c.Refresh)
 				}
@@ -112,7 +112,7 @@ func TestParseConfig_Accepts(t *testing.T) {
 		},
 		{
 			label: "max_events", spec: listing, raw: feedsAnd("max_events", 2), inherit: topLevel,
-			check: func(t *testing.T, c daygrid.Config) {
+			check: func(t *testing.T, c daydata.Config) {
 				if c.MaxEvents != 2 {
 					t.Errorf("MaxEvents = %d", c.MaxEvents)
 				}
@@ -120,7 +120,7 @@ func TestParseConfig_Accepts(t *testing.T) {
 		},
 		{
 			label: "show_location", spec: listing, raw: feedsAnd("show_location", true), inherit: topLevel,
-			check: func(t *testing.T, c daygrid.Config) {
+			check: func(t *testing.T, c daydata.Config) {
 				if !c.ShowLocation {
 					t.Error("ShowLocation = false")
 				}
@@ -139,7 +139,7 @@ func TestParseConfig_Accepts(t *testing.T) {
 				}},
 				map[string]any{"url": feedA, "name": "Labelled"},
 			}},
-			check: func(t *testing.T, c daygrid.Config) {
+			check: func(t *testing.T, c daydata.Config) {
 				f := c.Feeds
 				if len(f) != 3 {
 					t.Fatalf("Feeds = %+v, want 3", f)
@@ -157,9 +157,9 @@ func TestParseConfig_Accepts(t *testing.T) {
 		},
 		{
 			label: "a key the widget declares as its own", inherit: topLevel,
-			spec: daygrid.Spec{Widget: "test-widget", MaxEvents: 3, Extra: []string{"days"}},
+			spec: daydata.Spec{Widget: "test-widget", MaxEvents: 3, Extra: []string{"days"}},
 			raw:  feedsAnd("days", 7),
-			check: func(*testing.T, daygrid.Config) {
+			check: func(*testing.T, daydata.Config) {
 			},
 		},
 		{
@@ -167,7 +167,7 @@ func TestParseConfig_Accepts(t *testing.T) {
 			// put in feeds; the weather settings work as they do anywhere.
 			label: "a weather-only widget needs no feeds", spec: weatherOnly, inherit: topLevel,
 			raw: map[string]any{"latitude": 51.5, "temp_unit": "C"},
-			check: func(t *testing.T, c daygrid.Config) {
+			check: func(t *testing.T, c daydata.Config) {
 				if len(c.Feeds) != 0 {
 					t.Errorf("Feeds = %+v, want none", c.Feeds)
 				}
@@ -179,7 +179,7 @@ func TestParseConfig_Accepts(t *testing.T) {
 		},
 		{
 			label: "a weather-only widget with no settings at all", spec: weatherOnly, raw: nil, inherit: topLevel,
-			check: func(t *testing.T, c daygrid.Config) {
+			check: func(t *testing.T, c daydata.Config) {
 				if c.Weather.TempUnit != "F" {
 					t.Errorf("TempUnit = %q, want the top level's F", c.Weather.TempUnit)
 				}
@@ -187,15 +187,15 @@ func TestParseConfig_Accepts(t *testing.T) {
 		},
 		{
 			label: "a weather-only widget's own key", inherit: topLevel,
-			spec: daygrid.Spec{Widget: "test-widget", WeatherOnly: true, Extra: []string{"days"}},
+			spec: daydata.Spec{Widget: "test-widget", WeatherOnly: true, Extra: []string{"days"}},
 			raw:  map[string]any{"days": 4},
-			check: func(*testing.T, daygrid.Config) {
+			check: func(*testing.T, daydata.Config) {
 			},
 		},
 		{
 			// A widget placed for one day draws today unless told which.
 			label: "a one-day widget draws today by default", spec: oneDay, raw: nil, inherit: topLevel,
-			check: func(t *testing.T, c daygrid.Config) {
+			check: func(t *testing.T, c daydata.Config) {
 				if c.Day != 0 {
 					t.Errorf("Day = %d, want 0", c.Day)
 				}
@@ -203,7 +203,7 @@ func TestParseConfig_Accepts(t *testing.T) {
 		},
 		{
 			label: "a one-day widget's day", spec: oneDay, raw: map[string]any{"day": 6}, inherit: topLevel,
-			check: func(t *testing.T, c daygrid.Config) {
+			check: func(t *testing.T, c daydata.Config) {
 				if c.Day != 6 {
 					t.Errorf("Day = %d, want 6", c.Day)
 				}
@@ -212,7 +212,7 @@ func TestParseConfig_Accepts(t *testing.T) {
 		{
 			// An event list reads no forecast, so it has no weather to set.
 			label: "a calendar-only widget", spec: calendarOnly, raw: feedsAnd("max_events", 2), inherit: topLevel,
-			check: func(t *testing.T, c daygrid.Config) {
+			check: func(t *testing.T, c daydata.Config) {
 				if len(c.Feeds) != 1 || c.MaxEvents != 2 {
 					t.Errorf("Feeds, MaxEvents = %+v, %d", c.Feeds, c.MaxEvents)
 				}
@@ -220,12 +220,12 @@ func TestParseConfig_Accepts(t *testing.T) {
 		},
 		{
 			// The example config's bold-five screen.
-			label: "an existing bold-five config", spec: daygrid.Spec{Widget: "bold-five", MaxEvents: 4}, inherit: topLevel,
+			label: "an existing bold-five config", spec: daydata.Spec{Widget: "bold-five", MaxEvents: 4}, inherit: topLevel,
 			raw: map[string]any{
 				"feeds": []any{"https://example.com/my-calendar.ics"}, "max_events": 3,
 				"show_location": false, "refresh": "15m", "temp_unit": "F", "weather_model": "ecmwf",
 			},
-			check: func(t *testing.T, c daygrid.Config) {
+			check: func(t *testing.T, c daydata.Config) {
 				if c.MaxEvents != 3 || c.Weather.TempUnit != "F" || c.Weather.Model != weather.ModelECMWF {
 					t.Errorf("Config = %+v", c)
 				}
@@ -234,7 +234,7 @@ func TestParseConfig_Accepts(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			cfg, err := daygrid.ParseConfig(tt.spec, tt.raw, tt.inherit)
+			cfg, err := daydata.ParseConfig(tt.spec, tt.raw, tt.inherit)
 			if err != nil {
 				t.Fatalf("ParseConfig: %v", err)
 			}
@@ -248,14 +248,14 @@ func TestParseConfig_Accepts(t *testing.T) {
 // misspelling, is rejected rather than ignored.
 func TestParseConfig_Rejects(t *testing.T) {
 	const accepted = "(accepted: feeds, latitude, longitude, max_events, refresh, show_location, temp_unit, weather_model)"
-	noMaxEvents := daygrid.Spec{Widget: "test-widget"}
-	explains := daygrid.Spec{Widget: "test-widget", MaxEvents: 3, Rejected: map[string]string{
+	noMaxEvents := daydata.Spec{Widget: "test-widget"}
+	explains := daydata.Spec{Widget: "test-widget", MaxEvents: 3, Rejected: map[string]string{
 		"days": "always five columns",
 	}}
 
 	tests := []struct {
 		label string
-		spec  daygrid.Spec
+		spec  daydata.Spec
 		raw   map[string]any
 		want  string
 	}{
@@ -339,7 +339,7 @@ func TestParseConfig_Rejects(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			_, err := daygrid.ParseConfig(tt.spec, tt.raw, topLevel)
+			_, err := daydata.ParseConfig(tt.spec, tt.raw, topLevel)
 			if err == nil {
 				t.Fatal("expected an error")
 			}

@@ -6,7 +6,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
@@ -39,7 +39,7 @@ type placement struct {
 // a block filling the window, clipped at both ends, and for today it is
 // as good as all day, so it's listed as one. A timed event that starts
 // or ends today, even one crossing a midnight, is a block like any other.
-func place(today daygrid.Day, start, end time.Time) placement {
+func place(today daydata.Day, start, end time.Time) placement {
 	var p placement
 	for _, e := range today.Events {
 		switch {

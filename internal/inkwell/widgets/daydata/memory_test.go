@@ -1,4 +1,4 @@
-package daygrid_test
+package daydata_test
 
 import (
 	"slices"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
@@ -28,7 +28,7 @@ func TestInMemory(t *testing.T) {
 		{Date: at(17, 0), High: 9, Low: -2},
 	}
 
-	got := daygrid.InMemory(events, forecast).Days(now, 3)
+	got := daydata.InMemory(events, forecast).Days(now, 3)
 
 	if g := dayEvents(got); !slices.Equal(g, []string{"Standup", "", "Dentist"}) {
 		t.Errorf("events by day = %q", g)
@@ -65,7 +65,7 @@ func TestInMemory_ForecastArrived(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			if got := daygrid.InMemory(nil, tt.forecast).Days(now, 3).ForecastArrived; got != tt.want {
+			if got := daydata.InMemory(nil, tt.forecast).Days(now, 3).ForecastArrived; got != tt.want {
 				t.Errorf("ForecastArrived = %v, want %v", got, tt.want)
 			}
 		})

@@ -10,7 +10,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
@@ -40,7 +40,7 @@ func defaultConfig() Config {
 }
 
 func newWidget(bounds image.Rectangle, events []ical.Event, cfg Config) *Widget {
-	return New(bounds, daygrid.InMemory(events, nil), fixedClock(testTime), cfg)
+	return New(bounds, daydata.InMemory(events, nil), fixedClock(testTime), cfg)
 }
 
 func newTestFrame() *image.Paletted {
@@ -636,7 +636,7 @@ func TestWidget_LabelTimeIsInTheDisplayZone(t *testing.T) {
 	e := span("Call", time.Date(2026, 3, 16, 19, 0, 0, 0, time.UTC), time.Date(2026, 3, 16, 20, 0, 0, 0, time.UTC))
 
 	frame := newTestFrame()
-	w := New(testBounds, daygrid.InMemory([]ical.Event{e}, nil), fixedClock(now), defaultConfig())
+	w := New(testBounds, daydata.InMemory([]ical.Event{e}, nil), fixedClock(now), defaultConfig())
 	if err := w.Render(frame); err != nil {
 		t.Fatal(err)
 	}
@@ -879,7 +879,7 @@ func TestWidget_Golden(t *testing.T) {
 			if now.IsZero() {
 				now = testTime
 			}
-			w := New(testBounds, daygrid.InMemory(tt.events, tt.forecast), fixedClock(now), cfg)
+			w := New(testBounds, daydata.InMemory(tt.events, tt.forecast), fixedClock(now), cfg)
 			testutil.AssertGoldenPNG(t, renderToFrame(t, w))
 		})
 	}
@@ -1046,7 +1046,7 @@ func TestWidget_CountsEventsOutsideTheWindow(t *testing.T) {
 func TestWidget_DrawsNoBlockForEventsOutsideTheWindow(t *testing.T) {
 	events := []ical.Event{span("Gym", at(5, 0), at(7, 0)), span("Late call", at(22, 0), at(23, 0))}
 	// Late in the evening, so no now marker crosses the column either.
-	w := New(testBounds, daygrid.InMemory(events, nil), fixedClock(at(23, 30)), defaultConfig())
+	w := New(testBounds, daydata.InMemory(events, nil), fixedClock(at(23, 30)), defaultConfig())
 	frame := renderToFrame(t, w)
 	l := computeLayout(testBounds, sections{Earlier: true, Later: true})
 

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
@@ -21,22 +21,22 @@ var _ widget.Widget = (*Widget)(nil)
 // Config is the day-badge widget's parsed configuration: the weather
 // settings and day every one-day widget shares, and its style.
 type Config struct {
-	daygrid.Config
+	daydata.Config
 	// Style is the shape the badge is drawn in.
 	Style Style
 }
 
 // Widget is one day's badge placed on a screen on its own.
 type Widget struct {
-	daygrid.Base
+	daydata.Base
 	// Config is the widget's parsed settings: the shared ones Base holds
 	// as well, and its own.
 	Config Config
 }
 
 // New creates a day-badge Widget drawing cfg.Day's badge from days.
-func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg Config) *Widget {
-	return &Widget{Base: daygrid.NewBase(bounds, days, now, cfg.Config), Config: cfg}
+func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg Config) *Widget {
+	return &Widget{Base: daydata.NewBase(bounds, days, now, cfg.Config), Config: cfg}
 }
 
 // Render draws the day's badge at the top-left of the widget's bounds.
@@ -65,7 +65,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 
 // spec declares day-badge to the shared parser: the weather settings, day
 // and its own style.
-var spec = daygrid.Spec{
+var spec = daydata.Spec{
 	Widget:      widgetName,
 	WeatherOnly: true,
 	OneDay:      true,
@@ -76,7 +76,7 @@ var spec = daygrid.Spec{
 // inheriting weather settings from the top level through deps, then the
 // style.
 func parseConfig(raw map[string]any, deps widget.Deps) (Config, error) {
-	shared, err := daygrid.ParseConfig(spec, raw, deps.Weather)
+	shared, err := daydata.ParseConfig(spec, raw, deps.Weather)
 	cfg := Config{Config: shared, Style: Column}
 	if err != nil {
 		return cfg, err
@@ -102,7 +102,7 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 	if err != nil {
 		return nil, err
 	}
-	days, err := daygrid.New(widgetName, cfg.Config, deps)
+	days, err := daydata.New(widgetName, cfg.Config, deps)
 	if err != nil {
 		return nil, err
 	}

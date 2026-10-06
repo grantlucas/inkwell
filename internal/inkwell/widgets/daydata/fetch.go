@@ -1,4 +1,4 @@
-package daygrid
+package daydata
 
 import (
 	"context"

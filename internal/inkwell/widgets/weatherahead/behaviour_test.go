@@ -6,7 +6,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
@@ -28,11 +28,11 @@ func TestWidget_SharedRangeIsTheRowsOwn(t *testing.T) {
 		{label: "a freezing friday", forecast: week(today, day{weather.Snow, -15, -25, 0.5}), wantMoved: true},
 	}
 	cfg := config(3, "C")
-	base := render(t, New(goldenBox, daygrid.InMemory(nil, week(today, mildFriday)), fixedClock(testTime), cfg))
+	base := render(t, New(goldenBox, daydata.InMemory(nil, week(today, mildFriday)), fixedClock(testTime), cfg))
 	firstRow := image.Rect(0, 0, goldenBox.Dx(), goldenBox.Dy()/3)
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			got := render(t, New(goldenBox, daygrid.InMemory(nil, tt.forecast), fixedClock(testTime), cfg))
+			got := render(t, New(goldenBox, daydata.InMemory(nil, tt.forecast), fixedClock(testTime), cfg))
 			if moved := differs(base, got, firstRow); moved != tt.wantMoved {
 				t.Errorf("first row changed = %v, want %v", moved, tt.wantMoved)
 			}
@@ -109,7 +109,7 @@ func TestWidget_StaysInsideItsBounds(t *testing.T) {
 			t.Run(p.label+" "+f.label, func(t *testing.T) {
 				frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
 				paintOutside(frame, p.bounds)
-				w := New(p.bounds, daygrid.InMemory(nil, f.forecast), fixedClock(testTime), config(p.days, f.unit))
+				w := New(p.bounds, daydata.InMemory(nil, f.forecast), fixedClock(testTime), config(p.days, f.unit))
 				if err := w.Render(frame); err != nil {
 					t.Fatalf("Render: %v", err)
 				}
@@ -143,7 +143,7 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			w := New(tt.bounds, daygrid.InMemory(nil, mixedWeek), fixedClock(testTime), config(tt.days, "C"))
+			w := New(tt.bounds, daydata.InMemory(nil, mixedWeek), fixedClock(testTime), config(tt.days, "C"))
 			if inked(render(t, w), tt.bounds) {
 				t.Error("drew into bounds too small to hold the rows")
 			}
@@ -161,7 +161,7 @@ func TestWidget_NoLargeFixedFill(t *testing.T) {
 	} {
 		t.Run(cond.Label(), func(t *testing.T) {
 			wet := day{cond, -12, -18, 1}
-			w := New(goldenBox, daygrid.InMemory(nil, forecast(today, wet, wet, wet, wet)), fixedClock(testTime), config(4, "C"))
+			w := New(goldenBox, daydata.InMemory(nil, forecast(today, wet, wet, wet, wet)), fixedClock(testTime), config(4, "C"))
 			if hasSolidSquare(render(t, w), 20) {
 				t.Error("found a solid black 20x20 block — a fixed fill is a burn-in risk")
 			}

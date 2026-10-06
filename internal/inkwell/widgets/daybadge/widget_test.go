@@ -11,7 +11,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daybadge"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 )
 
 func fixedClock(t time.Time) func() time.Time { return func() time.Time { return t } }
@@ -27,11 +27,11 @@ func week() []weather.DailyForecast {
 }
 
 func badgeConfig(s daybadge.Style, d int, unit string) daybadge.Config {
-	return daybadge.Config{Config: daygrid.Config{Day: d, Weather: daygrid.WeatherConfig{TempUnit: unit}}, Style: s}
+	return daybadge.Config{Config: daydata.Config{Day: d, Weather: daydata.WeatherConfig{TempUnit: unit}}, Style: s}
 }
 
 func newBadge(bounds image.Rectangle, forecast []weather.DailyForecast, cfg daybadge.Config) *daybadge.Widget {
-	return daybadge.New(bounds, daygrid.InMemory(nil, forecast), fixedClock(testTime), cfg)
+	return daybadge.New(bounds, daydata.InMemory(nil, forecast), fixedClock(testTime), cfg)
 }
 
 // blackFrame is a frame inked solid, standing in for the widgets around

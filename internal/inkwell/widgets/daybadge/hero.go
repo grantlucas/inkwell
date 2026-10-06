@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/fuzzyclock"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
@@ -59,7 +59,7 @@ const (
 // refresh is a burn-in risk on this panel, and today is already obvious
 // from being the left column, so it carries no fill or outline at all
 // (CLAUDE.md). The rule is what still separates it from the weather.
-func drawHero(frame *image.Paletted, r image.Rectangle, day daygrid.Day, now time.Time, unit string) {
+func drawHero(frame *image.Paletted, r image.Rectangle, day daydata.Day, now time.Time, unit string) {
 	x := r.Min.X + heroPadX
 	drawkit.Scaled(drawkit.BodyBoldFace, heroDateScale, widget.PaperBlack).Draw(
 		frame, x, r.Min.Y+heroDateBase,

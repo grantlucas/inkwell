@@ -107,7 +107,7 @@ type feedCache struct {
 // The fetch runs under the first caller's ctx while the lock is held, so
 // a waiter can't give up on its own ctx; it waits for that fetch to
 // finish. That wait is bounded because every caller goes through
-// the day data module (daygrid), whose fetch always sets a deadline. A caller
+// the day data module (daydata), whose fetch always sets a deadline. A caller
 // without one would make the others wait as long as the upstream takes.
 func (c *feedCache) events(ctx context.Context, p *Provider, url string, refresh time.Duration) ([]Event, error) {
 	c.mu.Lock()

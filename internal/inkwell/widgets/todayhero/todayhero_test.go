@@ -12,7 +12,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil/fakehttp"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
@@ -124,12 +124,12 @@ func sampleEvents() []ical.Event {
 }
 
 // drawConfig is a config with the knobs today-hero draws with.
-func drawConfig(unit string, showLocation bool) daygrid.Config {
-	return daygrid.Config{MaxEvents: defaultMaxEvents, ShowLocation: showLocation, Weather: daygrid.WeatherConfig{TempUnit: unit}}
+func drawConfig(unit string, showLocation bool) daydata.Config {
+	return daydata.Config{MaxEvents: defaultMaxEvents, ShowLocation: showLocation, Weather: daydata.WeatherConfig{TempUnit: unit}}
 }
 
 func newWidget(events []ical.Event, forecast []weather.DailyForecast, clock time.Time) *Widget {
-	return New(image.Rect(0, 0, 800, 480), daygrid.InMemory(events, forecast), fixedClock(clock), drawConfig("C", false))
+	return New(image.Rect(0, 0, 800, 480), daydata.InMemory(events, forecast), fixedClock(clock), drawConfig("C", false))
 }
 
 func renderToFrame(t *testing.T, w *Widget) *image.Paletted {
@@ -357,7 +357,7 @@ func TestWidget_DayRowListsThreeAndSaysHowManyMore(t *testing.T) {
 	cfg := drawConfig("C", false)
 	cfg.MaxEvents = 6
 	panel := image.Rect(0, 0, 800, 480)
-	frame := renderToFrame(t, New(panel, daygrid.InMemory(events, nil), fixedClock(testTime), cfg))
+	frame := renderToFrame(t, New(panel, daydata.InMemory(events, nil), fixedClock(testTime), cfg))
 
 	// Tuesday is tomorrow, the first row.
 	row := computeDayRows(panel)[0]
@@ -431,7 +431,7 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 			}
 			drawkit.FillRect(frame, neighbour, widget.PaperGray70)
 
-			w := New(tt.bounds, daygrid.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), drawConfig("C", false))
+			w := New(tt.bounds, daydata.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), drawConfig("C", false))
 			if err := w.Render(frame); err != nil {
 				t.Fatalf("Render: %v", err)
 			}
@@ -508,13 +508,13 @@ func TestWidget_Golden(t *testing.T) {
 			if clock.IsZero() {
 				clock = testTime
 			}
-			w := New(image.Rect(0, 0, 800, 480), daygrid.InMemory(tt.events, tt.forecast), fixedClock(clock), drawConfig(unit, tt.location))
+			w := New(image.Rect(0, 0, 800, 480), daydata.InMemory(tt.events, tt.forecast), fixedClock(clock), drawConfig(unit, tt.location))
 			testutil.AssertGoldenPNG(t, renderToFrame(t, w))
 		})
 	}
 }
 
-// Factory is the shared day-widget factory, tested in daygrid: parsing
+// Factory is the shared day-widget factory, tested in daydata: parsing
 // the shared settings, building the day data and taking the clock. What is
 // today-hero's own is its default event cap, that it takes the example config, and the reasons it gives for settings it has no use for.
 func TestFactory(t *testing.T) {

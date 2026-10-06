@@ -13,7 +13,7 @@ import (
 	"image"
 	"time"
 
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 )
 
 // Style is one of the shapes a day badge is drawn in.
@@ -84,7 +84,7 @@ func (s Style) Size() image.Point {
 // A day the forecast doesn't reach still names the day but draws no
 // weather: a zero would state a temperature nobody forecast. Nothing is
 // highlighted on today, which is shown by position (CLAUDE.md).
-func (s Style) Draw(frame *image.Paletted, r image.Rectangle, day daygrid.Day, now time.Time, unit string) {
+func (s Style) Draw(frame *image.Paletted, r image.Rectangle, day daydata.Day, now time.Time, unit string) {
 	switch s {
 	case Column:
 		drawColumn(frame, r, day, unit)

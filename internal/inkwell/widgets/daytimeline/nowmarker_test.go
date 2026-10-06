@@ -7,7 +7,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar/ical"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
@@ -88,7 +88,7 @@ func TestNowMarker_PassesBehindALabel(t *testing.T) {
 	l, tl := gridOf(testBounds, defaultConfig().Window)
 	block := blockRect(l.Events, tl, e)
 	render := func(now time.Time) *image.Paletted {
-		return renderToFrame(t, New(testBounds, daygrid.InMemory([]ical.Event{e}, nil), fixedClock(now), defaultConfig()))
+		return renderToFrame(t, New(testBounds, daydata.InMemory([]ical.Event{e}, nil), fixedClock(now), defaultConfig()))
 	}
 	// The "UNTIL 17:00" line's caps sit a line under the first's.
 	until := labelBaseline(block) + drawkit.BodyLineH() - capH/2
@@ -130,7 +130,7 @@ func TestNowMarker_IsPaperThroughASolidBlock(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			w := New(testBounds, daygrid.InMemory(tt.events, nil), fixedClock(now), defaultConfig())
+			w := New(testBounds, daydata.InMemory(tt.events, nil), fixedClock(now), defaultConfig())
 			frame := renderToFrame(t, w)
 			l, tl := gridOf(testBounds, defaultConfig().Window)
 			blocks := arrange(tt.events, l.Events, tl).Blocks

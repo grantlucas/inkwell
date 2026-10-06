@@ -14,7 +14,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
@@ -68,13 +68,13 @@ func highDrawer() fonts.ScaledDrawer {
 
 // Widget renders today's weather.
 type Widget struct {
-	daygrid.Base
+	daydata.Base
 }
 
 // New creates a today-weather Widget drawing today from days. Of cfg it
 // reads only the temperature unit.
-func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg daygrid.Config) *Widget {
-	return &Widget{daygrid.NewBase(bounds, days, now, cfg)}
+func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg daydata.Config) *Widget {
+	return &Widget{daydata.NewBase(bounds, days, now, cfg)}
 }
 
 // Render draws today's icon, high, low and condition, centred down the
@@ -133,4 +133,4 @@ func renderForecast(frame *image.Paletted, b image.Rectangle, day weather.DailyF
 }
 
 // Factory creates a today-weather Widget from config and dependencies.
-var Factory = daygrid.Factory(spec, New)
+var Factory = daydata.Factory(spec, New)

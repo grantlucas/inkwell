@@ -7,7 +7,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
@@ -44,7 +44,7 @@ func TestRenderHeroAgenda_TooNarrowToList(t *testing.T) {
 // has no room for an event, nor for the "+N MORE" line.
 func TestRenderDayRow_ListEndsAboveTheRule(t *testing.T) {
 	row := image.Rect(0, 0, 800, rowPadX+drawkit.BodyLineH())
-	day := daygrid.Day{
+	day := daydata.Day{
 		Start:  time.Date(2026, 3, 17, 0, 0, 0, 0, time.UTC),
 		Events: []calendar.Event{{Summary: "Dentist", Start: time.Date(2026, 3, 17, 10, 0, 0, 0, time.UTC)}},
 	}

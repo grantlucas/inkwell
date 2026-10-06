@@ -11,7 +11,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/combinedchart"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
@@ -58,7 +58,7 @@ func week() []weather.DailyForecast {
 }
 
 func chartConfig(d, rangeDays int) combinedchart.Config {
-	return combinedchart.Config{Config: daygrid.Config{Day: d}, RangeDays: rangeDays}
+	return combinedchart.Config{Config: daydata.Config{Day: d}, RangeDays: rangeDays}
 }
 
 func render(t *testing.T, w *combinedchart.Widget) *image.Paletted {
@@ -89,7 +89,7 @@ func TestWidget_DrawsItsDaysChart(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			w := combinedchart.New(bounds, daygrid.InMemory(nil, week()), fixedClock(testTime), tt.cfg)
+			w := combinedchart.New(bounds, daydata.InMemory(nil, week()), fixedClock(testTime), tt.cfg)
 			got := render(t, w)
 
 			want := image.NewPaletted(got.Bounds(), widget.PaperPalette)
@@ -112,7 +112,7 @@ func TestWidget_NoForecastDrawsNothing(t *testing.T) {
 			frame.SetColorIndex(x, y, widget.PaperBlack)
 		}
 	}
-	w := combinedchart.New(bounds, daygrid.InMemory(nil, week()[:2]), fixedClock(testTime), chartConfig(3, 5))
+	w := combinedchart.New(bounds, daydata.InMemory(nil, week()[:2]), fixedClock(testTime), chartConfig(3, 5))
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestWidget_Golden(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			w := combinedchart.New(tt.bounds, daygrid.InMemory(nil, week()), fixedClock(testTime), tt.cfg)
+			w := combinedchart.New(tt.bounds, daydata.InMemory(nil, week()), fixedClock(testTime), tt.cfg)
 			frame := image.NewPaletted(tt.bounds, widget.PaperPalette)
 			if err := w.Render(frame); err != nil {
 				t.Fatalf("Render: %v", err)

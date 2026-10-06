@@ -7,7 +7,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daybadge"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
@@ -16,14 +16,14 @@ var _ widget.Widget = (*Widget)(nil)
 
 // Widget renders the today-hero screen.
 type Widget struct {
-	daygrid.Base
+	daydata.Base
 }
 
 // New creates a today-hero Widget drawing the days from days. Of cfg it
 // reads only how events are listed and the temperature unit; where the
 // days come from is the day data module's business.
-func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg daygrid.Config) *Widget {
-	return &Widget{daygrid.NewBase(bounds, days, now, cfg)}
+func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg daydata.Config) *Widget {
+	return &Widget{daydata.NewBase(bounds, days, now, cfg)}
 }
 
 // Render draws today down the left and the next four days as rows down
@@ -84,4 +84,4 @@ func (w *Widget) Render(frame *image.Paletted) error {
 // Factory creates a today-hero Widget from config and dependencies. Its
 // settings are the ones every calendar widget shares, so a screen can be
 // swapped between calendar widgets without rewriting its config.
-var Factory = daygrid.Factory(spec, New)
+var Factory = daydata.Factory(spec, New)

@@ -6,7 +6,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daybadge"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
@@ -48,7 +48,7 @@ type dayRowOptions struct {
 // row cannot carry a legible bar chart *and* a legible title side by
 // side, and titles dropped to about 12 characters. Stacked under the
 // date it costs the agenda nothing.
-func renderDayRow(frame *image.Paletted, bounds image.Rectangle, day daygrid.Day, opts dayRowOptions) {
+func renderDayRow(frame *image.Paletted, bounds image.Rectangle, day daydata.Day, opts dayRowOptions) {
 	daybadge.Compact.Draw(frame, rowBadge(bounds), day, opts.Now, opts.TempUnit)
 	renderRowChart(frame, rowChart(bounds), day.Forecast, opts.TempRange)
 	opts.Agenda.Draw(frame, rowAgenda(bounds), day.Events)

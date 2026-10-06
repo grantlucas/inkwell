@@ -1,6 +1,6 @@
 package todayweather
 
-import "github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+import "github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 
 // widgetName prefixes every config error so a dashboard that fails to
 // load says which widget rejected it.
@@ -11,7 +11,7 @@ const widgetName = "today-weather"
 // the calendar. weather-ahead's days is explained rather than listed as
 // unknown, because the two sit side by side and a key copied between them
 // is the likely mistake.
-var spec = daygrid.Spec{
+var spec = daydata.Spec{
 	Widget:      widgetName,
 	WeatherOnly: true,
 	Rejected: map[string]string{

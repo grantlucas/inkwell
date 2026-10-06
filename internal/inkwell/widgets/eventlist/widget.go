@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
@@ -28,7 +28,7 @@ var _ widget.Widget = (*Widget)(nil)
 // Config is the event-list widget's parsed configuration: the calendar
 // settings and day every one-day widget shares, and its own.
 type Config struct {
-	daygrid.Config
+	daydata.Config
 	// Preset is the shape the events are listed in.
 	Preset Preset
 	// HideFinished drops events that finished before now, for a list of
@@ -43,15 +43,15 @@ type Config struct {
 // events, listed into its bounds in one of the presets the full-screen
 // widgets list in.
 type Widget struct {
-	daygrid.Base
+	daydata.Base
 	// Config is the widget's parsed settings: the shared ones Base holds
 	// as well, and its own.
 	Config Config
 }
 
 // New creates an event-list Widget listing cfg.Day's events from days.
-func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg Config) *Widget {
-	return &Widget{Base: daygrid.NewBase(bounds, days, now, cfg.Config), Config: cfg}
+func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg Config) *Widget {
+	return &Widget{Base: daydata.NewBase(bounds, days, now, cfg.Config), Config: cfg}
 }
 
 // Render lists the day's events into the widget's bounds. The list keeps
@@ -95,7 +95,7 @@ func parseConfig(raw map[string]any) (Config, error) {
 		}
 	}
 
-	shared, err := daygrid.ParseConfig(daygrid.Spec{
+	shared, err := daydata.ParseConfig(daydata.Spec{
 		Widget:       widgetName,
 		MaxEvents:    defaultMaxEvents[cfg.Preset],
 		Extra:        ownKeys,
@@ -130,7 +130,7 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 	if err != nil {
 		return nil, err
 	}
-	days, err := daygrid.New(widgetName, cfg.Config, deps, daygrid.WithoutWeather())
+	days, err := daydata.New(widgetName, cfg.Config, deps, daydata.WithoutWeather())
 	if err != nil {
 		return nil, err
 	}

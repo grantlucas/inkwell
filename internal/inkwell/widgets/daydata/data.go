@@ -1,4 +1,4 @@
-// Package daygrid is the day data module every day widget draws from. A
+// Package daydata is the day data module every day widget draws from. A
 // widget parses its settings with ParseConfig, builds its module with New,
 // and on each render asks it for n days from now: each day's date, whether
 // it is Today, its events and its forecast, plus the shared temperature
@@ -16,7 +16,7 @@
 // Every error message takes a widget name, so a dashboard that fails to
 // load still says which widget rejected the config. The text and rule
 // helpers the day widgets draw with are drawkit's.
-package daygrid
+package daydata
 
 import (
 	"time"

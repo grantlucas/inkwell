@@ -9,7 +9,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 )
 
 // testTime is a Monday mid-afternoon, so the rows start on Tuesday.
@@ -78,7 +78,7 @@ var mixedWeek = forecast(
 
 // config is the parsed config with days rows in unit.
 func config(days int, unit string) Config {
-	return Config{Config: daygrid.Config{Weather: daygrid.WeatherConfig{TempUnit: unit}}, Days: days}
+	return Config{Config: daydata.Config{Weather: daydata.WeatherConfig{TempUnit: unit}}, Days: days}
 }
 
 // render draws the widget into a frame exactly its size.
@@ -132,7 +132,7 @@ func TestWidget_Golden(t *testing.T) {
 			if bounds.Empty() {
 				bounds = goldenBox
 			}
-			w := New(bounds, daygrid.InMemory(nil, tt.forecast), fixedClock(testTime), tt.cfg)
+			w := New(bounds, daydata.InMemory(nil, tt.forecast), fixedClock(testTime), tt.cfg)
 			testutil.AssertGoldenPNG(t, render(t, w))
 		})
 	}

@@ -7,7 +7,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 )
 
 // forecastToday is today's forecast with every hour's temperature and
@@ -49,7 +49,7 @@ func constant(v float64) func(int) float64 { return func(int) float64 { return v
 // renderWeather renders the widget over today's forecast, at now.
 func renderWeather(t *testing.T, forecast []weather.DailyForecast, cfg Config, now time.Time) *image.Paletted {
 	t.Helper()
-	w := New(testBounds, daygrid.InMemory(nil, forecast), fixedClock(now), cfg)
+	w := New(testBounds, daydata.InMemory(nil, forecast), fixedClock(now), cfg)
 	return renderToFrame(t, w)
 }
 

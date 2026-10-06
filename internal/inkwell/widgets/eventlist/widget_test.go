@@ -10,7 +10,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil/fakehttp"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
 
@@ -47,13 +47,13 @@ var (
 // listConfig is a parsed config listing day in preset.
 func listConfig(preset eventlist.Preset, day, maxEvents int) eventlist.Config {
 	return eventlist.Config{
-		Config: daygrid.Config{MaxEvents: maxEvents, Day: day},
+		Config: daydata.Config{MaxEvents: maxEvents, Day: day},
 		Preset: preset,
 	}
 }
 
 func newList(bounds image.Rectangle, events []calendar.Event, cfg eventlist.Config) *eventlist.Widget {
-	return eventlist.New(bounds, daygrid.InMemory(events, nil), fixedClock(widgetTime), cfg)
+	return eventlist.New(bounds, daydata.InMemory(events, nil), fixedClock(widgetTime), cfg)
 }
 
 func renderList(t *testing.T, w *eventlist.Widget, size image.Rectangle) *image.Paletted {
@@ -84,10 +84,10 @@ func TestWidget_ListsItsDay(t *testing.T) {
 		{"tomorrow", listConfig(eventlist.PresetInline, 1, 3), []calendar.Event{allWeek, dentist}, ""},
 		{"capped at max_events", listConfig(eventlist.PresetLarge, 0, 2), []calendar.Event{allWeek, standup, review, dinner}, ""},
 		{"only what is left of today", eventlist.Config{
-			Config: daygrid.Config{MaxEvents: 3}, Preset: eventlist.PresetLarge, HideFinished: true,
+			Config: daydata.Config{MaxEvents: 3}, Preset: eventlist.PresetLarge, HideFinished: true,
 		}, []calendar.Event{allWeek, review, dinner}, ""},
 		{"an empty day says what the config says", eventlist.Config{
-			Config: daygrid.Config{MaxEvents: 3, Day: 3}, Preset: eventlist.PresetLarge, Empty: str("ALL CLEAR"),
+			Config: daydata.Config{MaxEvents: 3, Day: 3}, Preset: eventlist.PresetLarge, Empty: str("ALL CLEAR"),
 		}, nil, "ALL CLEAR"},
 		{"an empty day says the preset's note", listConfig(eventlist.PresetInline, 3, 3), nil, ""},
 	}
@@ -150,7 +150,7 @@ func TestWidget_Golden(t *testing.T) {
 	}{
 		{"stacked in a bold-five column", listConfig(eventlist.PresetStacked, 0, 4), image.Rect(0, 0, 148, 272)},
 		{"large for what is left of today", eventlist.Config{
-			Config: daygrid.Config{MaxEvents: 3}, Preset: eventlist.PresetLarge, HideFinished: true,
+			Config: daydata.Config{MaxEvents: 3}, Preset: eventlist.PresetLarge, HideFinished: true,
 		}, image.Rect(0, 0, 310, 198)},
 		{"inline for tomorrow", listConfig(eventlist.PresetInline, 1, 3), image.Rect(0, 0, 440, 96)},
 		{"stacked on an empty day", listConfig(eventlist.PresetStacked, 3, 4), image.Rect(0, 0, 148, 272)},

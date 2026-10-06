@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
@@ -18,15 +18,15 @@ var _ widget.Widget = (*Widget)(nil)
 
 // Widget renders the day-timeline.
 type Widget struct {
-	daygrid.Base
+	daydata.Base
 	// Window is the span of today the grid shows.
 	Window Window
 }
 
 // New creates a day-timeline Widget drawing today from days over the
 // window cfg sets.
-func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg Config) *Widget {
-	return &Widget{Base: daygrid.NewBase(bounds, days, now, cfg.Config), Window: cfg.Window}
+func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg Config) *Widget {
+	return &Widget{Base: daydata.NewBase(bounds, days, now, cfg.Config), Window: cfg.Window}
 }
 
 // Render draws today's hourly grid.
@@ -95,14 +95,14 @@ func (w *Widget) Render(frame *image.Paletted) error {
 }
 
 // Factory creates a day-timeline Widget from config and dependencies. It
-// doesn't use daygrid.Factory: the window keys are its own, and the
+// doesn't use daydata.Factory: the window keys are its own, and the
 // shared factory never hands a widget its raw config.
 func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
 	cfg, err := parseConfig(config, deps.Weather)
 	if err != nil {
 		return nil, err
 	}
-	days, err := daygrid.New(widgetName, cfg.Config, deps)
+	days, err := daydata.New(widgetName, cfg.Config, deps)
 	if err != nil {
 		return nil, err
 	}

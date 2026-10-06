@@ -1,6 +1,6 @@
 package boldfive
 
-import "github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+import "github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 
 const (
 	// defaultMaxEvents is four rather than weekly's five: the taller
@@ -18,7 +18,7 @@ const (
 // show_weather: false would draw a weather band the operator explicitly
 // turned off, which looks like a bug in the widget rather than a key that
 // did not carry over.
-var spec = daygrid.Spec{
+var spec = daydata.Spec{
 	Widget:    widgetName,
 	MaxEvents: defaultMaxEvents,
 	Rejected: map[string]string{

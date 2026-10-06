@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
@@ -58,7 +58,7 @@ const (
 // panel. The high is body size, not scaled: the badge cannot hold a
 // 38 px icon, a display-sized temperature and a legible chart at once,
 // and the 3x date numeral already carries the row at distance.
-func drawRow(frame *image.Paletted, r image.Rectangle, day daygrid.Day, unit string) {
+func drawRow(frame *image.Paletted, r image.Rectangle, day daydata.Day, unit string) {
 	x := r.Min.X + rowPadX
 	numeral := fmt.Sprintf("%d", day.Start.Day())
 	drawer := drawkit.Scaled(drawkit.BodyBoldFace, rowScale, widget.PaperBlack)

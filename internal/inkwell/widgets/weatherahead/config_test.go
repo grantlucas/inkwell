@@ -10,7 +10,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil/fakehttp"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 )
 
 // The widget shows only the weather, so it takes the weather settings
@@ -129,7 +129,7 @@ func TestWidget_FetchFailureSaysNoForecast(t *testing.T) {
 			if tr.Total() == 0 {
 				t.Fatal("the forecast was never asked for")
 			}
-			want := render(t, New(goldenBox, daygrid.InMemory(nil, nil), fixedClock(testTime), config(4, "C")))
+			want := render(t, New(goldenBox, daydata.InMemory(nil, nil), fixedClock(testTime), config(4, "C")))
 			if !slices.Equal(got.Pix, want.Pix) {
 				t.Error("a failed fetch drew something other than the no-forecast state")
 			}

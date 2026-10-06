@@ -11,7 +11,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daybadge"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
@@ -33,8 +33,8 @@ func forecastFor(i int, cond weather.Condition, high, low float64) *weather.Dail
 }
 
 // dayAt is March 16+i as the day data module builds it from testTime.
-func dayAt(i int, f *weather.DailyForecast) daygrid.Day {
-	return daygrid.Day{Start: time.Date(2026, 3, 16+i, 0, 0, 0, 0, time.UTC), IsToday: i == 0, Forecast: f}
+func dayAt(i int, f *weather.DailyForecast) daydata.Day {
+	return daydata.Day{Start: time.Date(2026, 3, 16+i, 0, 0, 0, 0, time.UTC), IsToday: i == 0, Forecast: f}
 }
 
 func newFrame() *image.Paletted {
@@ -47,7 +47,7 @@ func at(s daybadge.Style) image.Rectangle {
 	return image.Rectangle{Min: image.Pt(40, 30), Max: image.Pt(40, 30).Add(s.Size())}
 }
 
-func draw(s daybadge.Style, d daygrid.Day, unit string) *image.Paletted {
+func draw(s daybadge.Style, d daydata.Day, unit string) *image.Paletted {
 	frame := newFrame()
 	s.Draw(frame, at(s), d, testTime, unit)
 	return frame

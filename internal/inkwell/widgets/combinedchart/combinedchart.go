@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
@@ -32,7 +32,7 @@ const widgetName = "combined-chart"
 const defaultRangeDays = 5
 
 // maxRangeDays is a week from today, the furthest a chart can be placed.
-const maxRangeDays = daygrid.MaxDay + 1
+const maxRangeDays = daydata.MaxDay + 1
 
 var _ widget.Widget = (*Widget)(nil)
 
@@ -40,7 +40,7 @@ var _ widget.Widget = (*Widget)(nil)
 // settings and day every one-day widget shares, and the span its
 // temperature range covers.
 type Config struct {
-	daygrid.Config
+	daydata.Config
 	// RangeDays is how many days from today the shared temperature range
 	// spans. It always reaches Day.
 	RangeDays int
@@ -48,15 +48,15 @@ type Config struct {
 
 // Widget is one day's combined chart placed on a screen on its own.
 type Widget struct {
-	daygrid.Base
+	daydata.Base
 	// Config is the widget's parsed settings: the shared ones Base holds
 	// as well, and its own.
 	Config Config
 }
 
 // New creates a combined-chart Widget drawing cfg.Day's chart from days.
-func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg Config) *Widget {
-	return &Widget{Base: daygrid.NewBase(bounds, days, now, cfg.Config), Config: cfg}
+func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg Config) *Widget {
+	return &Widget{Base: daydata.NewBase(bounds, days, now, cfg.Config), Config: cfg}
 }
 
 // Render draws the day's combined chart into the widget's bounds, on the
@@ -84,7 +84,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 
 // spec declares combined-chart to the shared parser: the weather settings,
 // day, and its own range_days.
-var spec = daygrid.Spec{
+var spec = daydata.Spec{
 	Widget:      widgetName,
 	WeatherOnly: true,
 	OneDay:      true,
@@ -95,7 +95,7 @@ var spec = daygrid.Spec{
 // inheriting weather settings from the top level through deps, then
 // range_days, which must reach the chart's own day.
 func parseConfig(raw map[string]any, deps widget.Deps) (Config, error) {
-	shared, err := daygrid.ParseConfig(spec, raw, deps.Weather)
+	shared, err := daydata.ParseConfig(spec, raw, deps.Weather)
 	cfg := Config{Config: shared, RangeDays: defaultRangeDays}
 	if err != nil {
 		return cfg, err
@@ -124,7 +124,7 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 	if err != nil {
 		return nil, err
 	}
-	days, err := daygrid.New(widgetName, cfg.Config, deps)
+	days, err := daydata.New(widgetName, cfg.Config, deps)
 	if err != nil {
 		return nil, err
 	}
