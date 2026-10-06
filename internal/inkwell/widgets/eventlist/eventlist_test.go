@@ -392,31 +392,6 @@ func TestDraw_LargeTimeStaysInsideTheList(t *testing.T) {
 
 func growAt(scale int) int { return daygrid.Scaled(bold, scale, widget.PaperBlack).Grow }
 
-// Truncate cuts on characters and marks the cut with » when there is
-// room for one.
-func TestTruncate(t *testing.T) {
-	tests := []struct {
-		label    string
-		in       string
-		maxChars int
-		want     string
-	}{
-		{"fits", "Standup", 10, "Standup"},
-		{"exactly fits", "Standup", 7, "Standup"},
-		{"cut with »", "Standup", 5, "Stan»"},
-		{"cut on characters", "Ñandúñandú", 6, "Ñandú»"},
-		{"no room for »", "Standup", 1, "S"},
-		{"no room at all", "Standup", 0, ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.label, func(t *testing.T) {
-			if got := eventlist.Truncate(tt.in, tt.maxChars); got != tt.want {
-				t.Errorf("Truncate(%q, %d) = %q, want %q", tt.in, tt.maxChars, got, tt.want)
-			}
-		})
-	}
-}
-
 // An event is as tall as whichever of its lines reaches lowest: the
 // title's descent, or the time's when there is no title or the title
 // is tucked close under a large time. A large time's descent is scaled

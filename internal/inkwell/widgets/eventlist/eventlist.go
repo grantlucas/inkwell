@@ -3,10 +3,9 @@
 // for the events that do not. Widgets that list events through it write
 // them the same way and say how many they hid the same way.
 //
-// bold-five and today-hero's hero agenda list through it today, with
-// the stacked layout. row-agenda and today-hero's day rows still draw
-// their own inline lines. weekly-calendar never will; it is being
-// retired.
+// bold-five and today-hero's hero agenda list through it with the
+// stacked layout, row-agenda and today-hero's day rows with the inline
+// one. weekly-calendar never will; it is being retired.
 package eventlist
 
 import (
@@ -22,8 +21,9 @@ import (
 	"golang.org/x/image/font"
 )
 
-// MinChars is the narrowest list, in body characters, that draws
-// anything. A widget with an empty-day message draws it only from this
+// MinChars is the narrowest stacked list, in body characters, that
+// draws anything, and the least room an inline title is drawn in. A
+// widget that draws its own empty-day message draws it only from this
 // width up too, so the list and its empty state give out together.
 const MinChars = 3
 
@@ -84,9 +84,9 @@ type text struct {
 	baseline int
 }
 
-// block is one event, or the "+N MORE" line, resolved to the exact lines
-// it draws, so the draw pass never re-wraps and cannot disagree with the
-// measurement that decided it fit.
+// block is one event, the "+N MORE" line or the Empty line, resolved to
+// the exact lines it draws, so the draw pass never re-wraps and cannot
+// disagree with the measurement that decided it fit.
 type block struct {
 	lines []text
 	// rows is how many lines of text the block takes down the list. An
@@ -111,8 +111,8 @@ type placed struct {
 // or not at all. When not every event is drawn, the last visible line
 // is "+N MORE", counting every event not shown. A time without room to
 // be drawn whole is left off, since a clock time cut short reads as a
-// different time. An empty list draws nothing: what an empty day says is
-// the widget's.
+// different time. An empty list draws the style's Empty line, or nothing
+// when there is none.
 func (s Style) Draw(frame *image.Paletted, r image.Rectangle, events []calendar.Event) int {
 	blocks, hidden := s.layout(r, events)
 	for i, b := range blocks {
@@ -130,8 +130,9 @@ func (s Style) Draw(frame *image.Paletted, r image.Rectangle, events []calendar.
 // Lines reports how many lines events need to be drawn in full at width
 // pixels: every listed event's lines (a stacked event's time and title
 // lines, an inline event's one), and the "+N MORE" line when MaxEvents
-// hides any. A line is one row of text, whatever size it is drawn at. A
-// width too narrow to draw into needs none.
+// hides any. An empty list needs its Empty line, if it has one. A line
+// is one row of text, whatever size it is drawn at. A width too narrow
+// to draw into needs none.
 func (s Style) Lines(events []calendar.Event, width int) int {
 	if _, ok := s.charsIn(width); !ok {
 		return 0
@@ -246,11 +247,11 @@ func (s Style) inline(e calendar.Event, width int) block {
 	col := timeColumn()
 	title := ""
 	if chars := (width - col) / daygrid.BodyAdvance(); chars >= MinChars {
-		title = Truncate(strings.TrimSpace(s.Title(e)), chars)
+		title = truncate(strings.TrimSpace(s.title(e)), chars)
 	}
 	return block{
 		lines: []text{
-			{s: s.TimeLabel(e), drawer: body(daygrid.BodyFace), baseline: ascent},
+			{s: s.timeLabel(e), drawer: body(daygrid.BodyFace), baseline: ascent},
 			{s: title, drawer: body(daygrid.BodyFace), dx: col, baseline: ascent},
 		},
 		rows:   1,
@@ -291,7 +292,7 @@ func (s Style) stacked(e calendar.Event, width int) block {
 	if lead <= 0 {
 		lead = lineH
 	}
-	for i, l := range wrap(s.Title(e), maxChars, max(s.TitleLines, 1)) {
+	for i, l := range wrap(s.title(e), maxChars, max(s.TitleLines, 1)) {
 		if i == 0 {
 			baseline += lead
 		} else {
@@ -310,7 +311,7 @@ func (s Style) stacked(e calendar.Event, width int) block {
 // and nothing when it does not: a clock time cut short reads as a
 // different time ("0" for 09:00), which is worse than no time at all.
 func (s Style) timeText(e calendar.Event, maxChars int) string {
-	label := s.TimeLabel(e)
+	label := s.timeLabel(e)
 	if runeLen(label) > maxChars {
 		return ""
 	}
@@ -331,7 +332,7 @@ func marker(hidden, maxChars int) block {
 func note(s string, face font.Face, maxChars int) block {
 	return block{
 		lines: []text{{
-			s:        Truncate(s, maxChars),
+			s:        truncate(s, maxChars),
 			drawer:   body(face),
 			baseline: daygrid.BodyAscent(),
 		}},

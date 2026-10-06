@@ -13,12 +13,7 @@ import (
 // been cut. U+00BB is in the range and actually draws.
 const ellipsis = "»"
 
-// The text rules are exported only for today-hero's day rows, which
-// write events inline until #146 gives the module an inline layout.
-// Once nothing outside the package calls them they go back to being
-// unexported.
-
-// TimeLabel is the event's clock label: "ALL DAY", or a 24-hour time in
+// timeLabel is the event's clock label: "ALL DAY", or a 24-hour time in
 // the style's Location. Times stay precise (16:15, not "quarter past
 // four"): they are data, not a clock, and fuzzing them would lose real
 // information for no refresh benefit.
@@ -26,16 +21,16 @@ const ellipsis = "»"
 // A parsed Event.Start is a correct instant but carries whatever zone
 // its feed serialized it with, so it is converted to the display zone
 // before it is written.
-func (s Style) TimeLabel(e calendar.Event) string {
+func (s Style) timeLabel(e calendar.Event) string {
 	if e.AllDay {
 		return "ALL DAY"
 	}
 	return e.Start.In(s.Location).Format("15:04")
 }
 
-// Title is the event's summary, followed by " @ " and where it is when
+// title is the event's summary, followed by " @ " and where it is when
 // the style shows locations and the event has one.
-func (s Style) Title(e calendar.Event) string {
+func (s Style) title(e calendar.Event) string {
 	if s.ShowLocation && e.Location != "" {
 		return e.Summary + " @ " + e.Location
 	}
@@ -81,7 +76,7 @@ func wrap(text string, maxChars, maxLines int) []string {
 
 	if len(split) > maxLines {
 		split = split[:maxLines]
-		split[maxLines-1] = Truncate(split[maxLines-1]+ellipsis, maxChars)
+		split[maxLines-1] = truncate(split[maxLines-1]+ellipsis, maxChars)
 	}
 	return split
 }
@@ -89,15 +84,13 @@ func wrap(text string, maxChars, maxLines int) []string {
 // runeLen counts characters, the unit every text budget here is in.
 func runeLen(s string) int { return utf8.RuneCountInString(s) }
 
-// Truncate shortens s to maxChars characters, marking the cut with »
-// when there is room for one. It counts runes, never bytes.
-func Truncate(s string, maxChars int) string {
+// truncate shortens s to maxChars characters, marking the cut with ».
+// It counts runes, never bytes. Every caller has at least MinChars to
+// give it, so there is always room for the mark.
+func truncate(s string, maxChars int) string {
 	r := []rune(s)
 	if len(r) <= maxChars {
 		return s
-	}
-	if maxChars <= 1 {
-		return string(r[:maxChars])
 	}
 	return string(r[:maxChars-1]) + ellipsis
 }
