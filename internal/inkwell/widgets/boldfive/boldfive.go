@@ -49,6 +49,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	// serialized them with, so they still need converting.
 	now := w.now()
 	data := w.days.Days(now, columns)
+	events := eventStyle(w.config.MaxEvents, w.config.ShowLocation, now.Location())
 
 	for i, col := range computeColumns(w.bounds) {
 		day := data.Days[i]
@@ -65,11 +66,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 			NowHour:       now.Hour(),
 		})
 
-		renderEvents(frame, col.Events, day.Events, eventOptions{
-			MaxEvents:    w.config.MaxEvents,
-			ShowLocation: w.config.ShowLocation,
-			Location:     now.Location(),
-		})
+		renderEvents(frame, col.Events, day.Events, events)
 
 		if !col.IsLast {
 			// Solid PaperBlack: a PaperGrayNN hairline snaps to white
