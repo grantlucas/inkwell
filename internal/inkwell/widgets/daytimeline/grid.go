@@ -19,8 +19,9 @@ const (
 )
 
 // drawGrid draws the hour grid: a two-digit label for each hour in the
-// gutter, a dotted rule across the event column at each hour, solid
-// rules at the window's edges, and a rule down the gutter's edge.
+// gutter, a dotted rule across the lane and events at each hour, solid
+// rules at the window's edges, and a rule down the grid between the
+// labels and lane on its left and the events on its right.
 //
 // When the rows are shorter than a line of text, as a whole-day window
 // makes them, every other hour is labelled so the labels don't run into
@@ -45,7 +46,7 @@ func drawGrid(frame *image.Paletted, l layout, tl timeline, win Window) {
 				fmt.Sprintf("%02d", win.StartHour+h), daygrid.BodyBoldFace, widget.PaperBlack)
 		}
 	}
-	daygrid.DrawVLine(frame, l.Gutter.Max.X-1, l.Grid.Min.Y, tl.bottom+1, widget.PaperBlack)
+	daygrid.DrawVLine(frame, l.Lane.Max.X, l.Grid.Min.Y, l.Grid.Max.Y, widget.PaperBlack)
 }
 
 // hourAt is the wall-clock hour h hours after the window opens at start.

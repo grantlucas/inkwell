@@ -2,6 +2,7 @@ package daytimeline
 
 import (
 	"image"
+	"maps"
 	"testing"
 	"time"
 
@@ -83,9 +84,7 @@ func TestFactory_Window(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			config := map[string]any{"feeds": feed}
-			for k, v := range tt.window {
-				config[k] = v
-			}
+			maps.Copy(config, tt.window)
 			w, err := Factory(image.Rect(0, 0, 500, 432), config, deps)
 			if tt.wantErr != "" {
 				if err == nil || err.Error() != tt.wantErr {

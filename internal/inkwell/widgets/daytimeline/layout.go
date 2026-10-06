@@ -13,9 +13,12 @@ const (
 	gridPadY = 2
 	// gutterW is the hour-label column: two digits and a little paper on
 	// each side.
-	gutterW = 30
-	// eventsPadX is the paper between the gutter rule and the blocks,
-	// and between the blocks and the right edge.
+	gutterW = 29
+	// ruleW is the solid rule between the labels and lane on its left
+	// and the events on its right.
+	ruleW = 1
+	// eventsPadX is the paper between the rule and the blocks, and
+	// between the blocks and the right edge.
 	eventsPadX = 4
 
 	// The widget will not draw into less than this. Below it the hour
@@ -38,23 +41,26 @@ type sections struct {
 	Later   bool
 }
 
-// layout is where each part of the widget goes.
+// layout is where each part of the widget goes. Across the grid, left to
+// right: the hour labels, the weather lane, a rule, then the events.
 type layout struct {
 	// Earlier and Later are the note bands above and below the grid,
 	// empty when nothing falls outside the window on that side.
 	Earlier, Later image.Rectangle
-	// Grid is the hour grid: the gutter and the event column.
+	// Grid is the hour grid, every column of it.
 	Grid image.Rectangle
 	// Gutter is the hour-label column on the grid's left.
 	Gutter image.Rectangle
+	// Lane is the weather lane between the labels and the rule, sharing
+	// the grid's rows. It has no width until the lane is drawn.
+	Lane image.Rectangle
 	// Events is the column the blocks are drawn in.
 	Events image.Rectangle
 }
 
 // computeLayout splits the widget's bounds. The agenda is the whole of
-// the bounds for now: the all-day strip comes off its top and the weather
-// lane off its right in later changes, and everything below is laid out
-// inside whatever is left.
+// the bounds for now; the all-day strip comes off its top in a later
+// change, and everything below is laid out inside whatever is left.
 func computeLayout(bounds image.Rectangle, s sections) layout {
 	agenda := bounds
 
@@ -70,7 +76,8 @@ func computeLayout(bounds image.Rectangle, s sections) layout {
 	}
 	l.Grid = image.Rect(agenda.Min.X, top, agenda.Max.X, bottom)
 	l.Gutter = image.Rect(l.Grid.Min.X, top, l.Grid.Min.X+gutterW, bottom)
-	l.Events = image.Rect(l.Gutter.Max.X+eventsPadX, top, l.Grid.Max.X-eventsPadX, bottom)
+	l.Lane = image.Rect(l.Gutter.Max.X, top, l.Gutter.Max.X, bottom)
+	l.Events = image.Rect(l.Lane.Max.X+ruleW+eventsPadX, top, l.Grid.Max.X-eventsPadX, bottom)
 	return l
 }
 

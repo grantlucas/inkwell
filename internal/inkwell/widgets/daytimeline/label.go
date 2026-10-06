@@ -48,7 +48,7 @@ func drawLabel(frame *image.Paletted, inner image.Rectangle, e calendar.Event, l
 	if chars < timeChars || inner.Dy() < capH {
 		return
 	}
-	baseline := inner.Min.Y + min((inner.Dy()-capH)/2, labelMaxPadY) + capH
+	baseline := labelBaseline(inner)
 	daygrid.DrawText(clip, x, baseline, e.Start.In(loc).Format("15:04"), daygrid.BodyBoldFace, ink)
 
 	title := e.Summary
@@ -58,6 +58,22 @@ func drawLabel(frame *image.Paletted, inner image.Rectangle, e calendar.Event, l
 	if room := chars - timeChars - 1; room > 0 {
 		daygrid.DrawText(clip, x+(timeChars+1)*adv, baseline, truncate(title, room), daygrid.BodyFace, ink)
 	}
+
+	// A block with room for a second line says when the event ends: the
+	// block's length only shows it to the nearest few minutes, and an
+	// event cut off at the window's end shows nothing of it at all. Only
+	// whole capitals are drawn, so a block one line tall doesn't carry
+	// the tops of a second.
+	if until := baseline + daygrid.BodyLineH(); until < inner.Max.Y && e.End.After(e.Start) {
+		daygrid.DrawText(clip, x, until, "UNTIL "+e.End.In(loc).Format("15:04"), daygrid.BodyFace, ink)
+	}
+}
+
+// labelBaseline is the baseline of a label's first line in inner: its
+// caps centred in a short block, and a little way under the top of a
+// tall one.
+func labelBaseline(inner image.Rectangle) int {
+	return inner.Min.Y + min((inner.Dy()-capH)/2, labelMaxPadY) + capH
 }
 
 // truncate shortens s to at most n characters, marking a cut with ».

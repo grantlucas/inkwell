@@ -235,6 +235,55 @@ func TestWidget_LabelsBlocks(t *testing.T) {
 	}
 }
 
+// A block with room for a second line says when its event ends, which
+// the block's length only shows approximately. One a line tall doesn't,
+// and neither does a reminder with no end.
+func TestWidget_TallBlocksSayWhenTheyEnd(t *testing.T) {
+	tests := []struct {
+		label     string
+		from, to  time.Time
+		wantUntil string
+	}{
+		{label: "upcoming two hours", from: at(15, 0), to: at(17, 0), wantUntil: "UNTIL 17:00"},
+		{label: "finished two hours", from: at(9, 0), to: at(11, 0), wantUntil: "UNTIL 11:00"},
+		{label: "runs past the window", from: at(20, 0), to: at(25, 0), wantUntil: "UNTIL 01:00"},
+		{label: "one hour", from: at(15, 0), to: at(16, 0)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			e := span("Block", tt.from, tt.to)
+			frame := renderToFrame(t, newWidget(testBounds, []ical.Event{e}, defaultConfig()))
+			l, tl := gridOf(testBounds, defaultConfig().Window)
+			block := blockRect(l.Events, tl, e)
+
+			contrast, inner := widget.PaperWhite, block
+			if finished(e, testTime) {
+				contrast, inner = widget.PaperBlack, block.Inset(outlineW)
+			}
+			// Everything under the first line.
+			below := image.Rect(inner.Min.X, inner.Min.Y+daygrid.BodyLineH(), inner.Max.X-markClear, inner.Max.Y)
+			if tt.wantUntil == "" {
+				if n := countIndexIn(frame, below, contrast); n != 0 {
+					t.Errorf("%d px under the first line of a block with no room for a second", n)
+				}
+				return
+			}
+			// The second line reads exactly the end time, written in
+			// the regular cut at the label's left.
+			ref := newTestFrame()
+			daygrid.FillRect(ref, block, widget.PaperBlack)
+			if finished(e, testTime) {
+				daygrid.FillWhite(ref, inner)
+			}
+			daygrid.DrawText(ref, inner.Min.X+labelPadX, labelBaseline(inner)+daygrid.BodyLineH(),
+				tt.wantUntil, daygrid.BodyFace, contrast)
+			if !sameIn(frame, ref, below) {
+				t.Errorf("second line doesn't read %q", tt.wantUntil)
+			}
+		})
+	}
+}
+
 // A block too short to hold a line of capitals carries no label: the
 // tops of clipped glyphs would read as noise, not words.
 func TestWidget_ShortBlocksAreUnlabelled(t *testing.T) {
@@ -331,6 +380,17 @@ func TestWidget_DrawsAnHourGrid(t *testing.T) {
 			frame := renderToFrame(t, newWidget(testBounds, nil, cfg))
 			l, tl := gridOf(testBounds, tt.win)
 			start, _ := tt.win.on(at(0, 0))
+
+			// A solid rule runs the grid's height between the hour
+			// labels (and the weather lane after them) and the events.
+			ruleX := l.Lane.Max.X
+			if ruleX < l.Gutter.Max.X || ruleX >= l.Events.Min.X {
+				t.Fatalf("rule at x=%d is not between the labels (to %d) and the events (from %d)",
+					ruleX, l.Gutter.Max.X, l.Events.Min.X)
+			}
+			if n := countIndexIn(frame, image.Rect(ruleX, l.Grid.Min.Y, ruleX+1, l.Grid.Max.Y), widget.PaperBlack); n != l.Grid.Dy() {
+				t.Errorf("rule between labels and events is %d/%d px", n, l.Grid.Dy())
+			}
 
 			for h := 0; h <= tt.win.EndHour-tt.win.StartHour; h++ {
 				y := tl.y(start.Add(time.Duration(h) * time.Hour))
