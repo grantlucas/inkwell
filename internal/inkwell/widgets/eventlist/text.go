@@ -92,7 +92,7 @@ func runeLen(s string) int { return utf8.RuneCountInString(s) }
 
 // truncate shortens s to maxChars characters, marking the cut with »
 // when there is room for one. It counts runes, never bytes. Today's
-// callers all give it at least MinChars, but a budget of one or less
+// callers all give it at least minChars, but a budget of one or less
 // cuts without the mark rather than slicing past the start.
 func truncate(s string, maxChars int) string {
 	r := []rune(s)

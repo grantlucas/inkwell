@@ -7,6 +7,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
 
 var _ widget.Widget = (*Widget)(nil)
@@ -56,7 +57,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	renderIdentity(frame, hero.Identity, now)
 	renderHeroWeather(frame, hero.Weather, today.Forecast, unit)
 	renderHeroChart(frame, hero.Chart, today.Forecast, now.Hour(), data.TempRange)
-	renderHeroAgenda(frame, hero.Agenda, remainingToday(today.Events, now), agenda)
+	renderHeroAgenda(frame, hero.Agenda, eventlist.Remaining(today.Events, now), agenda)
 
 	// The divider separates two different kinds of content, so it is
 	// heavier than a column rule and runs the full height.

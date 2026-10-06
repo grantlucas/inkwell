@@ -328,7 +328,8 @@ func TestWidget_BelowHeaderFitsThreeWrappedEventsAndTheCount(t *testing.T) {
 
 	today := computeColumns(belowHeader)[0].Events
 	lineH := daygrid.BodyLineH()
-	moreY := today.Min.Y + eventsTopPad + daygrid.BodyAscent() + 3*(3*lineH+eventsGap)
+	const gap = 8 // the stacked list's paper between events
+	moreY := today.Min.Y + eventsTopPad + daygrid.BodyAscent() + 3*(3*lineH+gap)
 	if !moreLineAt(frame, today, moreY, "+2 MORE") {
 		t.Errorf("no \"+2 MORE\" line under three events at baseline %d", moreY)
 	}

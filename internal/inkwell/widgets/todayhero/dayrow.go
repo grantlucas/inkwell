@@ -120,19 +120,14 @@ func rowChart(row image.Rectangle) image.Rectangle {
 	)
 }
 
-// dayRowStyle is how a row lists its day: inline, a time and a title a
-// line, up to rowMaxEvents of them and then "+N MORE".
+// dayRowStyle is how a row lists its day: the event list's inline preset,
+// a time and a title a line, up to rowMaxEvents of them and then
+// "+N MORE".
 //
 // loc is the zone event clock labels are rendered in. It must never be
 // nil.
 func dayRowStyle(showLocation bool, loc *time.Location) eventlist.Style {
-	return eventlist.Style{
-		Layout:       eventlist.Inline,
-		MaxEvents:    rowMaxEvents,
-		Empty:        eventlist.NothingScheduled,
-		ShowLocation: showLocation,
-		Location:     loc,
-	}
+	return eventlist.PresetInline.Style(rowMaxEvents, showLocation, loc)
 }
 
 // rowAgenda is the rectangle a row's events are listed in: right of the

@@ -531,8 +531,10 @@ func TestDraw_InlineEventText(t *testing.T) {
 		{"title lines do not wrap an inline title", long, eventlist.Style{TitleLines: 3}, 12, "09:00", "Platform ar»"},
 		{"a multi-byte title is cut on characters", timed("Ñandúñandúñandú", 9), eventlist.Style{}, 12, "09:00", "Ñandúñandúñ»"},
 		{"space around a title is dropped", timed("  Standup  ", 9), eventlist.Style{}, 12, "09:00", "Standup"},
-		{"the time is drawn alone with no room for a title", long, eventlist.Style{}, eventlist.MinChars - 1, "09:00", ""},
-		{"a title gets the narrowest room it can use", long, eventlist.Style{}, eventlist.MinChars, "09:00", "Pl»"},
+		// Three characters is the narrowest title the list writes: two and
+		// a » would read as punctuation.
+		{"the time is drawn alone with no room for a title", long, eventlist.Style{}, 2, "09:00", ""},
+		{"a title gets the narrowest room it can use", long, eventlist.Style{}, 3, "09:00", "Pl»"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -551,26 +553,42 @@ func TestDraw_InlineEventText(t *testing.T) {
 	}
 }
 
-// A list with no events says what Empty says, on its first line in the
-// regular cut, cut to the width like every other line. It is held to
-// the same fit rule, and it is a line a caller sizing the list needs.
+// A list with no events says what Empty says, on its first line: in the
+// regular cut at body size, or in the bold cut at a larger scale, from
+// the list's left edge or centred across it, and cut to the width like
+// every other line. It is held to the same fit rule, and it is a line a
+// caller sizing the list needs.
 func TestDraw_Empty(t *testing.T) {
 	adv := daygrid.BodyAdvance()
 	const msg = eventlist.NothingScheduled
+	note := eventlist.Note{Text: msg}
+	done := eventlist.Note{Text: "DONE FOR TODAY", Scale: 2}
+	dash := eventlist.Note{Text: "--", Centred: true}
 	tests := []struct {
 		label  string
 		style  eventlist.Style
 		width  int
 		height int
-		want   string
+		want   line
 		lines  int
 	}{
-		{"an inline list says it", eventlist.Style{Layout: eventlist.Inline, Empty: msg}, 30 * adv, 400, msg, 1},
-		{"a stacked list says it", eventlist.Style{Empty: msg}, 30 * adv, 400, msg, 1},
-		{"it is cut to the width", eventlist.Style{Layout: eventlist.Inline, Empty: msg}, 10 * adv, 400, "NOTHING S»", 1},
-		{"it needs a whole line", eventlist.Style{Layout: eventlist.Inline, Empty: msg}, 30 * adv, lineH - 1, "", 1},
-		{"too narrow for the list, too narrow for it", eventlist.Style{Layout: eventlist.Inline, Empty: msg}, timeColumn - 1, 400, "", 0},
-		{"without one an empty list draws nothing", eventlist.Style{Layout: eventlist.Inline}, 30 * adv, 400, "", 0},
+		{"an inline list says it", eventlist.Style{Layout: eventlist.Inline, Empty: note}, 30 * adv, 400,
+			line{text: msg, face: regular, baseline: ascent}, 1},
+		{"a stacked list says it", eventlist.Style{Empty: note}, 30 * adv, 400,
+			line{text: msg, face: regular, baseline: ascent}, 1},
+		{"it is cut to the width", eventlist.Style{Layout: eventlist.Inline, Empty: note}, 10 * adv, 400,
+			line{text: "NOTHING S»", face: regular, baseline: ascent}, 1},
+		{"it needs a whole line", eventlist.Style{Layout: eventlist.Inline, Empty: note}, 30 * adv, lineH - 1, line{}, 1},
+		{"too narrow for the list, too narrow for it", eventlist.Style{Layout: eventlist.Inline, Empty: note}, timeColumn - 1, 400, line{}, 0},
+		{"without one an empty list draws nothing", eventlist.Style{Layout: eventlist.Inline}, 30 * adv, 400, line{}, 0},
+		{"a scaled one is bold, a scaled ascent down", eventlist.Style{Empty: done}, 30 * adv, 400,
+			line{text: done.Text, face: bold, scale: 2, baseline: 2 * ascent}, 1},
+		{"a scaled one is cut on scaled characters, clear of its dilation", eventlist.Style{Empty: done}, 10*adv + 1, 400,
+			line{text: "DONE»", face: bold, scale: 2, baseline: 2 * ascent}, 1},
+		{"a scaled one needs a scaled line", eventlist.Style{Empty: done}, 30 * adv, 2 * lineH, line{}, 1},
+		{"a centred one sits in the middle of the list", eventlist.Style{Empty: dash}, 30 * adv, 400,
+			line{text: "--", face: regular, x: 14 * adv, baseline: ascent}, 1},
+		{"a stacked list too narrow to list events is too narrow for it", eventlist.Style{Empty: dash}, 3*adv - 1, 400, line{}, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -580,7 +598,7 @@ func TestDraw_Empty(t *testing.T) {
 			if hidden := style.Draw(frame, image.Rect(0, 0, tt.width, tt.height), nil); hidden != 0 {
 				t.Errorf("hidden = %d, want 0", hidden)
 			}
-			assertLines(t, frame, 0, []line{{text: tt.want, face: regular, baseline: ascent}})
+			assertLines(t, frame, 0, []line{tt.want})
 			if got := style.Lines(nil, tt.width); got != tt.lines {
 				t.Errorf("Lines = %d, want %d", got, tt.lines)
 			}
