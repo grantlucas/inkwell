@@ -1,7 +1,12 @@
-// Package eventlist turns a day's events into drawn lines. Every widget
-// that lists events draws them through it, so they all write an event
-// the same way, fit lines by the same rule and say how many events they
-// hid the same way.
+// Package eventlist turns a day's events into drawn lines: how an event
+// is written, one rule for whether a line fits, and one "+N MORE" line
+// for the events that do not. Widgets that list events through it write
+// them the same way and say how many they hid the same way.
+//
+// bold-five and today-hero's hero agenda list through it today, with
+// the stacked layout. row-agenda and today-hero's day rows still draw
+// their own inline lines. weekly-calendar never will; it is being
+// retired.
 package eventlist
 
 import (
@@ -16,8 +21,10 @@ import (
 	"golang.org/x/image/font"
 )
 
-// minChars is the narrowest list, in characters, that draws anything.
-const minChars = 3
+// MinChars is the narrowest list, in body characters, that draws
+// anything. A widget with an empty-day message draws it only from this
+// width up too, so the list and its empty state give out together.
+const MinChars = 3
 
 // Style chooses how a list is laid out and what it shows. The zero value
 // lists every event that fits, stacked: each event's bold time on one
@@ -79,8 +86,10 @@ type placed struct {
 // many it hid. Every line is cut to r's width. A line fits when its whole
 // height, ascent and descent, is inside r, and an event is drawn whole
 // or not at all. When not every event is drawn, the last visible line
-// is "+N MORE", counting every event not shown. An empty list draws
-// nothing: what an empty day says is the widget's.
+// is "+N MORE", counting every event not shown. A time without room to
+// be drawn whole is left off, since a clock time cut short reads as a
+// different time. An empty list draws nothing: what an empty day says is
+// the widget's.
 func (s Style) Draw(frame *image.Paletted, r image.Rectangle, events []calendar.Event) int {
 	blocks, hidden := s.layout(r, events)
 	for i, b := range blocks {
@@ -100,14 +109,13 @@ func (s Style) Draw(frame *image.Paletted, r image.Rectangle, events []calendar.
 // line when MaxEvents hides any. A line is one row of text, whatever
 // size it is drawn at. A width too narrow to draw into needs none.
 func (s Style) Lines(events []calendar.Event, width int) int {
-	maxChars, ok := charsIn(width)
-	if !ok {
+	if _, ok := charsIn(width); !ok {
 		return 0
 	}
 	listed := s.listed(events)
 	n := 0
 	for _, e := range listed {
-		n += len(s.event(e, maxChars).lines)
+		n += len(s.event(e, width).lines)
 	}
 	if len(listed) < len(events) {
 		n++
@@ -116,12 +124,12 @@ func (s Style) Lines(events []calendar.Event, width int) int {
 }
 
 // charsIn is the character budget of a list width pixels wide, and
-// whether it is wide enough to draw anything. Narrower than minChars a
+// whether it is wide enough to draw anything. Narrower than MinChars a
 // title is punctuation, and a column of » reads as a fault rather than
 // as content.
 func charsIn(width int) (int, bool) {
 	maxChars := width / daygrid.BodyAdvance()
-	return maxChars, maxChars >= minChars
+	return maxChars, maxChars >= MinChars
 }
 
 // listed is the events the cap lets through.
@@ -147,7 +155,7 @@ func (s Style) layout(r image.Rectangle, events []calendar.Event) ([]placed, int
 
 	var out []placed
 	for _, e := range s.listed(events) {
-		b, top := s.event(e, maxChars), s.next(out, r)
+		b, top := s.event(e, r.Dx()), s.next(out, r)
 		if !fits(b, top) {
 			break
 		}
@@ -184,19 +192,27 @@ func (s Style) next(out []placed, r image.Rectangle) int {
 }
 
 // event resolves one event to its time line and the title under it.
-func (s Style) event(e calendar.Event, maxChars int) block {
+func (s Style) event(e calendar.Event, width int) block {
+	maxChars := width / daygrid.BodyAdvance()
 	ascent, lineH := daygrid.BodyAscent(), daygrid.BodyLineH()
 	descent := lineH - ascent
 	scale := max(s.TimeScale, 1)
+	timeDrawer := daygrid.Scaled(daygrid.BodyBoldFace, scale, widget.PaperBlack)
+	// Dilation can spill this far past a glyph's cell, so the time is
+	// measured with it below and to the right. Above and to the left the
+	// time keeps to the list's edges, so it lines up with its title:
+	// Tamzen's digits, colon and ALL DAY leave empty rows above them and
+	// an empty first column, more than any grow reaches.
+	grow := timeDrawer.Grow
 
 	baseline := scale * ascent
 	b := block{
 		lines: []text{{
-			s:        Truncate(s.TimeLabel(e), maxChars/scale),
-			drawer:   daygrid.Scaled(daygrid.BodyBoldFace, scale, widget.PaperBlack),
+			s:        s.timeText(e, (width-grow)/(scale*daygrid.BodyAdvance())),
+			drawer:   timeDrawer,
 			baseline: baseline,
 		}},
-		height: baseline + scale*descent,
+		height: baseline + scale*descent + grow,
 	}
 
 	lead := s.TitleLead
@@ -210,9 +226,22 @@ func (s Style) event(e calendar.Event, maxChars int) block {
 			baseline += lineH
 		}
 		b.lines = append(b.lines, text{s: l, drawer: body(daygrid.BodyFace), baseline: baseline})
-		b.height = baseline + descent
+		// Whichever line reaches lowest: a title tucked close under a
+		// large time can end above the time's own descent.
+		b.height = max(b.height, baseline+descent)
 	}
 	return b
+}
+
+// timeText is the event's clock label when it fits whole in maxChars,
+// and nothing when it does not: a clock time cut short reads as a
+// different time ("0" for 09:00), which is worse than no time at all.
+func (s Style) timeText(e calendar.Event, maxChars int) string {
+	label := s.TimeLabel(e)
+	if runeLen(label) > maxChars {
+		return ""
+	}
+	return label
 }
 
 // marker is the "+N MORE" line. It is cut to the list's width like every

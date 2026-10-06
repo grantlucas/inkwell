@@ -208,6 +208,8 @@ func TestDraw_FitAndOverflow(t *testing.T) {
 		{"every event fits to the last pixel", threeExactly, 3, 0, 0, stacked(3, gap, "")},
 		{"a pixel short, the last event gives way to the line", threeExactly - 1, 3, 0, 1, stacked(2, gap, "+1 MORE")},
 		{"the cap hides events and the line counts them", 400, 5, 3, 2, stacked(3, gap, "+2 MORE")},
+		{"a cap of zero is no cap", 400, 5, 0, 0, stacked(5, gap, "")},
+		{"a negative cap is no cap", 400, 5, -1, 0, stacked(5, gap, "")},
 		{"the cap and the room together", threeExactly - 1, 5, 4, 3, stacked(2, gap, "+3 MORE")},
 		{"the line lands exactly on the bottom edge", 2*pitch + lineH, 3, 0, 1, stacked(2, gap, "+1 MORE")},
 		{"a pixel short of that, one more event gives way", 2*pitch + lineH - 1, 3, 0, 2, stacked(1, gap, "+2 MORE")},
@@ -279,8 +281,27 @@ func TestDraw_Width(t *testing.T) {
 			{text: "A", face: regular, baseline: ascent + lineH},
 			{text: "+12 »", face: bold, baseline: 2*lineH + ascent},
 		}},
-		{"a large time is cut to the characters it has room for", 3, eventlist.Style{TimeScale: 2}, events(1), 0, []line{
-			{text: "0", face: bold, scale: 2, baseline: 2 * ascent},
+		// A clock time cut short reads as a different time ("0" for
+		// 09:00), so a time without room to be drawn whole is left off and
+		// its title keeps its place.
+		{"a large time with no room is left off", 3, eventlist.Style{TimeScale: 2}, events(1), 0, []line{
+			{text: "A", face: regular, baseline: 2*ascent + lineH},
+		}},
+		{"a body-size time with no room is left off", 4, eventlist.Style{}, events(1), 0, []line{
+			{text: "A", face: regular, baseline: ascent + lineH},
+		}},
+		{"an all-day label with no room is left off", 6, eventlist.Style{}, []calendar.Event{
+			{Summary: "Off", AllDay: true, Start: time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC)},
+		}, 0, []line{
+			{text: "Off", face: regular, baseline: ascent + lineH},
+		}},
+		// Dilation spills a pixel past a 2x glyph's cell, so a 2x time
+		// needs that pixel beside its advance as well.
+		{"a large time needs room for its dilation", 10, eventlist.Style{TimeScale: 2}, events(1), 0, []line{
+			{text: "A", face: regular, baseline: 2*ascent + lineH},
+		}},
+		{"a large time with room for its dilation is drawn", 11, eventlist.Style{TimeScale: 2}, events(1), 0, []line{
+			{text: "09:00", face: bold, scale: 2, baseline: 2 * ascent},
 			{text: "A", face: regular, baseline: 2*ascent + lineH},
 		}},
 	}
@@ -331,26 +352,104 @@ func TestLines(t *testing.T) {
 	}
 }
 
-// A time with no title under it is as tall as the time itself, descent
-// included, at whatever size the time is drawn.
-func TestDraw_TimeWithoutATitle(t *testing.T) {
-	untitled := []calendar.Event{timed("", 9)}
+// A dilated time never inks outside the list, at any label and any
+// scale. Below and to the right that is the measured grow; above and to
+// the left it is the empty rows and column Tamzen's label glyphs carry.
+func TestDraw_LargeTimeStaysInsideTheList(t *testing.T) {
+	labels := []calendar.Event{{AllDay: true, Start: time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC)}}
+	for h := range 24 {
+		labels = append(labels, calendar.Event{Start: time.Date(2026, 3, 16, h, h+35, 0, 0, time.UTC)})
+	}
+	for _, scale := range []int{2, 3, 4} {
+		for _, e := range labels {
+			style := eventlist.Style{TimeScale: scale, Location: time.UTC}
+			// As tight as the list allows: exactly the time's height, and
+			// just wide enough for "ALL DAY" and its dilation.
+			grow := growAt(scale)
+			r := image.Rect(30, 30, 30+7*scale*daygrid.BodyAdvance()+grow, 30+scale*lineH+grow)
+			frame := newFrame()
+			if hidden := style.Draw(frame, r, []calendar.Event{e}); hidden != 0 {
+				t.Fatalf("scale %d %v: hidden = %d, want the time drawn", scale, e.Start, hidden)
+			}
+			inside := 0
+			for y := range frame.Bounds().Dy() {
+				for x := range frame.Bounds().Dx() {
+					if frame.ColorIndexAt(x, y) != widget.PaperBlack {
+						continue
+					}
+					if !image.Pt(x, y).In(r) {
+						t.Fatalf("scale %d %v: ink at (%d,%d), outside %v", scale, e.Start, x, y, r)
+					}
+					inside++
+				}
+			}
+			if inside == 0 {
+				t.Fatalf("scale %d %v: the time was left off", scale, e.Start)
+			}
+		}
+	}
+}
+
+func growAt(scale int) int { return daygrid.Scaled(bold, scale, widget.PaperBlack).Grow }
+
+// Truncate cuts on characters and marks the cut with » when there is
+// room for one.
+func TestTruncate(t *testing.T) {
+	tests := []struct {
+		label    string
+		in       string
+		maxChars int
+		want     string
+	}{
+		{"fits", "Standup", 10, "Standup"},
+		{"exactly fits", "Standup", 7, "Standup"},
+		{"cut with »", "Standup", 5, "Stan»"},
+		{"cut on characters", "Ñandúñandú", 6, "Ñandú»"},
+		{"no room for »", "Standup", 1, "S"},
+		{"no room at all", "Standup", 0, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			if got := eventlist.Truncate(tt.in, tt.maxChars); got != tt.want {
+				t.Errorf("Truncate(%q, %d) = %q, want %q", tt.in, tt.maxChars, got, tt.want)
+			}
+		})
+	}
+}
+
+// An event is as tall as whichever of its lines reaches lowest: the
+// title's descent, or the time's when there is no title or the title
+// is tucked close under a large time. A large time's descent is scaled
+// and carries the pixel its dilation can spill past the glyph's cell.
+func TestDraw_EventHeight(t *testing.T) {
+	more := []line{{text: "+1 MORE", face: bold, baseline: ascent}}
+	large := 2*lineH + 1 // a 2x time's ascent and descent, plus a pixel of dilation
 	tests := []struct {
 		label      string
+		title      string
 		scale      int
+		lead       int
 		height     int
 		wantHidden int
 		want       []line
 	}{
-		{"fits on its own height", 2, 2 * lineH, 0, []line{{text: "09:00", face: bold, scale: 2, baseline: 2 * ascent}}},
-		{"a pixel short gives way to the line", 2, 2*lineH - 1, 1, []line{{text: "+1 MORE", face: bold, baseline: ascent}}},
-		{"at body size, one line", 1, lineH, 0, []line{{text: "09:00", face: bold, baseline: ascent}}},
+		{"an untitled large time fits on its own height", "", 2, 0, large, 0,
+			[]line{{text: "09:00", face: bold, scale: 2, baseline: 2 * ascent}}},
+		{"a pixel short, it gives way to the line", "", 2, 0, large - 1, 1, more},
+		{"an untitled body-size time is one line", "", 1, 0, lineH, 0,
+			[]line{{text: "09:00", face: bold, baseline: ascent}}},
+		{"a large time below a tucked title sets the height", "A", 2, 1, large, 0, []line{
+			{text: "09:00", face: bold, scale: 2, baseline: 2 * ascent},
+			{text: "A", face: regular, baseline: 2*ascent + 1},
+		}},
+		{"a pixel short of the time's descent, it gives way", "A", 2, 1, large - 1, 1, more},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			style := eventlist.Style{TimeScale: tt.scale, Location: time.UTC}
+			style := eventlist.Style{TimeScale: tt.scale, TitleLead: tt.lead, Location: time.UTC}
 			frame := newFrame()
-			if hidden := style.Draw(frame, image.Rect(0, 0, 200, tt.height), untitled); hidden != tt.wantHidden {
+			events := []calendar.Event{timed(tt.title, 9)}
+			if hidden := style.Draw(frame, image.Rect(0, 0, 200, tt.height), events); hidden != tt.wantHidden {
 				t.Errorf("hidden = %d, want %d", hidden, tt.wantHidden)
 			}
 			assertLines(t, frame, 0, tt.want)
