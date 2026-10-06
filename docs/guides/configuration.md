@@ -214,7 +214,8 @@ disagree — most visibly about precipitation timing.
 
 A partial `weather:` block is valid: omit `model` or `temp_unit` and the
 defaults apply. Any individual widget can override any of these in its
-own `config:`; see the [weekly-calendar](#weekly-calendar) table.
+own `config:`; see any weather widget's table, such as
+[day-timeline](#day-timeline)'s.
 
 ## `dashboard` — screens and rotation
 
@@ -222,10 +223,10 @@ own `config:`; see the [weekly-calendar](#weekly-calendar) table.
 dashboard:
   rotate_interval: "30m"
   screens:
-    - name: weekly
+    - name: day-timeline
       widgets:
         # ...widgets for this screen
-    - name: agenda
+    - name: row-agenda
       widgets:
         # ...widgets for this screen
 ```
@@ -239,13 +240,16 @@ dashboard:
 | `screens[].widgets` | list | — | The widgets on that screen. |
 <!-- markdownlint-enable MD013 -->
 
-**Rotation interacts with the refresh gate**, and this catches people
-out. Advancing the screen does not by itself push a frame: a change only
-reaches the panel when some widget on the *newly active* screen is due
-to refresh that minute. A screen of `static` widgets can therefore rotate
-into place and not appear until something else forces a refresh. If you
-rotate, give each screen at least one widget whose cadence divides the
-rotation interval.
+**A rotation reaches the panel on the cycle it happens.** It opens the
+refresh gate by itself, so the new screen is pushed straight away rather
+than waiting for one of its widgets to come due, even a screen made only
+of `static` widgets. From then on the new screen's widgets refresh on
+their own cadences as usual.
+
+The [example config](../../inkwell.example.yaml) rotates through four
+screens every 15 minutes: the
+[day-timeline screen](#the-day-timeline-screen), then `bold-five` under a
+fuzzy clock band, `today-hero` and `row-agenda`.
 
 Setting `rotate_interval` with no `screens` configured is an error rather
 than a no-op.
@@ -308,8 +312,9 @@ minute.
 
 > **Two different `refresh` keys.** The **top-level** `refresh` above is
 > the widget's *render cadence* — how often it may flash the panel. The
-> **nested** `config.refresh` on `weekly-calendar` is its *data cache
-> TTL* — how often the ICS feeds are re-fetched over the network. They
+> **nested** `config.refresh` on a calendar widget (`bold-five`,
+> `today-hero`, `row-agenda`, `day-timeline`) is its *data cache TTL* —
+> how often the ICS feeds are re-fetched over the network. They
 > are unrelated, and a feed fetched every 15 minutes on a widget allowed
 > to refresh every hour will simply show data up to an hour stale.
 
@@ -380,47 +385,13 @@ side.
 Always `refresh: "static"`. It never changes, so it should never be the
 reason the panel flashes.
 
-### `weekly-calendar`
-
-A rolling calendar-and-weather dashboard of up to seven days, one column
-per day starting with today — set `days` to show fewer and get wider
-columns. The largest widget and the one with the most options; the
-[widget README](../../internal/inkwell/widgets/weekly/README.md) covers
-layout and feed setup in more depth.
-
-<!-- markdownlint-disable MD013 -->
-| Key | Type | Default | Accepted values | Impact |
-|-----|------|---------|-----------------|--------|
-| `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Each entry is a URL string, or an object with `url`, optional `name`, and optional `rules` — see [feed rules](#feed-rules). |
-| `refresh` | duration | `"15m"` | `>= 1m` | **Calendar data cache TTL** — how often feeds are re-fetched. Not the render cadence. |
-| `days` | integer | `7` | `[1, 7]` | Day columns to draw, counting from today. Fewer days means wider columns and more room for event text: across 800 px, `7` leaves 13 characters per line and `5` leaves 19. |
-| `max_events` | integer | `5` | Positive | Cap on events shown per day column. Extra events are dropped, not scrolled. |
-| `show_location` | bool | `false` | `true`, `false` | Draws each event's location on its own line below the title, when the event has one and the column has room. |
-| `show_weather` | bool | `true` | `true`, `false` | Renders the per-day weather block. When false, the space is given back to events. |
-| `show_weather_label` | bool | `true` | `true`, `false` | Shows the condition word (`CLOUDY`) above the temperatures. |
-| `week_start` | string | `"monday"` | `monday`, `sunday` | **Validated but not yet applied** — the view always starts on today. |
-| `highlight_hour` | integer | `15` | `[0, 23]` | **Validated but not yet applied** — the hourly chart always highlights the current hour. |
-| `latitude` | number | inherits `weather.latitude` | `[-90, 90]` | Per-widget forecast location override. |
-| `longitude` | number | inherits `weather.longitude` | `[-180, 180]` | Per-widget forecast location override. |
-| `temp_unit` | string | inherits `weather.temp_unit` | `C`, `F` | Per-widget unit override. |
-| `weather_model` | string | inherits `weather.model` | `gfs`, `ecmwf`, `gem` | Per-widget model override. |
-<!-- markdownlint-enable MD013 -->
-
-The four inheriting keys exist for the multi-location case — a second
-weekly-calendar showing another city. If every widget wants the same
-values, set them once under top-level [`weather`](#weather--shared-forecast-defaults)
-and leave these out; overriding here defeats the shared cache.
-
-Any key not in this table, such as a misspelt `max_event`, stops the
-dashboard loading with the list of keys the widget accepts.
-
 ### `bold-five`
 
-The same five-column calendar-and-weather shape as `weekly-calendar`,
-with every element sized to be read from across the room rather than
-from arm's length: the day numeral goes from a 2.1 mm cap (readable to
-about 0.35 m) to 6.2 mm (about 1.06 m). Each column carries its own
-date, so it needs no separate `date` widget.
+Five days of calendar and weather as columns, one per day starting with
+today, with every element sized to be read from across the room rather
+than from arm's length: the day numeral has a 6.2 mm cap, readable to
+about 1.06 m. Each column carries its own date, so it needs no separate
+`date` widget.
 
 Every column draws the combined chart: precipitation bars with the
 temperature line over them, on one temperature scale shared by the five
@@ -444,9 +415,9 @@ inverted header would spend ink restating what position already says.
 <!-- markdownlint-disable MD013 -->
 | Key | Type | Default | Accepted values | Impact |
 |-----|------|---------|-----------------|--------|
-| `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Same form as `weekly-calendar`, including [feed rules](#feed-rules). |
+| `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Each entry is a URL string, or an object with `url`, optional `name`, and optional `rules` — see [feed rules](#feed-rules). |
 | `refresh` | duration | `"15m"` | `>= 1m` | **Calendar data cache TTL** — how often feeds are re-fetched. Not the render cadence. |
-| `max_events` | integer | `4` | Positive | Cap on events shown per column. One fewer than `weekly-calendar`: the taller line height costs an event. Under a clock header band, `3` is what fits. Events past the cap or past the column's height are counted in a `+N MORE` line. |
+| `max_events` | integer | `4` | Positive | Cap on events shown per column, set by the tall line height. Under a clock header band, `3` is what fits. Events past the cap or past the column's height are counted in a `+N MORE` line. |
 | `show_location` | bool | `false` | `true`, `false` | Appends the event's location to its title, when it has one and the line has room. |
 | `latitude` | number | inherits `weather.latitude` | `[-90, 90]` | Per-widget forecast location override. |
 | `longitude` | number | inherits `weather.longitude` | `[-180, 180]` | Per-widget forecast location override. |
@@ -454,10 +425,10 @@ inverted header would spend ink restating what position already says.
 | `weather_model` | string | inherits `weather.model` | `gfs`, `ecmwf`, `gem` | Per-widget model override. |
 <!-- markdownlint-enable MD013 -->
 
-The config is otherwise swappable with `weekly-calendar`, so the keys
-that screen has and this one does not — `days`, `week_start`,
-`show_weather`, `show_weather_label`, `highlight_hour` — are **rejected
-with an explanation** rather than ignored. Silently dropping
+Calendar keys this screen has no use for — `days`, `week_start`,
+`show_weather`, `show_weather_label`, `highlight_hour`, all carried over
+from the deprecated `weekly-calendar` — are **rejected with an
+explanation** rather than ignored. Silently dropping
 `show_weather: false` would draw a weather band you had turned off,
 which reads as a bug in the widget rather than a key that did not carry
 over. Any other key the widget does not take, such as a misspelt
@@ -505,7 +476,7 @@ refreshes every fifteen.
 <!-- markdownlint-disable MD013 -->
 | Key | Type | Default | Accepted values | Impact |
 |-----|------|---------|-----------------|--------|
-| `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Same form as `weekly-calendar`, including [feed rules](#feed-rules). |
+| `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Each entry is a URL string, or an object with `url`, optional `name`, and optional `rules` — see [feed rules](#feed-rules). |
 | `refresh` | duration | `"15m"` | `>= 1m` | **Calendar data cache TTL** — how often feeds are re-fetched. Not the render cadence. |
 | `max_events` | integer | `3` | Positive | Cap on today's agenda. The scaled time and wrapped title make each event tall, so three is what fits before the "+N MORE" line. |
 | `show_location` | bool | `false` | `true`, `false` | Appends the event's location to its title, when it has one and the line has room. |
@@ -515,11 +486,11 @@ refreshes every fifteen.
 | `weather_model` | string | inherits `weather.model` | `gfs`, `ecmwf`, `gem` | Per-widget model override. |
 <!-- markdownlint-enable MD013 -->
 
-As with `bold-five`, the `weekly-calendar` keys this screen has no
-equivalent for — `days`, `week_start`, `show_weather`,
-`show_weather_label`, `highlight_hour` — are rejected with an
-explanation rather than ignored. Any other key the widget does not
-take stops the dashboard loading with the list of keys it accepts.
+As with `bold-five`, the calendar keys this screen has no use for —
+`days`, `week_start`, `show_weather`, `show_weather_label`,
+`highlight_hour` — are rejected with an explanation rather than
+ignored. Any other key the widget does not take stops the dashboard
+loading with the list of keys it accepts.
 
 **What it gives up:** the day rows' charts are small. They sit under
 the date rather than beside the agenda, because a 462 px row cannot
@@ -567,7 +538,7 @@ e-paper.
 <!-- markdownlint-disable MD013 -->
 | Key | Type | Default | Accepted values | Impact |
 |-----|------|---------|-----------------|--------|
-| `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Same form as `weekly-calendar`, including [feed rules](#feed-rules). |
+| `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Each entry is a URL string, or an object with `url`, optional `name`, and optional `rules` — see [feed rules](#feed-rules). |
 | `refresh` | duration | `"15m"` | `>= 1m` | **Calendar data cache TTL** — how often feeds are re-fetched. Not the render cadence. |
 | `show_location` | bool | `false` | `true`, `false` | Appends the event's location to its title, when it has one and the line has room. |
 | `latitude` | number | inherits `weather.latitude` | `[-90, 90]` | Per-widget forecast location override. |
@@ -579,9 +550,9 @@ e-paper.
 There is deliberately no `max_events`: rows grow to fit their events,
 and when the week is too full the busiest rows give up lines first. A
 separate cap could only contradict that. It is rejected with that
-explanation, as are the other `weekly-calendar` keys this screen has no
-equivalent for. Any other key the widget does not take stops the
-dashboard loading with the list of keys it accepts.
+explanation, as are the other calendar keys `bold-five` rejects. Any
+other key the widget does not take stops the dashboard loading with the
+list of keys it accepts.
 
 **What it gives up:** the panel holds about twenty event lines across
 the five rows, so a genuinely packed week loses detail from its busiest
@@ -692,7 +663,7 @@ the example config gives it 532 × 432 px under a clock band, beside
 <!-- markdownlint-disable MD013 -->
 | Key | Type | Default | Accepted values | Impact |
 |-----|------|---------|-----------------|--------|
-| `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Same form as `weekly-calendar`, including [feed rules](#feed-rules). |
+| `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Each entry is a URL string, or an object with `url`, optional `name`, and optional `rules` — see [feed rules](#feed-rules). |
 | `start_hour` | int | `7` | `0`–`24`, whole hours | First hour the grid shows. |
 | `end_hour` | int | `22` | `0`–`24`, whole hours | Hour the grid ends at; `24` is midnight. Must be after `start_hour`, and the window at least six hours. |
 | `refresh` | duration | `"15m"` | `>= 1m` | **Calendar data cache TTL** — how often feeds are re-fetched. Not the render cadence. |
@@ -798,14 +769,58 @@ widget reads no calendar.
     days: 4
 ```
 
+### `weekly-calendar`
+
+> **Deprecated, pending removal.** weekly-calendar is no longer in the
+> example config and will be deleted in a later release. Its filled
+> today header lands in the same place on every refresh, which is the
+> burn-in risk the newer screens avoid. Move to one of the screens that
+> replaced it: [`day-timeline`](#the-day-timeline-screen) for today hour
+> by hour, [`bold-five`](#bold-five) for the same five-column shape
+> sized for across the room, [`today-hero`](#today-hero) or
+> [`row-agenda`](#row-agenda). They take the same `feeds`, `refresh`,
+> `show_location` and weather keys. A key below that the new screen has
+> no equivalent for stops the config loading, with the reason where
+> there is one, rather than being silently dropped.
+
+A rolling calendar-and-weather view of up to seven days, one column
+per day starting with today — set `days` to show fewer and get wider
+columns.
+
+<!-- markdownlint-disable MD013 -->
+| Key | Type | Default | Accepted values | Impact |
+|-----|------|---------|-----------------|--------|
+| `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Each entry is a URL string, or an object with `url`, optional `name`, and optional `rules` — see [feed rules](#feed-rules). |
+| `refresh` | duration | `"15m"` | `>= 1m` | **Calendar data cache TTL** — how often feeds are re-fetched. Not the render cadence. |
+| `days` | integer | `7` | `[1, 7]` | Day columns to draw, counting from today. Fewer days means wider columns and more room for event text: across 800 px, `7` leaves 13 characters per line and `5` leaves 19. |
+| `max_events` | integer | `5` | Positive | Cap on events shown per day column. Extra events are dropped, not scrolled. |
+| `show_location` | bool | `false` | `true`, `false` | Draws each event's location on its own line below the title, when the event has one and the column has room. |
+| `show_weather` | bool | `true` | `true`, `false` | Renders the per-day weather block. When false, the space is given back to events. |
+| `show_weather_label` | bool | `true` | `true`, `false` | Shows the condition word (`CLOUDY`) above the temperatures. |
+| `week_start` | string | `"monday"` | `monday`, `sunday` | **Validated but not yet applied** — the view always starts on today. |
+| `highlight_hour` | integer | `15` | `[0, 23]` | **Validated but not yet applied** — the hourly chart always highlights the current hour. |
+| `latitude` | number | inherits `weather.latitude` | `[-90, 90]` | Per-widget forecast location override. |
+| `longitude` | number | inherits `weather.longitude` | `[-180, 180]` | Per-widget forecast location override. |
+| `temp_unit` | string | inherits `weather.temp_unit` | `C`, `F` | Per-widget unit override. |
+| `weather_model` | string | inherits `weather.model` | `gfs`, `ecmwf`, `gem` | Per-widget model override. |
+<!-- markdownlint-enable MD013 -->
+
+The four inheriting keys exist for the multi-location case — a second
+calendar widget showing another city. If every widget wants the same
+values, set them once under top-level [`weather`](#weather--shared-forecast-defaults)
+and leave these out; overriding here defeats the shared cache.
+
+Any key not in this table, such as a misspelt `max_event`, stops the
+dashboard loading with the list of keys the widget accepts.
+
 ## Worked examples
 
 ### The day-timeline screen
 
 Today hour by hour, composed from widgets rather than drawn as one. It
-is an active screen in [`inkwell.example.yaml`](../../inkwell.example.yaml),
-listed after `weekly`; with no `rotate_interval` only the first screen
-shows, so set one or move this screen to the top of the list to see it.
+is the first screen in [`inkwell.example.yaml`](../../inkwell.example.yaml),
+so it is the one shown at startup, and the one that stays if you remove
+`rotate_interval`.
 
 ```text
 +----------------------------------------------------+  0
@@ -862,28 +877,25 @@ weather:
 
 dashboard:
   screens:
-    - name: weekly
+    - name: bold-five
       widgets:
-        - type: date
-          bounds: [0, 0, 500, 50]
-          refresh: "24h"          # only changes at midnight
         - type: fuzzy_clock
-          bounds: [500, 0, 800, 50]
+          bounds: [0, 0, 800, 46]
           refresh: "5m"           # phrase only changes every ~5 min
           config:
-            align: right
+            scale: 2
         - type: separator
-          bounds: [0, 50, 800, 52]
+          bounds: [0, 46, 800, 48]
           refresh: "static"       # never a reason to flash
-        - type: weekly-calendar
-          bounds: [0, 52, 800, 480]
+        - type: bold-five
+          bounds: [0, 48, 800, 480]
           refresh: "15m"          # coalesces with the 5m clock at :00/:15/:30
           config:
             feeds:
               - "https://example.com/personal.ics"
             refresh: "15m"        # data cache TTL, matched to the cadence
             show_location: true
-            max_events: 4
+            max_events: 3
 ```
 
 ### Two rotating screens
@@ -894,9 +906,9 @@ dashboard:
   screens:
     - name: week
       widgets:
-        - type: weekly-calendar
+        - type: row-agenda
           bounds: [0, 0, 800, 480]
-          refresh: "15m"          # due at :00/:15/:30/:45, so rotations land
+          refresh: "15m"
           config:
             feeds: ["https://example.com/personal.ics"]
     - name: clock
@@ -904,10 +916,12 @@ dashboard:
         - type: fuzzy_clock
           bounds: [0, 180, 800, 300]
           refresh: "5m"
+          config:
+            scale: 2
 ```
 
-Both screens carry a widget whose cadence divides 30 minutes, so each
-rotation coincides with a due minute and reaches the panel promptly.
+Each rotation reaches the panel when it happens; between rotations,
+each screen's widgets refresh on their own cadences.
 
 ### Rendering to PNG for a screenshot
 
@@ -930,7 +944,7 @@ image:
 | `invalid backend: "x"` | Must be `preview`, `image`, or `spi`. |
 | `invalid color_mode: "x"` | Must be `gray4` or `bw`. |
 | `dashboard.rotate_interval is set but no screens are configured` | Rotation needs screens to rotate between. |
-| `weekly-calendar: feeds is required` | The widget needs at least one feed. |
+| `bold-five: feeds is required` | A calendar widget needs at least one feed. |
 | `today-hero: unsupported setting "x" (accepted: ...)` | A calendar widget was given a key it does not take, often a typo. The message lists the keys it does. |
 | `row-agenda: max_events is not supported: ...` | A key another calendar widget takes but this one has no use for. The message says why. |
 | `bufio.Scanner: token too long` on a feed | The URL returned HTML, not ICS — usually a `?cid=` "add to calendar" link instead of the `.ics` feed URL. |
@@ -949,5 +963,3 @@ image:
 - [ADR 0008](../adrs/0008-full-screen-fast-refresh-instead-of-windowed-partial.md)
   and [ADR 0011](../adrs/0011-require-a-per-widget-refresh-cadence.md) — the
   waveform and cadence machinery behind `refresh`.
-- [weekly-calendar README](../../internal/inkwell/widgets/weekly/README.md)
-  — feed setup and layout detail.
