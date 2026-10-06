@@ -9,6 +9,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/rowagenda"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/separator"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/todayhero"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/todayweather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weekly"
 )
 
@@ -22,6 +23,7 @@ func NewDefaultRegistry() *widget.Registry {
 	r.Register("row-agenda", rowagenda.Factory)
 	r.Register("separator", separator.Factory)
 	r.Register("today-hero", todayhero.Factory)
+	r.Register("today-weather", todayweather.Factory)
 	r.Register("weekly-calendar", weekly.Factory)
 	return r
 }
