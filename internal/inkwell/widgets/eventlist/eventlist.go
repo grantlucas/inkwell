@@ -3,9 +3,11 @@
 // for the events that do not. Widgets that list events through it write
 // them the same way and say how many they hid the same way.
 //
-// bold-five and today-hero's hero agenda list through it with the
-// stacked layout, row-agenda and today-hero's day rows with the inline
-// one. weekly-calendar never will; it is being retired.
+// The shapes the day screens list in are its presets: bold-five's column
+// (stacked), today-hero's agenda (large) and the rows of row-agenda and
+// today-hero (inline). The event-list widget places one day's list on a
+// screen on its own in any of them. weekly-calendar never lists through
+// it; it is being retired.
 package eventlist
 
 import (
