@@ -1,3 +1,21 @@
+// Package daygrid is the day data module every day widget draws from. A
+// widget parses its settings with ParseConfig, builds its module with New,
+// and on each render asks it for n days from now: each day's date, whether
+// it is Today, its events and its forecast, plus the shared temperature
+// range. The concurrent calendar and weather fetch under one deadline, the
+// all-day convention, matching forecasts to days and the range all happen
+// inside it, so a widget is only layout and drawing.
+//
+// The part that really must not be copied is the all-day bucketing in
+// FilterEventsForDay: an iCal VALUE=DATE is anchored to UTC midnight by
+// the parser while days are built in the viewer's local zone, so comparing
+// them as instants leaks an all-day event into the previous local day in
+// any negative-UTC zone. Independent copies of that would drift, and the
+// failure is silent and off by one day.
+//
+// It also holds the drawing helpers the day widgets share. Every error
+// message takes a widget name, so a dashboard that fails to load still
+// says which widget rejected the config.
 package daygrid
 
 import (
