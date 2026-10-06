@@ -407,6 +407,9 @@ weekly-calendar showing another city. If every widget wants the same
 values, set them once under top-level [`weather`](#weather--shared-forecast-defaults)
 and leave these out; overriding here defeats the shared cache.
 
+Any key not in this table, such as a misspelt `max_event`, stops the
+dashboard loading with the list of keys the widget accepts.
+
 ### `bold-five`
 
 The same five-column calendar-and-weather shape as `weekly-calendar`,
@@ -508,7 +511,8 @@ refreshes every fifteen.
 As with `bold-five`, the `weekly-calendar` keys this screen has no
 equivalent for — `days`, `week_start`, `show_weather`,
 `show_weather_label`, `highlight_hour` — are rejected with an
-explanation rather than ignored.
+explanation rather than ignored. Any other key the widget does not
+take stops the dashboard loading with the list of keys it accepts.
 
 **What it gives up:** the day rows' charts are small. They sit under
 the date rather than beside the agenda, because a 462 px row cannot
@@ -569,7 +573,8 @@ There is deliberately no `max_events`: rows grow to fit their events,
 and when the week is too full the busiest rows give up lines first. A
 separate cap could only contradict that. It is rejected with that
 explanation, as are the other `weekly-calendar` keys this screen has no
-equivalent for.
+equivalent for. Any other key the widget does not take stops the
+dashboard loading with the list of keys it accepts.
 
 **What it gives up:** the panel holds about twenty event lines across
 the five rows, so a genuinely packed week loses detail from its busiest
@@ -704,6 +709,8 @@ image:
 | `invalid color_mode: "x"` | Must be `gray4` or `bw`. |
 | `dashboard.rotate_interval is set but no screens are configured` | Rotation needs screens to rotate between. |
 | `weekly-calendar: feeds is required` | The widget needs at least one feed. |
+| `today-hero: unsupported setting "x" (accepted: ...)` | A calendar widget was given a key it does not take, often a typo. The message lists the keys it does. |
+| `row-agenda: max_events is not supported: ...` | A key another calendar widget takes but this one has no use for. The message says why. |
 | `bufio.Scanner: token too long` on a feed | The URL returned HTML, not ICS — usually a `?cid=` "add to calendar" link instead of the `.ics` feed URL. |
 <!-- markdownlint-enable MD013 -->
 
