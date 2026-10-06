@@ -155,6 +155,9 @@ func TestParseConfig_Accepts(t *testing.T) {
 func TestParseConfig_Rejects(t *testing.T) {
 	const accepted = "(accepted: feeds, latitude, longitude, max_events, refresh, show_location, temp_unit, weather_model)"
 	noMaxEvents := daygrid.Spec{Widget: "test-widget"}
+	explains := daygrid.Spec{Widget: "test-widget", MaxEvents: 3, Rejected: map[string]string{
+		"days": "always five columns",
+	}}
 
 	tests := []struct {
 		label string
@@ -184,6 +187,11 @@ func TestParseConfig_Rejects(t *testing.T) {
 		{"weather_model unknown", listing, feedsAnd("weather_model", "nope"), "invalid weather_model"},
 		{"a misspelt key", listing, feedsAnd("max_event", 3), `unsupported setting "max_event" ` + accepted},
 		{"another widget's key", listing, feedsAnd("days", 7), `unsupported setting "days" ` + accepted},
+		// A key the widget knows another calendar widget takes is
+		// rejected with the widget's reason; anything else still gets
+		// the accepted list.
+		{"another widget's key, explained", explains, feedsAnd("days", 7), "days is not supported: always five columns"},
+		{"a typo beside an explained key", explains, feedsAnd("max_event", 3), `unsupported setting "max_event" ` + accepted},
 		{
 			"max_events on a widget that doesn't list a fixed number", noMaxEvents, feedsAnd("max_events", 3),
 			`unsupported setting "max_events" (accepted: feeds, latitude, longitude, refresh, show_location, temp_unit, weather_model)`,

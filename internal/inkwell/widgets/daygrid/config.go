@@ -43,6 +43,12 @@ type Spec struct {
 	// Extra are the widget's own keys: accepted here, and left in the
 	// raw config for the widget to parse.
 	Extra []string
+	// Rejected explains, key by key, why another calendar widget's
+	// setting means nothing here. Calendar configs are meant to be
+	// swappable, so a leftover key is a reasonable thing to find in a
+	// pasted config, and the reason says what to do about it. Any other
+	// unknown key gets the list of accepted ones.
+	Rejected map[string]string
 }
 
 // sharedKeys are the settings every calendar widget accepts.
@@ -123,7 +129,7 @@ func parseRefresh(name string, v any) (time.Duration, error) {
 }
 
 // rejectUnknown fails on the first key, in sorted order, that the widget
-// doesn't accept. Sorted, because ranging a map would name an arbitrary
+// doesn't accept, with the widget's reason when it gave one. Sorted, because ranging a map would name an arbitrary
 // one of several bad keys per run, so fixing them one at a time would
 // look like the error was wandering rather than counting down.
 func rejectUnknown(spec Spec, raw map[string]any) error {
@@ -133,9 +139,13 @@ func rejectUnknown(spec Spec, raw map[string]any) error {
 	}
 	slices.Sort(accepted)
 	for _, key := range slices.Sorted(maps.Keys(raw)) {
-		if !slices.Contains(accepted, key) {
-			return fmt.Errorf("%s: unsupported setting %q (accepted: %s)", spec.Widget, key, strings.Join(accepted, ", "))
+		if slices.Contains(accepted, key) {
+			continue
 		}
+		if why, ok := spec.Rejected[key]; ok {
+			return fmt.Errorf("%s: %s is not supported: %s", spec.Widget, key, why)
+		}
+		return fmt.Errorf("%s: unsupported setting %q (accepted: %s)", spec.Widget, key, strings.Join(accepted, ", "))
 	}
 	return nil
 }
