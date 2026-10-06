@@ -52,7 +52,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	data := w.days.Days(now, totalDays)
 	unit := w.config.Weather.TempUnit
 
-	events := heroStyle(w.config.MaxEvents, w.config.ShowLocation, now.Location())
+	agenda := heroStyle(w.config.MaxEvents, w.config.ShowLocation, now.Location())
 
 	// Every chart on the screen plots against the one temperature range
 	// the module takes across the days shown.
@@ -61,7 +61,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	renderIdentity(frame, hero.Identity, now)
 	renderHeroWeather(frame, hero.Weather, today.Forecast, unit)
 	renderHeroChart(frame, hero.Chart, today.Forecast, now.Hour(), data.TempRange)
-	renderHeroAgenda(frame, hero.Agenda, remainingToday(today.Events, now), events)
+	renderHeroAgenda(frame, hero.Agenda, remainingToday(today.Events, now), agenda)
 
 	// The divider separates two different kinds of content, so it is
 	// heavier than a column rule and runs the full height.
@@ -74,7 +74,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 			IsTomorrow: i == 0,
 			TempUnit:   unit,
 			TempRange:  data.TempRange,
-			Events:     events,
+			Agenda:     agenda,
 		})
 		if i < dayRows-1 {
 			daygrid.DrawHLine(frame, row.Min.X, row.Max.X, row.Max.Y-1, widget.PaperBlack)

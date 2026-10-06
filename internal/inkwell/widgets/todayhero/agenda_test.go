@@ -41,6 +41,18 @@ func TestRemainingToday(t *testing.T) {
 	}
 }
 
+// An agenda too narrow for the event list is too narrow for "DONE FOR
+// TODAY" too: drawn anyway, it would run over the divider.
+func TestRenderHeroAgenda_TooNarrowForDone(t *testing.T) {
+	frame := newTestFrame(800, 480)
+	narrow := image.Rect(0, 280, 2*heroPadX+2*daygrid.BodyAdvance(), 480)
+	renderHeroAgenda(frame, narrow, nil, heroStyle(3, false, time.UTC))
+	rule := narrow.Dx() - 2*heroPadX
+	if got := countIndexIn(frame, frame.Bounds(), widget.PaperBlack); got != rule {
+		t.Errorf("%d px inked, want only the %d px rule", got, rule)
+	}
+}
+
 // A row with no room for its agenda draws nothing rather than spilling
 // into the next row. Two ways to run out: no room for the agenda's
 // left edge at all, and room for the edge but not for a readable

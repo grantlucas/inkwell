@@ -26,6 +26,17 @@ func TestRenderEvents_EmptyDay(t *testing.T) {
 	}
 }
 
+// A column too narrow for the event list is too narrow for the empty
+// marker too: centred "--" would overhang the dividers either side.
+func TestRenderEvents_TooNarrowForTheEmptyMarker(t *testing.T) {
+	frame := newTestFrame(160, 480)
+	narrow := image.Rect(0, 216, 2*eventsPadX+2*daygrid.BodyAdvance(), 480)
+	renderEvents(frame, narrow, nil, eventStyle(defaultMaxEvents, false, time.UTC))
+	if got := countIndex(frame, widget.PaperBlack); got != narrow.Dx() {
+		t.Errorf("%d px inked, want only the %d px rule", got, narrow.Dx())
+	}
+}
+
 // The rule along the top of the agenda is what separates it from the
 // weather band; without it the two run together.
 func TestRenderEvents_DrawsTopRule(t *testing.T) {

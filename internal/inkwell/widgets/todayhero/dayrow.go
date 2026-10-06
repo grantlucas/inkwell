@@ -61,7 +61,9 @@ type dayRowOptions struct {
 	// TempRange is the screen's shared temperature scale, the same one
 	// today's chart plots against.
 	TempRange weatherview.TempRange
-	Events    eventlist.Style
+	// Agenda writes the row's events: their times, titles and
+	// locations.
+	Agenda eventlist.Style
 }
 
 // renderDayRow draws one following day: the date gutter with its
@@ -90,7 +92,7 @@ func renderDayRow(frame *image.Paletted, bounds image.Rectangle, day daygrid.Day
 		frame, x, top+rowDateBaseline, fmt.Sprintf("%d", day.Start.Day()))
 
 	renderRowWeather(frame, bounds, day.Forecast, opts.TempUnit, opts.TempRange)
-	renderRowAgenda(frame, bounds, day.Events, opts.Events)
+	renderRowAgenda(frame, bounds, day.Events, opts.Agenda)
 }
 
 // renderRowWeather draws the row's hi/lo pair, condition icon and

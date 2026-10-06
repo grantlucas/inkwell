@@ -49,6 +49,11 @@ func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calend
 	daygrid.DrawHLine(frame, bounds.Min.X, bounds.Max.X, bounds.Min.Y, widget.PaperBlack)
 
 	list := image.Rect(bounds.Min.X+eventsPadX, bounds.Min.Y+eventsTopPad, bounds.Max.X-eventsPadX, bounds.Max.Y)
+	if list.Dx() < eventlist.MinChars*daygrid.BodyAdvance() {
+		// Too narrow for the list, and so for its empty marker: centred
+		// in a column this narrow it would overhang the dividers.
+		return
+	}
 	if len(events) == 0 {
 		// An empty day says so rather than leaving a blank column that
 		// reads as a rendering fault.
