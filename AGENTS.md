@@ -189,7 +189,7 @@ The five default triage roles, each label named after its role (`needs-triage`,
 
 ### Domain docs
 
-Single-context: one root `CONTEXT.md` (created lazily) plus the ADRs in
+Single-context: one root `GLOSSARY.md` (created lazily) plus the ADRs in
 `docs/adrs/`. See `docs/agents/domain.md`.
 
 ## Session Completion

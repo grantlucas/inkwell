@@ -5,7 +5,7 @@ exploring the codebase.
 
 ## Before exploring, read these
 
-- **`CONTEXT.md`** at the repo root — the glossary.
+- **`GLOSSARY.md`** at the repo root — the glossary.
 - **`docs/adrs/`** — read ADRs that touch the area you're about to work in.
   Start from the index table in
   [`docs/adrs/README.md`](../adrs/README.md) to find the relevant ones.
@@ -28,7 +28,7 @@ Single-context repo:
 
 ```text
 /
-├── CONTEXT.md
+├── GLOSSARY.md
 ├── docs/adrs/
 │   ├── README.md                       ← index
 │   ├── 0001-target-waveshare-7in5-v2-on-a-pi-zero-2w.md
@@ -36,14 +36,14 @@ Single-context repo:
 └── internal/
 ```
 
-If the repo ever splits into multiple contexts, a root `CONTEXT-MAP.md` pointing
-at one `CONTEXT.md` per context is the switch.
+If the repo ever splits into multiple contexts, a root `GLOSSARY-MAP.md`
+pointing at one `GLOSSARY.md` per context is the switch.
 
 ## Use the glossary's vocabulary
 
 When your output names a domain concept (in an issue title, a refactor proposal,
-a hypothesis, a test name), use the term as defined in `CONTEXT.md`. Don't drift
-to synonyms the glossary explicitly avoids.
+a hypothesis, a test name), use the term as defined in `GLOSSARY.md`. Don't
+drift to synonyms the glossary explicitly avoids.
 
 If the concept you need isn't in the glossary yet, that's a signal — either
 you're inventing language the project doesn't use (reconsider) or there's a real
