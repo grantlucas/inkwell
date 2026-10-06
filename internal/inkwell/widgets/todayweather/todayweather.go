@@ -25,7 +25,9 @@ var _ widget.Widget = (*Widget)(nil)
 // screens read alike: a 58 px icon, the high at 3x and the low and the
 // condition at body size.
 const (
-	padX     = 14
+	// padX is weather-ahead's, so stacked in one column, as on the
+	// day-timeline screen, today's icon starts where the rows below do.
+	padX     = 6
 	padY     = 8
 	iconSize = 58
 	// iconGap is wider than today-hero's: some glyphs (partly cloudy's

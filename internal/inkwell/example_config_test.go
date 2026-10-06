@@ -153,6 +153,72 @@ func TestExampleConfig_DayTimelineScreen(t *testing.T) {
 	testutil.AssertGoldenPNG(t, frame)
 }
 
+// Under the clock band the left column shows one rule, the separator's,
+// as the right column does: the day-timeline draws no rule of its own
+// along its top edge when nothing of its own sits above its grid.
+func TestExampleConfig_DayTimelineScreen_OneRuleUnderTheClock(t *testing.T) {
+	_, frame := renderExampleScreen(t, "day-timeline", exampleUpstream())
+
+	for _, x := range []int{300, 700} {
+		var solid []int
+		for y := 40; y < 60; y++ {
+			if frame.ColorIndexAt(x, y) == widget.PaperBlack && frame.ColorIndexAt(x+1, y) == widget.PaperBlack {
+				solid = append(solid, y)
+			}
+		}
+		if !slices.Equal(solid, []int{46, 47}) {
+			t.Errorf("rows inked under the clock at x=%d: %v, want only the separator's [46 47]", x, solid)
+		}
+	}
+}
+
+// The right column's two widgets share a left edge: today-weather's icon
+// starts where weather-ahead's rows do, as the design draws them. Both
+// are measured on a rain icon: today's, and the first of weather-ahead's
+// four rows (a partly cloudy sun further down runs past its box).
+func TestExampleConfig_DayTimelineScreen_RightColumnLinesUp(t *testing.T) {
+	screen, frame := renderExampleScreen(t, "day-timeline", exampleUpstream())
+
+	left := map[string]int{}
+	for _, w := range screen.Widgets() {
+		b := w.Bounds()
+		switch kind := fmt.Sprintf("%T", w); kind {
+		case "*todayweather.Widget":
+			left[kind] = leftmostInk(frame, b)
+		case "*weatherahead.Widget":
+			b.Max.Y = b.Min.Y + b.Dy()/4
+			left[kind] = leftmostInk(frame, b)
+		}
+	}
+	today, ahead := left["*todayweather.Widget"], left["*weatherahead.Widget"]
+	if d := today - ahead; d < -2 || d > 2 {
+		t.Errorf("today-weather starts at x=%d, weather-ahead at x=%d; want them within 2 px", today, ahead)
+	}
+}
+
+// leftmostInk is the first column of r with anything but paper in it,
+// leaving out rules drawn across r's whole width, or r.Max.X when there
+// is none.
+func leftmostInk(frame *image.Paletted, r image.Rectangle) int {
+	left := r.Max.X
+	for y := r.Min.Y; y < r.Max.Y; y++ {
+		first, black := r.Max.X, 0
+		for x := r.Min.X; x < r.Max.X; x++ {
+			switch frame.ColorIndexAt(x, y) {
+			case widget.PaperWhite:
+				continue
+			case widget.PaperBlack:
+				black++
+			}
+			first = min(first, x)
+		}
+		if black < r.Dx() {
+			left = min(left, first)
+		}
+	}
+	return left
+}
+
 // The example rotates through the new screens, day-timeline first, and
 // each one loads with the example's bounds, tiles the panel and draws in
 // every widget. weekly-calendar is no longer part of it.

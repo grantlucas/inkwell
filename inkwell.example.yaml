@@ -131,7 +131,7 @@ dashboard:
         # 3x, the low beside it and the condition name. It reads no
         # calendar, so it takes only the weather keys every weather widget
         # takes, all optional; feeds and the other calendar keys are
-        # rejected. It needs at least 254 x 108 px. With no forecast for
+        # rejected. It needs at least 238 x 108 px. With no forecast for
         # today it says NO FORECAST rather than drawing a made-up number.
         - type: today-weather
           bounds: [534, 48, 800, 168]

@@ -570,8 +570,8 @@ func TestWidget_ListsAllDayEventsInAStripAboveTheGrid(t *testing.T) {
 				if !l.AllDay.Empty() {
 					t.Fatalf("strip %v with nothing to list", l.AllDay)
 				}
-				if l.Grid.Min.Y != testBounds.Min.Y+gridPadY {
-					t.Errorf("grid starts at %d with no strip, want %d", l.Grid.Min.Y, testBounds.Min.Y+gridPadY)
+				if l.Grid.Min.Y != testBounds.Min.Y {
+					t.Errorf("grid starts at %d with no strip, want the widget's top, %d", l.Grid.Min.Y, testBounds.Min.Y)
 				}
 				return
 			}
@@ -675,7 +675,9 @@ func sameIn(a, b *image.Paletted, r image.Rectangle) bool {
 }
 
 // Every hour in the window gets a label in the gutter and a rule across
-// the event column, and the window's last edge gets a rule too.
+// the event column, and the window's last edge gets a rule too. The
+// window's opening edge is the widget's top, ruled only when a band sits
+// above it (see TestWidget_TopEdge).
 func TestWidget_DrawsAnHourGrid(t *testing.T) {
 	tests := []struct {
 		label string
@@ -703,7 +705,7 @@ func TestWidget_DrawsAnHourGrid(t *testing.T) {
 				t.Errorf("rule between labels and events is %d/%d px", n, l.Grid.Dy())
 			}
 
-			for h := 0; h <= tt.win.EndHour-tt.win.StartHour; h++ {
+			for h := 1; h <= tt.win.EndHour-tt.win.StartHour; h++ {
 				y := tl.y(start.Add(time.Duration(h) * time.Hour))
 				if countIndexIn(frame, image.Rect(l.Events.Min.X, y, l.Events.Max.X, y+1), widget.PaperBlack) == 0 {
 					t.Errorf("no rule across the events at hour %d (y=%d)", tt.win.StartHour+h, y)
@@ -722,6 +724,58 @@ func TestWidget_DrawsAnHourGrid(t *testing.T) {
 				if countIndexIn(frame, row, widget.PaperBlack) == 0 {
 					t.Errorf("no label for hour %d", tt.win.StartHour+h)
 				}
+			}
+		})
+	}
+}
+
+// The window's opening edge gets a solid rule only when the widget has
+// its own band above the grid to close off. With nothing above, the grid
+// starts at the widget's top edge and draws no rule there: whatever sits
+// above the widget, a screen's separator or the panel's edge, already
+// closes it, and a second rule just under a separator reads as a double
+// line. The rule between the labels and the events then runs up to the
+// widget's edge, so it meets that separator.
+func TestWidget_TopEdge(t *testing.T) {
+	ruleX := testBounds.Min.X + gutterW + laneW
+	events := image.Rect(ruleX+ruleW+eventsPadX, 0, testBounds.Max.X-eventsPadX, 0)
+	tests := []struct {
+		label  string
+		events []ical.Event
+		// ruleY is the row the solid top edge rule is on, or -1 for none.
+		ruleY int
+	}{
+		{label: "nothing above the grid", ruleY: -1},
+		{
+			label:  "an earlier note above",
+			events: []ical.Event{span("Gym", at(5, 0), at(6, 0))},
+			ruleY:  testBounds.Min.Y + noteH(),
+		},
+		{
+			label:  "an all-day strip above",
+			events: []ical.Event{allDay("Car in for service")},
+			ruleY:  testBounds.Min.Y + stripH(1) + gridPadY,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			// Late in the evening, so no now marker crosses the top.
+			w := New(testBounds, daydata.InMemory(tt.events, nil), fixedClock(at(23, 30)), defaultConfig())
+			frame := renderToFrame(t, w)
+
+			if tt.ruleY < 0 {
+				top := image.Rect(events.Min.X, testBounds.Min.Y, events.Max.X, testBounds.Min.Y+2)
+				if n := countIndexIn(frame, top, widget.PaperBlack); n != 0 {
+					t.Errorf("%d px inked across the events' top rows, want no rule", n)
+				}
+				if frame.ColorIndexAt(ruleX, testBounds.Min.Y) != widget.PaperBlack {
+					t.Errorf("rule between labels and events doesn't reach the widget's top edge")
+				}
+				return
+			}
+			row := image.Rect(testBounds.Min.X, tt.ruleY, events.Max.X, tt.ruleY+1)
+			if n := countIndexIn(frame, row, widget.PaperBlack); n != row.Dx() {
+				t.Errorf("top edge rule at y=%d is %d/%d px", tt.ruleY, n, row.Dx())
 			}
 		})
 	}
@@ -1029,9 +1083,10 @@ func TestWidget_CountsEventsOutsideTheWindow(t *testing.T) {
 			if tt.wantLater != "" && !noteIn(frame, l.Later, l.Events.Min.X, tt.wantLater) {
 				t.Errorf("no %q note below the grid", tt.wantLater)
 			}
-			// Without a note the grid takes the height, and its edge
-			// rules sit at the bounds' padding.
-			if tt.wantEarlier == "" && l.Grid.Min.Y != testBounds.Min.Y+gridPadY {
+			// Without a note the grid takes the height: it starts at
+			// the bounds' top, unruled, and ends at the bottom rule's
+			// padding.
+			if tt.wantEarlier == "" && l.Grid.Min.Y != testBounds.Min.Y {
 				t.Errorf("grid starts at %d with nothing earlier", l.Grid.Min.Y)
 			}
 			if tt.wantLater == "" && l.Grid.Max.Y != testBounds.Max.Y-gridPadY {
