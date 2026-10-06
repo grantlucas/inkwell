@@ -48,3 +48,26 @@ func TestInMemory(t *testing.T) {
 		t.Error("only the first day is Today")
 	}
 }
+
+// A forecast that arrived is reported as arrived even when it carries no
+// days, so a widget can tell it from no forecast at all. Nil is the
+// forecast that never arrived.
+func TestInMemory_ForecastArrived(t *testing.T) {
+	now := time.Date(2026, 3, 16, 14, 30, 0, 0, time.UTC)
+	tests := []struct {
+		label    string
+		forecast []weather.DailyForecast
+		want     bool
+	}{
+		{label: "a forecast with days", forecast: []weather.DailyForecast{{Date: now}}, want: true},
+		{label: "a forecast carrying no days", forecast: []weather.DailyForecast{}, want: true},
+		{label: "no forecast", forecast: nil, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			if got := daygrid.InMemory(nil, tt.forecast).Days(now, 3).ForecastArrived; got != tt.want {
+				t.Errorf("ForecastArrived = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

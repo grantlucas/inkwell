@@ -147,6 +147,31 @@ func TestFetch_OneSideFailingLeavesTheOther(t *testing.T) {
 	}
 }
 
+// "No forecast arrived" and "a forecast arrived carrying no days" are
+// different states, and weekly-calendar gives its weather band's height
+// to the first. A 200 response with no daily data is the second, so
+// flattening the two would collapse the band for that cycle.
+func TestFetch_DistinguishesAnEmptyForecastFromNone(t *testing.T) {
+	tests := []struct {
+		label       string
+		ws          weather.Source
+		wantArrived bool
+	}{
+		{"a forecast carrying no days", &stubWeather{forecast: &weather.Forecast{}}, true},
+		{"a forecast with days", &stubWeather{forecast: oneDayForecast()}, true},
+		{"the fetch failed", &stubWeather{err: errors.New("boom")}, false},
+		{"no source configured", nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			res := fetch(context.Background(), "test-widget", &slowCal{}, tt.ws, testDays(), weather.Location{})
+			if res.arrived != tt.wantArrived {
+				t.Errorf("arrived = %v, want %v", res.arrived, tt.wantArrived)
+			}
+		})
+	}
+}
+
 // A screen configured without weather is not a failure — the forecast
 // is simply skipped, and the calendar half still runs.
 func TestFetch_NilWeatherSource(t *testing.T) {

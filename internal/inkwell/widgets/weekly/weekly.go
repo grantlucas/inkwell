@@ -3,7 +3,6 @@ package weekly
 import (
 	"fmt"
 	"image"
-	"slices"
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
@@ -84,11 +83,12 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	now := w.now()
 	data := w.days.Days(now, w.config.Days)
 
-	// The band is there when there is a forecast to draw in it. With
-	// none — show_weather off, or no forecast arrived — its height goes
-	// back to the events.
+	// The band's height follows from whether a forecast came back at
+	// all, not from whether it carried any days: a 200 response with
+	// no daily data is a forecast with none, and collapsing the band
+	// for that would reflow the whole screen for one cycle.
 	weatherH := 0
-	if w.config.ShowWeather && slices.ContainsFunc(data.Days, func(d daygrid.Day) bool { return d.Forecast != nil }) {
+	if w.config.ShowWeather && data.ForecastArrived {
 		weatherH = defaultWeatherH
 	}
 

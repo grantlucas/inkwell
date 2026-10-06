@@ -103,23 +103,39 @@ func TestWidget_Bounds(t *testing.T) {
 	}
 }
 
-// The weather band is there when there is a forecast to put in it. With
-// show_weather on but no forecast at all, the band gives its height back
-// to the events, exactly as with show_weather off.
-func TestWidget_BandNeedsAForecast(t *testing.T) {
+// The weather band's height follows from whether a forecast arrived at
+// all, not from whether it reaches any day shown. A 200 response with no
+// daily data still keeps the band, so one odd cycle doesn't reflow the
+// whole screen; only no forecast at all gives the height back to the
+// events, exactly as show_weather off does.
+func TestWidget_BandFollowsWhetherAForecastArrived(t *testing.T) {
 	bounds := image.Rect(0, 52, 800, 480)
 	hidden := drawConfig()
 	hidden.ShowWeather = false
-
-	noForecast := render(t, New(bounds, daygrid.InMemory(sampleEvents(), nil), fixedClock(testTime), drawConfig()))
 	weatherOff := render(t, New(bounds, daygrid.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), hidden))
-	withForecast := render(t, New(bounds, daygrid.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), drawConfig()))
 
-	if !slices.Equal(noForecast.Pix, weatherOff.Pix) {
-		t.Error("show_weather with no forecast drew differently from show_weather off")
+	nextYear := sampleForecast()
+	for i := range nextYear {
+		nextYear[i].Date = nextYear[i].Date.AddDate(1, 0, 0)
 	}
-	if slices.Equal(withForecast.Pix, weatherOff.Pix) {
-		t.Error("a forecast drew no weather band")
+
+	tests := []struct {
+		label    string
+		forecast []weather.DailyForecast
+		wantBand bool
+	}{
+		{label: "a forecast for the week", forecast: sampleForecast(), wantBand: true},
+		{label: "a forecast carrying no days", forecast: []weather.DailyForecast{}, wantBand: true},
+		{label: "a forecast reaching none of the days", forecast: nextYear, wantBand: true},
+		{label: "no forecast at all", forecast: nil, wantBand: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			frame := render(t, New(bounds, daygrid.InMemory(sampleEvents(), tt.forecast), fixedClock(testTime), drawConfig()))
+			if gotBand := !slices.Equal(frame.Pix, weatherOff.Pix); gotBand != tt.wantBand {
+				t.Errorf("weather band drawn = %v, want %v", gotBand, tt.wantBand)
+			}
+		})
 	}
 }
 

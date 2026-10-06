@@ -58,7 +58,7 @@ func fetch(ctx context.Context, widgetName string, cal calendar.Source, ws weath
 				log.Printf("%s: fetch weather forecast: %v", widgetName, err)
 			}
 			if f != nil {
-				out.forecast = f.Days
+				out.forecast, out.arrived = f.Days, true
 			}
 		})
 	}
@@ -67,11 +67,13 @@ func fetch(ctx context.Context, widgetName string, cal calendar.Source, ws weath
 	return out
 }
 
-// fetched is what one render's fetch produced: the events, and the
-// forecast's days, nil when no forecast arrived.
+// fetched is what one render's fetch produced: the events, the
+// forecast's days, and whether a forecast arrived at all. A 200 response
+// with no daily data arrived, carrying no days.
 type fetched struct {
 	events   []calendar.Event
 	forecast []weather.DailyForecast
+	arrived  bool
 }
 
 // fetchContext returns the render-scope context the screens share, and

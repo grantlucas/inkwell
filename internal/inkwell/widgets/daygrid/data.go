@@ -44,6 +44,12 @@ type Data struct {
 	// have a forecast, so every chart a widget draws compares on one
 	// scale. With no forecast at all it is GlobalTempRange's fallback.
 	TempRange weatherview.TempRange
+	// ForecastArrived is whether a forecast came back at all, even one
+	// that reaches none of the days. Whether a day has weather is its own
+	// Forecast; this is for a layout that sizes itself on the forecast's
+	// arrival, as weekly-calendar's band does, so a 200 response with no
+	// daily data doesn't reflow the screen for one cycle.
+	ForecastArrived bool
 }
 
 // New builds a widget's day data module from its configuration and the
@@ -77,12 +83,13 @@ func (m *module) Days(now time.Time, n int) Data {
 	ctx, cancel := fetchContext()
 	defer cancel()
 	got := fetch(ctx, m.widget, m.cal, m.weather, days, m.location)
-	return assemble(days, got.events, got.forecast)
+	return assemble(days, got.events, got.forecast, got.arrived)
 }
 
 // assemble gives each day its events and its forecast, and takes the
-// shared temperature range across the days that have one.
-func assemble(days []Day, events []calendar.Event, forecast []weather.DailyForecast) Data {
+// shared temperature range across the days that have one. arrived is
+// whether a forecast came back at all.
+func assemble(days []Day, events []calendar.Event, forecast []weather.DailyForecast, arrived bool) Data {
 	var known []weather.DailyForecast
 	for i := range days {
 		days[i].Events = filterEventsForDay(events, days[i])
@@ -91,5 +98,5 @@ func assemble(days []Day, events []calendar.Event, forecast []weather.DailyForec
 			known = append(known, *f)
 		}
 	}
-	return Data{Days: days, TempRange: weatherview.GlobalTempRange(known)}
+	return Data{Days: days, TempRange: weatherview.GlobalTempRange(known), ForecastArrived: arrived}
 }
