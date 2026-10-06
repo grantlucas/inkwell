@@ -34,11 +34,13 @@ func timed(summary string, hour int) calendar.Event {
 }
 
 // line is one row of text a test expects drawn: its text, its face, the
-// scale it is drawn at and its baseline.
+// scale it is drawn at, how far right of the list's edge it starts and
+// its baseline.
 type line struct {
 	text     string
 	face     font.Face
 	scale    int
+	x        int
 	baseline int
 }
 
@@ -54,7 +56,7 @@ var (
 func drawLines(x int, want []line) *image.Paletted {
 	ref := newFrame()
 	for _, l := range want {
-		daygrid.Scaled(l.face, max(l.scale, 1), widget.PaperBlack).Draw(ref, x, l.baseline, l.text)
+		daygrid.Scaled(l.face, max(l.scale, 1), widget.PaperBlack).Draw(ref, x+l.x, l.baseline, l.text)
 	}
 	return ref
 }
@@ -187,40 +189,74 @@ func stacked(drawn int, gap int, more string) []line {
 	return out
 }
 
-// One fit rule and one overflow rule. A line fits when its whole height,
-// ascent and descent, is inside the rectangle; an event is drawn whole
-// or not at all. When not every event is drawn, the last visible line
-// is "+N MORE", counting every event not shown: an event that would
-// leave no room for it gives its place up and is counted.
+// inline is what an inline list of events from events() draws when the
+// first drawn of them fit and more is the "+N MORE" line under them (""
+// for none): one line an event, the time in the regular cut and the
+// title past the time column.
+func inline(drawn int, more string) []line {
+	var out []line
+	for i := range drawn {
+		baseline := i*lineH + ascent
+		out = append(out,
+			line{text: timed("", 9+i).Start.Format("15:04"), face: regular, baseline: baseline},
+			line{text: string(rune('A' + i)), face: regular, x: timeColumn, baseline: baseline},
+		)
+	}
+	if more != "" {
+		out = append(out, line{text: more, face: bold, baseline: drawn*lineH + ascent})
+	}
+	return out
+}
+
+// One fit rule and one overflow rule, whichever the layout. A line fits
+// when its whole height, ascent and descent, is inside the rectangle;
+// an event is drawn whole or not at all. When not every event is drawn,
+// the last visible line is "+N MORE", counting every event not shown:
+// an event that would leave no room for it gives its place up and is
+// counted. An inline list of n body lines therefore holds n of them,
+// which is how a caller hands the list a line budget: a rectangle
+// exactly that many lines tall.
 func TestDraw_FitAndOverflow(t *testing.T) {
-	const gap = 8
+	const gap, width = 8, 300
 	pitch := 2*lineH + gap
 	threeExactly := 2*pitch + 2*lineH
+	st := func(maxEvents int) eventlist.Style { return eventlist.Style{Gap: gap, MaxEvents: maxEvents} }
+	in := func(maxEvents int) eventlist.Style {
+		return eventlist.Style{Layout: eventlist.Inline, MaxEvents: maxEvents}
+	}
 
 	tests := []struct {
 		label      string
+		style      eventlist.Style
+		width      int
 		height     int
 		events     int
-		maxEvents  int
 		wantHidden int
 		want       []line
 	}{
-		{"every event fits to the last pixel", threeExactly, 3, 0, 0, stacked(3, gap, "")},
-		{"a pixel short, the last event gives way to the line", threeExactly - 1, 3, 0, 1, stacked(2, gap, "+1 MORE")},
-		{"the cap hides events and the line counts them", 400, 5, 3, 2, stacked(3, gap, "+2 MORE")},
-		{"a cap of zero is no cap", 400, 5, 0, 0, stacked(5, gap, "")},
-		{"a negative cap is no cap", 400, 5, -1, 0, stacked(5, gap, "")},
-		{"the cap and the room together", threeExactly - 1, 5, 4, 3, stacked(2, gap, "+3 MORE")},
-		{"the line lands exactly on the bottom edge", 2*pitch + lineH, 3, 0, 1, stacked(2, gap, "+1 MORE")},
-		{"a pixel short of that, one more event gives way", 2*pitch + lineH - 1, 3, 0, 2, stacked(1, gap, "+2 MORE")},
-		{"room for the line alone", lineH, 2, 0, 2, stacked(0, gap, "+2 MORE")},
-		{"no room for any line", lineH - 1, 2, 0, 2, nil},
+		{"stacked: every event fits to the last pixel", st(0), width, threeExactly, 3, 0, stacked(3, gap, "")},
+		{"stacked: a pixel short, the last event gives way to the line", st(0), width, threeExactly - 1, 3, 1, stacked(2, gap, "+1 MORE")},
+		{"stacked: the cap hides events and the line counts them", st(3), width, 400, 5, 2, stacked(3, gap, "+2 MORE")},
+		{"stacked: a cap of zero is no cap", st(0), width, 400, 5, 0, stacked(5, gap, "")},
+		{"stacked: a negative cap is no cap", st(-1), width, 400, 5, 0, stacked(5, gap, "")},
+		{"stacked: the cap and the room together", st(4), width, threeExactly - 1, 5, 3, stacked(2, gap, "+3 MORE")},
+		{"stacked: the line lands exactly on the bottom edge", st(0), width, 2*pitch + lineH, 3, 1, stacked(2, gap, "+1 MORE")},
+		{"stacked: a pixel short of that, one more event gives way", st(0), width, 2*pitch + lineH - 1, 3, 2, stacked(1, gap, "+2 MORE")},
+		{"stacked: room for the line alone", st(0), width, lineH, 2, 2, stacked(0, gap, "+2 MORE")},
+		{"stacked: no room for any line", st(0), width, lineH - 1, 2, 2, nil},
+		{"inline: every event fits to the last pixel", in(0), width, 3 * lineH, 3, 0, inline(3, "")},
+		{"inline: a line short, the last event gives way to the line", in(0), width, 3 * lineH, 4, 2, inline(2, "+2 MORE")},
+		{"inline: a pixel short, the last line does not fit", in(0), width, 3*lineH - 1, 3, 2, inline(1, "+2 MORE")},
+		{"inline: the cap hides events and the line counts them", in(3), width, 400, 5, 2, inline(3, "+2 MORE")},
+		{"inline: room for the line alone", in(0), width, lineH, 4, 4, inline(0, "+4 MORE")},
+		{"inline: too narrow for the time column draws nothing", in(0), timeColumn - 1, 400, 2, 2, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			style := eventlist.Style{Gap: gap, MaxEvents: tt.maxEvents, Location: time.UTC}
+			style := tt.style
+			style.Location = time.UTC
 			frame := newFrame()
-			hidden := style.Draw(frame, image.Rect(0, 0, 200, tt.height), events(tt.events))
+			hidden := style.Draw(frame, image.Rect(0, 0, tt.width, tt.height), events(tt.events))
 			if hidden != tt.wantHidden {
 				t.Errorf("hidden = %d, want %d", hidden, tt.wantHidden)
 			}
@@ -319,33 +355,41 @@ func TestDraw_Width(t *testing.T) {
 }
 
 // Lines is how many lines a list needs to draw in full at a width: each
-// event's time and title lines up to the cap, and the "+N MORE" line
-// when the cap hides any. It is the count Draw lays out, so a caller can
-// size a list before drawing it.
+// listed event's lines up to the cap, and the "+N MORE" line when the
+// cap hides any. A stacked event takes its time and title lines; an
+// inline one takes one line whatever its title. It is the count Draw
+// lays out, so a caller can size a list before drawing it.
 func TestLines(t *testing.T) {
 	adv := daygrid.BodyAdvance()
+	inlineWidth := timeColumn + 20*adv
 	long := timed("Platform architecture review", 9)
+	longer := timed("Platform architecture review with the whole infra team", 9)
 	tests := []struct {
 		label  string
-		chars  int
+		layout eventlist.Layout
+		width  int
 		style  eventlist.Style
 		events []calendar.Event
 		want   int
 	}{
-		{"no events need no lines", 20, eventlist.Style{}, nil, 0},
-		{"a time and a title each", 20, eventlist.Style{}, events(3), 6},
-		{"a wrapped title takes its lines", 12, eventlist.Style{TitleLines: 2}, []calendar.Event{long, long}, 6},
-		{"up to its title lines", 12, eventlist.Style{TitleLines: 3}, []calendar.Event{long}, 4},
-		{"a blank title takes none", 20, eventlist.Style{}, []calendar.Event{timed(" ", 9)}, 1},
-		{"the cap adds the +N MORE line", 20, eventlist.Style{MaxEvents: 2}, events(5), 5},
-		{"a cap the list is under adds nothing", 20, eventlist.Style{MaxEvents: 5}, events(2), 4},
-		{"too narrow to draw needs none", 2, eventlist.Style{}, events(2), 0},
+		{"stacked: no events need no lines", eventlist.Stacked, 20 * adv, eventlist.Style{}, nil, 0},
+		{"stacked: a time and a title each", eventlist.Stacked, 20 * adv, eventlist.Style{}, events(3), 6},
+		{"stacked: a wrapped title takes its lines", eventlist.Stacked, 12 * adv, eventlist.Style{TitleLines: 2}, []calendar.Event{long, long}, 6},
+		{"stacked: up to its title lines", eventlist.Stacked, 12 * adv, eventlist.Style{TitleLines: 3}, []calendar.Event{long}, 4},
+		{"stacked: a blank title takes none", eventlist.Stacked, 20 * adv, eventlist.Style{}, []calendar.Event{timed(" ", 9)}, 1},
+		{"stacked: the cap adds the +N MORE line", eventlist.Stacked, 20 * adv, eventlist.Style{MaxEvents: 2}, events(5), 5},
+		{"stacked: a cap the list is under adds nothing", eventlist.Stacked, 20 * adv, eventlist.Style{MaxEvents: 5}, events(2), 4},
+		{"stacked: too narrow to draw needs none", eventlist.Stacked, 2 * adv, eventlist.Style{}, events(2), 0},
+		{"inline: one line an event", eventlist.Inline, inlineWidth, eventlist.Style{}, events(3), 3},
+		{"inline: a long title still takes one", eventlist.Inline, inlineWidth, eventlist.Style{TitleLines: 3}, []calendar.Event{longer, longer}, 2},
+		{"inline: the cap adds the +N MORE line", eventlist.Inline, inlineWidth, eventlist.Style{MaxEvents: 3}, events(5), 4},
+		{"inline: too narrow for the time column needs none", eventlist.Inline, timeColumn - 1, eventlist.Style{}, events(2), 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			style := tt.style
-			style.Location = time.UTC
-			if got := style.Lines(tt.events, tt.chars*adv); got != tt.want {
+			style.Layout, style.Location = tt.layout, time.UTC
+			if got := style.Lines(tt.events, tt.width); got != tt.want {
 				t.Errorf("Lines = %d, want %d", got, tt.want)
 			}
 		})
@@ -500,57 +544,6 @@ func TestDraw_InlineEventText(t *testing.T) {
 	}
 }
 
-// The inline layout keeps the one fit rule and the one overflow rule: a
-// line fits when its whole height is inside the rectangle, so a list of
-// n body lines holds n of them, and when not every event is drawn the
-// last visible line is "+N MORE". That is how a caller hands the list a
-// line budget: a rectangle exactly that many lines tall.
-func TestDraw_InlineFitAndOverflow(t *testing.T) {
-	width := timeColumn + 20*daygrid.BodyAdvance()
-	tests := []struct {
-		label      string
-		width      int
-		height     int
-		events     int
-		maxEvents  int
-		wantHidden int
-		drawn      int
-		more       string
-	}{
-		{"every event fits to the last pixel", width, 3 * lineH, 3, 0, 0, 3, ""},
-		{"a line short, the last event gives way to the line", width, 3 * lineH, 4, 0, 2, 2, "+2 MORE"},
-		{"a pixel short, the last line does not fit", width, 3*lineH - 1, 3, 0, 2, 1, "+2 MORE"},
-		{"the cap hides events and the line counts them", width, 400, 5, 3, 2, 3, "+2 MORE"},
-		{"room for the line alone", width, lineH, 4, 0, 4, 0, "+4 MORE"},
-		{"too narrow for the time column draws nothing", timeColumn - 1, 400, 2, 0, 2, 0, ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.label, func(t *testing.T) {
-			style := eventlist.Style{Layout: eventlist.Inline, MaxEvents: tt.maxEvents, Location: time.UTC}
-			frame := newFrame()
-			hidden := style.Draw(frame, image.Rect(0, 0, tt.width, tt.height), events(tt.events))
-			if hidden != tt.wantHidden {
-				t.Errorf("hidden = %d, want %d", hidden, tt.wantHidden)
-			}
-			ref := newFrame()
-			var want []line
-			for i := range tt.drawn {
-				baseline := i*lineH + ascent
-				clock := timed("", 9+i).Start.Format("15:04")
-				title := string(rune('A' + i))
-				daygrid.DrawText(ref, 0, baseline, clock, regular, widget.PaperBlack)
-				daygrid.DrawText(ref, timeColumn, baseline, title, regular, widget.PaperBlack)
-				want = append(want, line{text: clock}, line{text: title})
-			}
-			if tt.more != "" {
-				daygrid.DrawText(ref, 0, tt.drawn*lineH+ascent, tt.more, bold, widget.PaperBlack)
-				want = append(want, line{text: tt.more})
-			}
-			assertFrame(t, frame, ref, want)
-		})
-	}
-}
-
 // A list with no events says what Empty says, on its first line in the
 // regular cut, cut to the width like every other line. It is held to
 // the same fit rule, and it is a line a caller sizing the list needs.
@@ -583,35 +576,6 @@ func TestDraw_Empty(t *testing.T) {
 			assertLines(t, frame, 0, []line{{text: tt.want, face: regular, baseline: ascent}})
 			if got := style.Lines(nil, tt.width); got != tt.lines {
 				t.Errorf("Lines = %d, want %d", got, tt.lines)
-			}
-		})
-	}
-}
-
-// An inline event is one line whatever its title, so the lines a list
-// needs are one per listed event and the "+N MORE" line when the cap
-// hides any.
-func TestLines_Inline(t *testing.T) {
-	width := timeColumn + 20*daygrid.BodyAdvance()
-	long := timed("Platform architecture review with the whole infra team", 9)
-	tests := []struct {
-		label  string
-		width  int
-		style  eventlist.Style
-		events []calendar.Event
-		want   int
-	}{
-		{"one line an event", width, eventlist.Style{}, events(3), 3},
-		{"a long title still takes one", width, eventlist.Style{TitleLines: 3}, []calendar.Event{long, long}, 2},
-		{"the cap adds the +N MORE line", width, eventlist.Style{MaxEvents: 3}, events(5), 4},
-		{"too narrow for the time column needs none", timeColumn - 1, eventlist.Style{}, events(2), 0},
-	}
-	for _, tt := range tests {
-		t.Run(tt.label, func(t *testing.T) {
-			style := tt.style
-			style.Layout, style.Location = eventlist.Inline, time.UTC
-			if got := style.Lines(tt.events, tt.width); got != tt.want {
-				t.Errorf("Lines = %d, want %d", got, tt.want)
 			}
 		})
 	}
