@@ -6,7 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 const (
@@ -45,14 +45,14 @@ const markClear = 2*markPad + markW
 // now marker can pass behind the words rather than strike them through.
 func drawLabel(frame *image.Paletted, inner image.Rectangle, e calendar.Event, loc *time.Location, showLocation bool, ink uint8) []image.Rectangle {
 	clip, _ := frame.SubImage(inner).(*image.Paletted)
-	adv := daygrid.BodyAdvance()
+	adv := drawkit.BodyAdvance()
 	x := inner.Min.X + labelPadX
 	chars := (inner.Max.X - markClear - x) / adv
 	if chars < timeChars || inner.Dy() < capH {
 		return nil
 	}
 	baseline := labelBaseline(inner)
-	daygrid.DrawText(clip, x, baseline, e.Start.In(loc).Format("15:04"), daygrid.BodyBoldFace, ink)
+	drawkit.DrawText(clip, x, baseline, e.Start.In(loc).Format("15:04"), drawkit.BodyBoldFace, ink)
 	used := timeChars
 
 	title := e.Summary
@@ -61,7 +61,7 @@ func drawLabel(frame *image.Paletted, inner image.Rectangle, e calendar.Event, l
 	}
 	if room := chars - timeChars - 1; room > 0 {
 		title = truncate(title, room)
-		daygrid.DrawText(clip, x+(timeChars+1)*adv, baseline, title, daygrid.BodyFace, ink)
+		drawkit.DrawText(clip, x+(timeChars+1)*adv, baseline, title, drawkit.BodyFace, ink)
 		used += 1 + utf8.RuneCountInString(title)
 	}
 	boxes := []image.Rectangle{textBox(inner, x, baseline, used)}
@@ -71,9 +71,9 @@ func drawLabel(frame *image.Paletted, inner image.Rectangle, e calendar.Event, l
 	// event cut off at the window's end shows nothing of it at all. Only
 	// whole capitals are drawn, so a block one line tall doesn't carry
 	// the tops of a second.
-	if until := baseline + daygrid.BodyLineH(); until < inner.Max.Y && e.End.After(e.Start) {
+	if until := baseline + drawkit.BodyLineH(); until < inner.Max.Y && e.End.After(e.Start) {
 		text := "UNTIL " + e.End.In(loc).Format("15:04")
-		daygrid.DrawText(clip, x, until, text, daygrid.BodyFace, ink)
+		drawkit.DrawText(clip, x, until, text, drawkit.BodyFace, ink)
 		boxes = append(boxes, textBox(inner, x, until, len(text)))
 	}
 	return boxes
@@ -83,8 +83,8 @@ func drawLabel(frame *image.Paletted, inner image.Rectangle, e calendar.Event, l
 // x on baseline, from the top of its caps to the foot of its descenders,
 // clipped to inner.
 func textBox(inner image.Rectangle, x, baseline, chars int) image.Rectangle {
-	descent := daygrid.BodyLineH() - daygrid.BodyAscent()
-	return image.Rect(x, baseline-capH, x+chars*daygrid.BodyAdvance(), baseline+descent).Intersect(inner)
+	descent := drawkit.BodyLineH() - drawkit.BodyAscent()
+	return image.Rect(x, baseline-capH, x+chars*drawkit.BodyAdvance(), baseline+descent).Intersect(inner)
 }
 
 // labelBaseline is the baseline of a label's first line in inner: its

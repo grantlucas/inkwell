@@ -12,7 +12,8 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil/fakehttp"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 // testTime is a Monday mid-afternoon: today's agenda still has events
@@ -24,7 +25,7 @@ func fixedClock(t time.Time) func() time.Time { return func() time.Time { return
 
 func newTestFrame(w, h int) *image.Paletted {
 	frame := image.NewPaletted(image.Rect(0, 0, w, h), widget.PaperPalette)
-	daygrid.FillWhite(frame, frame.Bounds())
+	drawkit.FillWhite(frame, frame.Bounds())
 	return frame
 }
 
@@ -144,12 +145,12 @@ func withoutToday(events []ical.Event) []ical.Event {
 }
 
 // drawConfig is a config with the knobs row-agenda draws with.
-func drawConfig(unit string, showLocation bool) daygrid.Config {
-	return daygrid.Config{ShowLocation: showLocation, Weather: daygrid.WeatherConfig{TempUnit: unit}}
+func drawConfig(unit string, showLocation bool) daydata.Config {
+	return daydata.Config{ShowLocation: showLocation, Weather: daydata.WeatherConfig{TempUnit: unit}}
 }
 
 func newWidget(events []ical.Event, forecast []weather.DailyForecast, clock time.Time) *Widget {
-	return New(image.Rect(0, 0, 800, 480), daygrid.InMemory(events, forecast), fixedClock(clock), drawConfig("C", false))
+	return New(image.Rect(0, 0, 800, 480), daydata.InMemory(events, forecast), fixedClock(clock), drawConfig("C", false))
 }
 
 func renderToFrame(t *testing.T, w *Widget) *image.Paletted {
@@ -206,9 +207,9 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 			// A neighbour already on the frame, outside these bounds.
 			neighbour := image.Rect(0, 481-1, 800, 480)
 			_ = neighbour
-			daygrid.FillRect(frame, image.Rect(0, 0, 800, 480), widget.PaperWhite)
+			drawkit.FillRect(frame, image.Rect(0, 0, 800, 480), widget.PaperWhite)
 
-			w := New(tt.bounds, daygrid.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), drawConfig("C", false))
+			w := New(tt.bounds, daydata.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), drawConfig("C", false))
 			if err := w.Render(frame); err != nil {
 				t.Fatalf("Render: %v", err)
 			}
@@ -226,7 +227,8 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 func TestWidget_NoFilledDateGutter(t *testing.T) {
 	frame := renderToFrame(t, newWidget(sampleEvents(), sampleForecast(), testTime))
 
-	const band = 48
+	// gutterW is the date block at the left of each row's day badge.
+	const band, gutterW = 48, 122
 	for y := 0; y < 480; y += band {
 		r := image.Rect(0, y, gutterW, y+band)
 		if black := countIndexIn(frame, r, widget.PaperBlack); black > r.Dx()*r.Dy()/4 {
@@ -251,11 +253,11 @@ func TestWidget_ARowThatLostEventsSaysHowMany(t *testing.T) {
 		t.Fatalf("Monday kept %d lines for 9 events; the week should have trimmed it", row.Lines)
 	}
 	x := row.Agenda.Min.X + agendaPadX
-	baseline := row.Agenda.Min.Y + agendaPadY + (row.Lines-1)*daygrid.BodyLineH() + daygrid.BodyAscent()
-	box := image.Rect(x, baseline-daygrid.BodyAscent(), row.Agenda.Max.X, baseline-daygrid.BodyAscent()+daygrid.BodyLineH())
+	baseline := row.Agenda.Min.Y + agendaPadY + (row.Lines-1)*drawkit.BodyLineH() + drawkit.BodyAscent()
+	box := image.Rect(x, baseline-drawkit.BodyAscent(), row.Agenda.Max.X, baseline-drawkit.BodyAscent()+drawkit.BodyLineH())
 
 	want := newTestFrame(800, 480)
-	daygrid.DrawText(want, x, baseline, fmt.Sprintf("+%d MORE", 9-(row.Lines-1)), daygrid.BodyBoldFace, widget.PaperBlack)
+	drawkit.DrawText(want, x, baseline, fmt.Sprintf("+%d MORE", 9-(row.Lines-1)), drawkit.BodyBoldFace, widget.PaperBlack)
 	for y := box.Min.Y; y < box.Max.Y; y++ {
 		for xx := box.Min.X; xx < box.Max.X; xx++ {
 			if frame.ColorIndexAt(xx, y) != want.ColorIndexAt(xx, y) {
@@ -270,7 +272,7 @@ func TestWidget_ARowThatLostEventsSaysHowMany(t *testing.T) {
 // paints past the widget's edge over whatever shares the frame.
 func TestWidget_EmptyDayStaysInBounds(t *testing.T) {
 	frame := newTestFrame(800, 480)
-	w := New(image.Rect(0, 0, minWidth, 480), daygrid.InMemory(nil, nil), fixedClock(testTime), drawConfig("C", false))
+	w := New(image.Rect(0, 0, minWidth, 480), daydata.InMemory(nil, nil), fixedClock(testTime), drawConfig("C", false))
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -342,13 +344,13 @@ func TestWidget_Golden(t *testing.T) {
 			if unit == "" {
 				unit = "C"
 			}
-			w := New(image.Rect(0, 0, 800, 480), daygrid.InMemory(tt.events, tt.forecast), fixedClock(testTime), drawConfig(unit, tt.location))
+			w := New(image.Rect(0, 0, 800, 480), daydata.InMemory(tt.events, tt.forecast), fixedClock(testTime), drawConfig(unit, tt.location))
 			testutil.AssertGoldenPNG(t, renderToFrame(t, w))
 		})
 	}
 }
 
-// Factory is the shared day-widget factory, tested in daygrid: parsing
+// Factory is the shared day-widget factory, tested in daydata: parsing
 // the shared settings, building the day data and taking the clock. What is
 // row-agenda's own is that it takes the example config and the reasons it gives for settings it has no use for.
 func TestFactory(t *testing.T) {

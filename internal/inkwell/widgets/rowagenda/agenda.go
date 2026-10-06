@@ -4,7 +4,7 @@ import (
 	"image"
 	"time"
 
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
 
@@ -29,12 +29,7 @@ const (
 // serialized it with, so formatting it directly leaks that zone onto
 // the panel. It must never be nil.
 func agendaStyle(showLocation bool, loc *time.Location) eventlist.Style {
-	return eventlist.Style{
-		Layout:       eventlist.Inline,
-		Empty:        eventlist.NothingScheduled,
-		ShowLocation: showLocation,
-		Location:     loc,
-	}
+	return eventlist.PresetInline.Style(0, showLocation, loc)
 }
 
 // agendaWidth is how wide every row's list is in bounds, which is what
@@ -57,6 +52,6 @@ func agendaList(row rowLayout) image.Rectangle {
 	// row too narrow for its padding into a list to the left of it.
 	return image.Rectangle{
 		Min: image.Pt(row.Agenda.Min.X+agendaPadX, top),
-		Max: image.Pt(row.Agenda.Max.X-agendaPadX, min(top+row.Lines*daygrid.BodyLineH(), row.Agenda.Max.Y)),
+		Max: image.Pt(row.Agenda.Max.X-agendaPadX, min(top+row.Lines*drawkit.BodyLineH(), row.Agenda.Max.Y)),
 	}
 }

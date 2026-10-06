@@ -14,7 +14,8 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
@@ -57,23 +58,23 @@ var (
 	// forecast can push text past the widget's edge.
 	minWidth = 2*padX + iconSize + iconGap + highDrawer().Measure(widestHigh)
 	// minHeight holds the taller, wrapped block.
-	minHeight = 2*padY + hiBaseline + wrappedLoGap + daygrid.BodyLineH()
+	minHeight = 2*padY + hiBaseline + wrappedLoGap + drawkit.BodyLineH()
 )
 
 // highDrawer draws the high, the headline number.
 func highDrawer() fonts.ScaledDrawer {
-	return daygrid.Scaled(daygrid.BodyBoldFace, hiScale, widget.PaperBlack)
+	return drawkit.Scaled(drawkit.BodyBoldFace, hiScale, widget.PaperBlack)
 }
 
 // Widget renders today's weather.
 type Widget struct {
-	daygrid.Base
+	daydata.Base
 }
 
 // New creates a today-weather Widget drawing today from days. Of cfg it
 // reads only the temperature unit.
-func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg daygrid.Config) *Widget {
-	return &Widget{daygrid.NewBase(bounds, days, now, cfg)}
+func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg daydata.Config) *Widget {
+	return &Widget{daydata.NewBase(bounds, days, now, cfg)}
 }
 
 // Render draws today's icon, high, low and condition, centred down the
@@ -83,7 +84,7 @@ func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg 
 // on a render error, which would blank every other widget too.
 func (w *Widget) Render(frame *image.Paletted) error {
 	b := w.Bounds()
-	daygrid.FillWhite(frame, b)
+	drawkit.FillWhite(frame, b)
 
 	// The draw helpers clip to the frame, not to the widget, so a widget
 	// too small for its block would ink its neighbours.
@@ -95,8 +96,8 @@ func (w *Widget) Render(frame *image.Paletted) error {
 
 	day := w.Days.Days(w.Now(), 1).Days[0].Forecast
 	if day == nil {
-		daygrid.DrawTextCentered(frame, b.Min.X, b.Max.X, b.Min.Y+(b.Dy()+daygrid.BodyAscent())/2,
-			noForecast, daygrid.BodyFace, widget.PaperBlack)
+		drawkit.DrawTextCentered(frame, b.Min.X, b.Max.X, b.Min.Y+(b.Dy()+drawkit.BodyAscent())/2,
+			noForecast, drawkit.BodyFace, widget.PaperBlack)
 		return nil
 	}
 	renderForecast(frame, b, *day, w.Config.Weather.TempUnit)
@@ -113,12 +114,12 @@ func renderForecast(frame *image.Paletted, b image.Rectangle, day weather.DailyF
 	textX := x + iconSize + iconGap
 	loX := textX + hi.Measure(temps.High()) + loGap
 	loBaseline := hiBaseline
-	if loX+daygrid.TextWidth(daygrid.BodyFace, temps.Low()) > b.Max.X-padX {
+	if loX+drawkit.TextWidth(drawkit.BodyFace, temps.Low()) > b.Max.X-padX {
 		loX, loBaseline = textX, hiBaseline+wrappedLoGap
 	}
 	condBaseline := hiBaseline + condGap
 	if loBaseline != hiBaseline {
-		condBaseline = loBaseline + daygrid.BodyLineH()
+		condBaseline = loBaseline + drawkit.BodyLineH()
 	}
 
 	// The condition label is upper case, so the block ends at its
@@ -126,10 +127,10 @@ func renderForecast(frame *image.Paletted, b image.Rectangle, day weather.DailyF
 	top := b.Min.Y + (b.Dy()-condBaseline)/2
 	weatherview.DrawIcon(frame, x, top+(condBaseline-iconSize)/2, iconSize, day.Condition)
 	hi.Draw(frame, textX, top+hiBaseline, temps.High())
-	daygrid.DrawText(frame, loX, top+loBaseline, temps.Low(), daygrid.BodyFace, widget.PaperBlack)
-	daygrid.DrawText(frame, textX, top+condBaseline,
-		strings.ToUpper(day.Condition.Label()), daygrid.BodyFace, widget.PaperBlack)
+	drawkit.DrawText(frame, loX, top+loBaseline, temps.Low(), drawkit.BodyFace, widget.PaperBlack)
+	drawkit.DrawText(frame, textX, top+condBaseline,
+		strings.ToUpper(day.Condition.Label()), drawkit.BodyFace, widget.PaperBlack)
 }
 
 // Factory creates a today-weather Widget from config and dependencies.
-var Factory = daygrid.Factory(spec, New)
+var Factory = daydata.Factory(spec, New)

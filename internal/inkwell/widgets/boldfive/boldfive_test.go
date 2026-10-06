@@ -12,7 +12,8 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil/fakehttp"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 // testTime is a Monday mid-afternoon, so today's column has both
@@ -82,14 +83,14 @@ func sampleEvents() []ical.Event {
 }
 
 // drawConfig is a config with the knobs bold-five draws with.
-func drawConfig(maxEvents int, unit string) daygrid.Config {
-	return daygrid.Config{MaxEvents: maxEvents, Weather: daygrid.WeatherConfig{TempUnit: unit}}
+func drawConfig(maxEvents int, unit string) daydata.Config {
+	return daydata.Config{MaxEvents: maxEvents, Weather: daydata.WeatherConfig{TempUnit: unit}}
 }
 
 // newWidget draws the whole panel from the given events and forecast.
 func newWidget(t *testing.T, events []ical.Event, forecast []weather.DailyForecast) *Widget {
 	t.Helper()
-	return New(image.Rect(0, 0, 800, 480), daygrid.InMemory(events, forecast), fixedClock(testTime), drawConfig(defaultMaxEvents, "C"))
+	return New(image.Rect(0, 0, 800, 480), daydata.InMemory(events, forecast), fixedClock(testTime), drawConfig(defaultMaxEvents, "C"))
 }
 
 func renderToFrame(t *testing.T, w *Widget) *image.Paletted {
@@ -138,8 +139,8 @@ func TestWidget_NoColumnIsHighlighted(t *testing.T) {
 	frame := renderToFrame(t, newWidget(t, sampleEvents(), sampleForecast()))
 
 	for i, col := range computeColumns(image.Rect(0, 0, 800, 480)) {
-		black := countIndexIn(frame, col.Header, widget.PaperBlack)
-		if area := col.Header.Dx() * col.Header.Dy(); black > area/2 {
+		black := countIndexIn(frame, col.Badge, widget.PaperBlack)
+		if area := col.Badge.Dx() * col.Badge.Dy(); black > area/2 {
 			t.Errorf("column %d header is %d/%d black — it looks inverted", i, black, area)
 		}
 	}
@@ -173,7 +174,7 @@ func rainyForecast() []weather.DailyForecast {
 
 // columnChart is the chart cell of one column, in frame coordinates.
 func columnChart(col columnLayout) image.Rectangle {
-	return image.Rect(col.Weather.Min.X+chartPadX, col.Weather.Min.Y+chartTop, col.Weather.Max.X-chartPadX, col.Weather.Max.Y)
+	return col.Chart
 }
 
 // Every column carries the combined chart, so a dry day still draws the
@@ -297,7 +298,7 @@ func TestWidget_StaysInsideBoundsBelowAHeaderBand(t *testing.T) {
 		t.Run(tt.label, func(t *testing.T) {
 			frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
 			paintNeighbours(frame, tt.bounds)
-			w := New(tt.bounds, daygrid.InMemory(append(sampleEvents(), busiestDay()...), sampleForecast()),
+			w := New(tt.bounds, daydata.InMemory(append(sampleEvents(), busiestDay()...), sampleForecast()),
 				fixedClock(testTime), drawConfig(3, "C"))
 			if err := w.Render(frame); err != nil {
 				t.Fatalf("Render: %v", err)
@@ -320,15 +321,16 @@ func TestWidget_StaysInsideBoundsBelowAHeaderBand(t *testing.T) {
 // three events whose titles wrap, plus the line counting the rest.
 func TestWidget_BelowHeaderFitsThreeWrappedEventsAndTheCount(t *testing.T) {
 	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
-	w := New(belowHeader, daygrid.InMemory(busiestDay(), sampleForecast()),
+	w := New(belowHeader, daydata.InMemory(busiestDay(), sampleForecast()),
 		fixedClock(testTime), drawConfig(3, "C"))
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 
 	today := computeColumns(belowHeader)[0].Events
-	lineH := daygrid.BodyLineH()
-	moreY := today.Min.Y + eventsTopPad + daygrid.BodyAscent() + 3*(3*lineH+eventsGap)
+	lineH := drawkit.BodyLineH()
+	const gap = 8 // the stacked list's paper between events
+	moreY := today.Min.Y + eventsTopPad + drawkit.BodyAscent() + 3*(3*lineH+gap)
 	if !moreLineAt(frame, today, moreY, "+2 MORE") {
 		t.Errorf("no \"+2 MORE\" line under three events at baseline %d", moreY)
 	}
@@ -341,7 +343,7 @@ func TestWidget_Golden(t *testing.T) {
 		label    string
 		events   []ical.Event
 		forecast []weather.DailyForecast
-		cfg      func(*daygrid.Config)
+		cfg      func(*daydata.Config)
 		// bounds defaults to the whole panel.
 		bounds image.Rectangle
 	}{
@@ -370,13 +372,13 @@ func TestWidget_Golden(t *testing.T) {
 				},
 			},
 			forecast: sampleForecast(),
-			cfg:      func(c *daygrid.Config) { c.ShowLocation = true },
+			cfg:      func(c *daydata.Config) { c.ShowLocation = true },
 		},
 		{
 			label:    "fahrenheit",
 			events:   sampleEvents(),
 			forecast: sampleForecast(),
-			cfg:      func(c *daygrid.Config) { c.Weather.TempUnit = "F" },
+			cfg:      func(c *daydata.Config) { c.Weather.TempUnit = "F" },
 		},
 		// The example config's layout: under a fuzzy_clock header band,
 		// three events a column.
@@ -384,21 +386,21 @@ func TestWidget_Golden(t *testing.T) {
 			label:    "below header dry day",
 			events:   sampleEvents(),
 			forecast: dryForecast(),
-			cfg:      func(c *daygrid.Config) { c.MaxEvents = 3 },
+			cfg:      func(c *daydata.Config) { c.MaxEvents = 3 },
 			bounds:   belowHeader,
 		},
 		{
 			label:    "below header rainy day",
 			events:   sampleEvents(),
 			forecast: rainyForecast(),
-			cfg:      func(c *daygrid.Config) { c.MaxEvents = 3 },
+			cfg:      func(c *daydata.Config) { c.MaxEvents = 3 },
 			bounds:   belowHeader,
 		},
 		{
 			label:    "below header busiest day",
 			events:   append(busiestDay(), sampleEvents()[5:]...),
 			forecast: sampleForecast(),
-			cfg:      func(c *daygrid.Config) { c.MaxEvents = 3 },
+			cfg:      func(c *daydata.Config) { c.MaxEvents = 3 },
 			bounds:   belowHeader,
 		},
 	}
@@ -412,13 +414,13 @@ func TestWidget_Golden(t *testing.T) {
 			if bounds.Empty() {
 				bounds = image.Rect(0, 0, 800, 480)
 			}
-			w := New(bounds, daygrid.InMemory(tt.events, tt.forecast), fixedClock(testTime), cfg)
+			w := New(bounds, daydata.InMemory(tt.events, tt.forecast), fixedClock(testTime), cfg)
 			testutil.AssertGoldenPNG(t, renderToFrame(t, w))
 		})
 	}
 }
 
-// Factory is the shared day-widget factory, tested in daygrid: parsing
+// Factory is the shared day-widget factory, tested in daydata: parsing
 // the shared settings, building the day data and taking the clock. What is
 // bold-five's own is its default event cap and the reasons it gives for settings it has no use for.
 func TestFactory(t *testing.T) {
@@ -475,7 +477,7 @@ func TestWidget_TooShortDrawsNothing(t *testing.T) {
 		}
 	}
 
-	w := New(image.Rect(0, 0, 800, 150), daygrid.InMemory(sampleEvents(), sampleForecast()),
+	w := New(image.Rect(0, 0, 800, 150), daydata.InMemory(sampleEvents(), sampleForecast()),
 		fixedClock(testTime), drawConfig(defaultMaxEvents, "C"))
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)

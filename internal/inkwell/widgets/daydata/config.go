@@ -1,4 +1,4 @@
-package daygrid
+package daydata
 
 import (
 	"fmt"
@@ -29,7 +29,16 @@ type Config struct {
 	Weather      WeatherConfig
 	MaxEvents    int
 	ShowLocation bool
+	// Day is which day a one-day widget draws: 0 is today, 1 tomorrow,
+	// up to MaxDay. A widget drawing several days leaves it 0.
+	Day int
 }
+
+// MaxDay is the furthest day a one-day widget can be placed on: a week
+// out. The forecast every widget shares reaches a day past that (see
+// weather.ForecastHorizon), so a chart can still range over the whole
+// week it sits in.
+const MaxDay = 6
 
 // Spec is what a calendar widget tells the shared parser about itself.
 type Spec struct {
@@ -56,6 +65,13 @@ type Spec struct {
 	// weather settings parse and inherit exactly as a calendar widget's
 	// do.
 	WeatherOnly bool
+	// CalendarOnly is a widget that lists events and draws no forecast,
+	// so it reads no weather. Its weather settings are rejected with that
+	// as the reason.
+	CalendarOnly bool
+	// OneDay is a widget placed on a single day rather than drawing
+	// several, so it accepts day: which day, from today, it draws.
+	OneDay bool
 }
 
 // calendarKeys are the shared settings that configure a widget's
@@ -111,6 +127,17 @@ func ParseConfig(spec Spec, raw map[string]any, inherit *weather.Provider) (Conf
 		cfg.MaxEvents = n
 	}
 
+	if v, ok := raw["day"]; ok {
+		n, ok := v.(int)
+		if !ok {
+			return cfg, fmt.Errorf("%s: day must be an integer, got %T", name, v)
+		}
+		if n < 0 || n > MaxDay {
+			return cfg, fmt.Errorf("%s: day must be in [0, %d], got %d", name, MaxDay, n)
+		}
+		cfg.Day = n
+	}
+
 	if v, ok := raw["show_location"]; ok {
 		b, ok := v.(bool)
 		if !ok {
@@ -148,7 +175,13 @@ func parseRefresh(name string, v any) (time.Duration, error) {
 // per run, so fixing them one at a time would look like the error was
 // wandering rather than counting down.
 func rejectUnknown(spec Spec, raw map[string]any) error {
-	accepted := slices.Concat(weatherKeys, spec.Extra)
+	accepted := slices.Clone(spec.Extra)
+	if !spec.CalendarOnly {
+		accepted = append(accepted, weatherKeys...)
+	}
+	if spec.OneDay {
+		accepted = append(accepted, "day")
+	}
 	if !spec.WeatherOnly {
 		accepted = append(accepted, calendarKeys...)
 		if spec.MaxEvents > 0 {
@@ -165,6 +198,9 @@ func rejectUnknown(spec Spec, raw map[string]any) error {
 		}
 		if spec.WeatherOnly && (slices.Contains(calendarKeys, key) || key == "max_events") {
 			return fmt.Errorf("%s: %s is not supported: %s shows only the weather, so it reads no calendar", spec.Widget, key, spec.Widget)
+		}
+		if spec.CalendarOnly && slices.Contains(weatherKeys, key) {
+			return fmt.Errorf("%s: %s is not supported: %s shows only events, so it reads no forecast", spec.Widget, key, spec.Widget)
 		}
 		return fmt.Errorf("%s: unsupported setting %q (accepted: %s)", spec.Widget, key, strings.Join(accepted, ", "))
 	}

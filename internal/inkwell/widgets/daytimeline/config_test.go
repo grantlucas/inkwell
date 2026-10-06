@@ -14,7 +14,7 @@ import (
 
 // The window is the widget's own setting: whole hours, in order, wide
 // enough to read. Everything else is the shared calendar settings, which
-// daygrid's parser tests cover.
+// daydata's parser tests cover.
 func TestFactory_Window(t *testing.T) {
 	deps := widget.Deps{
 		Now:      fixedClock(testTime),

@@ -769,6 +769,130 @@ widget reads no calendar.
     days: 4
 ```
 
+### The day widgets: `day-badge`, `combined-chart`, `event-list`
+
+bold-five, today-hero and row-agenda each draw a day the same way: a
+day badge (the date and the day's weather in brief), a combined chart,
+and an event list. Those three are also widgets of their own, so a
+screen can be composed from them in any layout, with each piece's own
+bounds and refresh cadence. They draw exactly what the full-screen
+widgets draw, at the same sizes: a screen composed as bold-five places
+them draws bold-five. See
+[composing a screen from the day widgets](#composing-a-screen-from-the-day-widgets).
+
+Each one is placed on a single day, named by `day`: `0` is today, `1`
+tomorrow, up to `6`, a week out. A day the forecast doesn't reach still
+has its badge's date and its events, but no weather is drawn for it.
+
+#### `day-badge`
+
+The day's date and its weather in brief, in one of the shapes the
+full-screen widgets draw it in. The badge is drawn at the top left of
+its bounds, which must be at least the style's size; smaller bounds
+draw nothing rather than cut the text off.
+
+<!-- markdownlint-disable MD013 -->
+| `style` | Size | What it draws | Taken from |
+|---------|------|---------------|------------|
+| `column` | 160 × 156 | The weekday over the date numeral, centred, then the condition icon on the left and the high at 2x over the low on the right. | bold-five's columns |
+| `row` | 234 × 76 | The date numeral at 3x with the weekday and month beside it, then the condition icon and the high over the low. | row-agenda's rows |
+| `compact` | 176 × 64 | The weekday (or `TOMORROW`) over the date numeral at 2x, with the icon and the high and low on one line beside it. | today-hero's day rows |
+| `hero` | 338 × 202 | The weekday and date at 3x, the month and, on today, the fuzzy clock, above a rule; then a large icon, the high at 3x, the low and the condition's name. | today-hero's today |
+<!-- markdownlint-enable MD013 -->
+
+The `column` and `compact` styles align the high and low to the right
+edge of the bounds, and `column` centres the date, so they widen with
+their bounds. The others draw at fixed offsets from the top left.
+
+<!-- markdownlint-disable MD013 -->
+| Key | Type | Default | Accepted values | Impact |
+|-----|------|---------|-----------------|--------|
+| `style` | string | `column` | `column`, `row`, `compact`, `hero` | The shape the badge is drawn in. |
+| `day` | int | `0` | `[0, 6]` | Which day, counted from today. |
+| `latitude` | number | inherits `weather.latitude` | `[-90, 90]` | Per-widget forecast location override. |
+| `longitude` | number | inherits `weather.longitude` | `[-180, 180]` | Per-widget forecast location override. |
+| `temp_unit` | string | inherits `weather.temp_unit` | `C`, `F` | Per-widget unit override. |
+| `weather_model` | string | inherits `weather.model` | `gfs`, `ecmwf`, `gem` | Per-widget model override. |
+<!-- markdownlint-enable MD013 -->
+
+It reads no calendar, so the calendar settings (`feeds`, `refresh`,
+`show_location`, `max_events`) are rejected with the reason. The
+`hero` style's fuzzy clock moves every five minutes, so give a hero
+badge on today a `refresh` of `"5m"` if the clock should keep up;
+every other badge changes only with the forecast and the date, so
+`"1h"` is plenty.
+
+#### `combined-chart`
+
+One day's combined chart filling its bounds: the chance of
+precipitation as bars across 06:00 to 21:00, with the temperature line
+over them, black over paper and white over a bar. Today's chart has a
+now marker at the current hour. A dry day draws the line with no bars,
+and a day the forecast doesn't reach draws nothing.
+
+The line is plotted on a temperature range shared across `range_days`
+days from today. Charts don't know about each other, so each asks for
+its span of days and gets the range across them from the forecast every
+widget shares: **give every chart on a screen the same `range_days`**
+and they plot on one scale, so a cold day sits visibly lower than a
+warm one. Charts with different spans, or different weather settings,
+plot on different ranges.
+
+The chart labels its hours along the bottom and sizes itself to its
+bounds; below about 10 px either way it draws nothing. bold-five's
+charts are 144 × 40 px, row-agenda's 106 × 68 and today-hero's
+largest 312 × 68.
+
+<!-- markdownlint-disable MD013 -->
+| Key | Type | Default | Accepted values | Impact |
+|-----|------|---------|-----------------|--------|
+| `day` | int | `0` | `[0, 6]` | Which day's chart, counted from today. |
+| `range_days` | int | `5` | `[1, 7]`, and more than `day` | How many days from today the temperature range spans. Use the same value on every chart of a screen. |
+| `latitude` | number | inherits `weather.latitude` | `[-90, 90]` | Per-widget forecast location override. |
+| `longitude` | number | inherits `weather.longitude` | `[-180, 180]` | Per-widget forecast location override. |
+| `temp_unit` | string | inherits `weather.temp_unit` | `C`, `F` | Accepted for symmetry; the chart draws no temperatures as text. |
+| `weather_model` | string | inherits `weather.model` | `gfs`, `ecmwf`, `gem` | Per-widget model override. |
+<!-- markdownlint-enable MD013 -->
+
+A `range_days` that doesn't reach the chart's own day, such as `day: 5`
+with the default of five, stops the config loading with the value it
+needs. The calendar settings are rejected, as on `day-badge`.
+
+#### `event-list`
+
+One day's events listed into its bounds, in one of the shapes the
+full-screen widgets list in. The list fits whole events only: one that
+doesn't fit is left off, and the last line says "+N MORE", counting
+every event not shown. A list too small for even that line draws
+nothing, so there is no minimum size.
+
+<!-- markdownlint-disable MD013 -->
+| `style` | What it draws | Empty day | `max_events` default | Taken from |
+|---------|---------------|-----------|----------------------|------------|
+| `stacked` | The time in bold over a title of up to two lines, 8 px between events. | `--`, centred | `4` | bold-five's columns |
+| `large` | The time at 2x over the title, with a rule between events. | `NOTHING SCHEDULED` | `3` | today-hero's agenda |
+| `inline` | The time and the title on one line. | `NOTHING SCHEDULED` | `3` | row-agenda's and today-hero's rows |
+<!-- markdownlint-enable MD013 -->
+
+<!-- markdownlint-disable MD013 -->
+| Key | Type | Default | Accepted values | Impact |
+|-----|------|---------|-----------------|--------|
+| `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Each entry is a URL string, or an object with `url`, optional `name`, and optional `rules` — see [feed rules](#feed-rules). |
+| `style` | string | `stacked` | `stacked`, `large`, `inline` | The shape the events are listed in. |
+| `day` | int | `0` | `[0, 6]` | Which day's events, counted from today. |
+| `max_events` | int | the style's | Positive | Most events listed before "+N MORE". The room may hold fewer. |
+| `hide_finished` | bool | `false` | `true`, `false` | Leaves out events that have already ended, as today-hero's agenda does. An event still running stays. |
+| `empty` | string | the style's | Any text; `""` says nothing | What a day with no events says. |
+| `show_location` | bool | `false` | `true`, `false` | Appends " @ " and the event's location to its title. |
+| `refresh` | duration | `"15m"` | `>= 1m` | **Calendar data cache TTL** — how often feeds are re-fetched. Not the render cadence. |
+<!-- markdownlint-enable MD013 -->
+
+It reads no forecast, so the weather settings (`latitude`, `longitude`,
+`temp_unit`, `weather_model`) are rejected with the reason.
+today-hero's agenda is `style: large`, `hide_finished: true` and
+`empty: "DONE FOR TODAY"`, though that message is drawn at 2x there and
+at body size here.
+
 ### `weekly-calendar`
 
 > **Deprecated, pending removal.** weekly-calendar is no longer in the
@@ -860,6 +984,57 @@ down, the weather lane is blank and both weather widgets say
 `NO FORECAST`, while the agenda and the clock draw as usual. The screen
 is tested in both cases, along with a golden of the whole screen, by
 loading this entry from the example config.
+
+### Composing a screen from the day widgets
+
+The [day widgets](#the-day-widgets-day-badge-combined-chart-event-list)
+let a screen lay days out however it likes. The example config ends
+with one, commented out: today and tomorrow side by side, each half the
+panel, under the clock band. Uncomment it to add it to the rotation.
+
+```text
++---------------------------------------------------+  0
+|               fuzzy_clock, scale 2                |
++=========================+=========================+  46
+|     day-badge, today    |   day-badge, tomorrow   |
+|     combined-chart      |     combined-chart      |  204
+|-------------------------|-------------------------|  260
+|       event-list        |       event-list        |
++-------------------------+-------------------------+  480
+0                        400                       800
+```
+
+<!-- markdownlint-disable MD013 -->
+| Widget | Bounds | `refresh` | Notes |
+|--------|--------|-----------|-------|
+| [`fuzzy_clock`](#fuzzy_clock) | `[0, 0, 800, 46]` | `"5m"` | `scale: 2`. |
+| [`separator`](#separator) | `[0, 46, 800, 48]` | `"static"` | 2 px under the clock band. |
+| [`day-badge`](#day-badge) | `[0, 48, 400, 204]` | `"1h"` | `style: column`, `day: 0`. |
+| [`combined-chart`](#combined-chart) | `[8, 204, 392, 260]` | `"1h"` | `day: 0`, `range_days: 2`. |
+| [`separator`](#separator) | `[0, 260, 400, 261]` | `"static"` | `thickness: 1`. |
+| [`event-list`](#event-list) | `[8, 270, 392, 480]` | `"15m"` | `style: stacked`, `day: 0`. |
+| [`separator`](#separator) | `[400, 48, 401, 480]` | `"static"` | `orientation: vertical`, `thickness: 1`. |
+| the same four | from `x` 401 | | `day: 1`, and the same `range_days: 2`. |
+<!-- markdownlint-enable MD013 -->
+
+Two things make the pieces read as one screen:
+
+- **The charts share a range** because each asks for the same span of
+  days, `range_days: 2`, from the one forecast every widget shares. A
+  chart with a different span would plot its line on a different scale,
+  so tomorrow's line would no longer sit lower than today's when it is
+  colder. (Why the range works this way:
+  [ADR 0015](../adrs/0015-placed-charts-share-a-range-through-the-day-data-span.md).)
+- **Each widget keeps its own cadence.** The badges and charts change
+  with the forecast, so `"1h"` is enough; the event lists follow the
+  calendar at `"15m"`; the clock moves every five minutes. Each draws
+  only its own bounds, so the space between them stays paper.
+
+The same pieces can rebuild the full-screen widgets: five `column`
+badges at 160 px, five charts inset 8 px under them with
+`range_days: 5`, a rule, and five `stacked` lists draw bold-five
+exactly, but for the rays of the partly-cloudy icon, which a placed
+badge clips at its edge.
 
 ### A quiet dashboard
 

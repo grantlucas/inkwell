@@ -12,7 +12,8 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil/fakehttp"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 // testTime is a Monday mid-afternoon.
@@ -41,8 +42,8 @@ func today(cond weather.Condition, high, low float64) []weather.DailyForecast {
 
 // unitConfig is the parsed config with the one setting the widget draws
 // with.
-func unitConfig(unit string) daygrid.Config {
-	return daygrid.Config{Weather: daygrid.WeatherConfig{TempUnit: unit}}
+func unitConfig(unit string) daydata.Config {
+	return daydata.Config{Weather: daydata.WeatherConfig{TempUnit: unit}}
 }
 
 // render draws the widget at bounds into a frame exactly its size.
@@ -83,7 +84,7 @@ func TestWidget_Golden(t *testing.T) {
 			if bounds.Empty() {
 				bounds = goldenBox
 			}
-			w := New(bounds, daygrid.InMemory(nil, tt.forecast), fixedClock(testTime), unitConfig(tt.unit))
+			w := New(bounds, daydata.InMemory(nil, tt.forecast), fixedClock(testTime), unitConfig(tt.unit))
 			testutil.AssertGoldenPNG(t, render(t, w))
 		})
 	}
@@ -129,7 +130,7 @@ func TestWidget_StaysInsideItsBounds(t *testing.T) {
 			t.Run(p.label+" "+f.label, func(t *testing.T) {
 				frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
 				paintOutside(frame, p.bounds)
-				w := New(p.bounds, daygrid.InMemory(nil, f.forecast), fixedClock(testTime), unitConfig(f.unit))
+				w := New(p.bounds, daydata.InMemory(nil, f.forecast), fixedClock(testTime), unitConfig(f.unit))
 				if err := w.Render(frame); err != nil {
 					t.Fatalf("Render: %v", err)
 				}
@@ -191,7 +192,7 @@ func TestWidget_FetchFailureSaysNoForecast(t *testing.T) {
 			if tr.Total() == 0 {
 				t.Fatal("the forecast was never asked for")
 			}
-			want := render(t, New(goldenBox, daygrid.InMemory(nil, nil), fixedClock(testTime), unitConfig("C")))
+			want := render(t, New(goldenBox, daydata.InMemory(nil, nil), fixedClock(testTime), unitConfig("C")))
 			if !slices.Equal(got.Pix, want.Pix) {
 				t.Error("a failed fetch drew something other than the no-forecast state")
 			}
@@ -212,7 +213,7 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			w := New(tt.bounds, daygrid.InMemory(nil, today(weather.Rain, 12, 6)), fixedClock(testTime), unitConfig("C"))
+			w := New(tt.bounds, daydata.InMemory(nil, today(weather.Rain, 12, 6)), fixedClock(testTime), unitConfig("C"))
 			if inked(render(t, w), tt.bounds) {
 				t.Error("drew into bounds too small to hold the block")
 			}
@@ -228,7 +229,7 @@ func TestWidget_NoLargeFixedFill(t *testing.T) {
 		weather.Snow, weather.Thunderstorm, weather.Fog, weather.Drizzle,
 	} {
 		t.Run(cond.Label(), func(t *testing.T) {
-			w := New(goldenBox, daygrid.InMemory(nil, today(cond, -12, -18)), fixedClock(testTime), unitConfig("C"))
+			w := New(goldenBox, daydata.InMemory(nil, today(cond, -12, -18)), fixedClock(testTime), unitConfig("C"))
 			if hasSolidSquare(render(t, w), 20) {
 				t.Error("found a solid black 20x20 block — a fixed fill is a burn-in risk")
 			}
@@ -267,11 +268,11 @@ func hasSolidSquare(frame *image.Paletted, side int) bool {
 // The guard has to be able to fail.
 func TestHasSolidSquare(t *testing.T) {
 	frame := image.NewPaletted(image.Rect(0, 0, 100, 100), widget.PaperPalette)
-	daygrid.FillWhite(frame, frame.Rect)
+	drawkit.FillWhite(frame, frame.Rect)
 	if hasSolidSquare(frame, 20) {
 		t.Fatal("blank paper reported a solid square")
 	}
-	daygrid.FillRect(frame, image.Rect(30, 40, 50, 60), widget.PaperBlack)
+	drawkit.FillRect(frame, image.Rect(30, 40, 50, 60), widget.PaperBlack)
 	if !hasSolidSquare(frame, 20) {
 		t.Error("missed a 20x20 black square")
 	}

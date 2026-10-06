@@ -36,7 +36,7 @@ func TestDefaultRegistry_CalendarWidgetsShareOneFetchPerFeed(t *testing.T) {
 	feeds := map[string]any{"feeds": []any{url}}
 
 	r := widgets.NewDefaultRegistry()
-	for _, typeName := range []string{"bold-five", "day-timeline", "row-agenda", "today-hero", "weekly-calendar"} {
+	for _, typeName := range []string{"bold-five", "day-timeline", "event-list", "row-agenda", "today-hero", "weekly-calendar"} {
 		bounds := image.Rect(0, 0, 800, 480)
 		w, err := r.Create(typeName, bounds, feeds, deps)
 		if err != nil {
@@ -67,8 +67,11 @@ func TestDefaultRegistry_BuildsEveryWidgetFromTypedDeps(t *testing.T) {
 	}{
 		{typeName: "bold-five", bounds: image.Rect(0, 0, 800, 480), config: feeds},
 		{typeName: "clock", bounds: image.Rect(0, 0, 200, 50)},
+		{typeName: "combined-chart", bounds: image.Rect(8, 156, 152, 196)},
 		{typeName: "date", bounds: image.Rect(0, 0, 800, 52)},
+		{typeName: "day-badge", bounds: image.Rect(0, 0, 160, 156)},
 		{typeName: "day-timeline", bounds: image.Rect(0, 48, 500, 480), config: feeds},
+		{typeName: "event-list", bounds: image.Rect(6, 208, 154, 480), config: feeds},
 		{typeName: "fuzzy_clock", bounds: image.Rect(0, 0, 800, 50)},
 		{typeName: "row-agenda", bounds: image.Rect(0, 0, 800, 480), config: feeds},
 		{typeName: "separator", bounds: image.Rect(0, 0, 800, 2)},

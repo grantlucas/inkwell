@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 const (
@@ -29,24 +29,24 @@ const (
 func drawGrid(frame *image.Paletted, l layout, tl timeline, win Window) {
 	hours := win.EndHour - win.StartHour
 	step := 1
-	if tl.y(hourAt(tl.start, 1))-tl.top < daygrid.BodyLineH() {
+	if tl.y(hourAt(tl.start, 1))-tl.top < drawkit.BodyLineH() {
 		step = 2
 	}
 	for h := 0; h <= hours; h++ {
 		y := tl.y(hourAt(tl.start, h))
 		if h == 0 || h == hours {
-			daygrid.DrawHLine(frame, l.Grid.Min.X, l.Events.Max.X, y, widget.PaperBlack)
+			drawkit.DrawHLine(frame, l.Grid.Min.X, l.Events.Max.X, y, widget.PaperBlack)
 		} else {
 			for x := l.Gutter.Max.X; x < l.Events.Max.X; x += dotEvery {
-				daygrid.DrawHLine(frame, x, x+1, y, widget.PaperBlack)
+				drawkit.DrawHLine(frame, x, x+1, y, widget.PaperBlack)
 			}
 		}
 		if h < hours && h%step == 0 {
-			daygrid.DrawText(frame, l.Gutter.Min.X+hourLabelX, y+1+daygrid.BodyAscent(),
-				fmt.Sprintf("%02d", win.StartHour+h), daygrid.BodyBoldFace, widget.PaperBlack)
+			drawkit.DrawText(frame, l.Gutter.Min.X+hourLabelX, y+1+drawkit.BodyAscent(),
+				fmt.Sprintf("%02d", win.StartHour+h), drawkit.BodyBoldFace, widget.PaperBlack)
 		}
 	}
-	daygrid.DrawVLine(frame, l.Lane.Max.X, l.Grid.Min.Y, l.Grid.Max.Y, widget.PaperBlack)
+	drawkit.DrawVLine(frame, l.Lane.Max.X, l.Grid.Min.Y, l.Grid.Max.Y, widget.PaperBlack)
 }
 
 // hourAt is the wall-clock hour h hours after the window opens at start.

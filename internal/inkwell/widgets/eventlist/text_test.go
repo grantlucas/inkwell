@@ -3,7 +3,7 @@ package eventlist
 import "testing"
 
 // truncate cuts on characters and marks the cut with » when there is
-// room for one. Today's callers always give it at least MinChars, so the
+// room for one. Today's callers always give it at least minChars, so the
 // smallest budgets are pinned here rather than through Draw: a budget
 // of one or less must cut cleanly, never panic.
 func TestTruncate(t *testing.T) {

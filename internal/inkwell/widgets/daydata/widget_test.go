@@ -1,4 +1,4 @@
-package daygrid_test
+package daydata_test
 
 import (
 	"image"
@@ -6,16 +6,16 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 )
 
 // dayWidget is the smallest day widget: the shared Base and nothing drawn.
-type dayWidget struct{ daygrid.Base }
+type dayWidget struct{ daydata.Base }
 
 func (dayWidget) Render(*image.Paletted) error { return nil }
 
-func newDayWidget(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg daygrid.Config) *dayWidget {
-	return &dayWidget{daygrid.NewBase(bounds, days, now, cfg)}
+func newDayWidget(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg daydata.Config) *dayWidget {
+	return &dayWidget{daydata.NewBase(bounds, days, now, cfg)}
 }
 
 // A day widget's factory parses the shared settings against its spec,
@@ -28,7 +28,7 @@ func TestFactory(t *testing.T) {
 	s.tr.Serve(feedA, ics(weeklySeries))
 	noCalendar := s.deps
 	noCalendar.Calendar = nil
-	factory := daygrid.Factory(daygrid.Spec{Widget: "test-widget", MaxEvents: 3}, newDayWidget)
+	factory := daydata.Factory(daydata.Spec{Widget: "test-widget", MaxEvents: 3}, newDayWidget)
 	bounds := image.Rect(10, 20, 410, 260)
 	feeds := map[string]any{"feeds": []any{feedA}}
 

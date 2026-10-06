@@ -4,7 +4,7 @@ import (
 	"image"
 	"testing"
 
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 var panel = image.Rect(0, 0, 800, 480)
@@ -50,6 +50,29 @@ func TestPlanRows_AlwaysFiveRowsTilingTheBounds(t *testing.T) {
 	}
 }
 
+// Across a row, the day badge, the chart and the rule before the agenda
+// sit side by side with no overlap: the chart starts where the badge's
+// readings end, so bars never paint through the digits, and the rule
+// sits in the gap between the chart and the agenda. The badge and chart
+// share the row's centred block, so they sit level on every row.
+func TestPlanRows_BadgeThenChartThenAgenda(t *testing.T) {
+	for i, r := range planRows(panel, []int{6, 0, 2, 0, 1}) {
+		if r.Badge.Max.X != r.Chart.Min.X {
+			t.Errorf("row %d: badge ends at %d, chart starts at %d", i, r.Badge.Max.X, r.Chart.Min.X)
+		}
+		if r.Chart.Max.X+ruleInset != r.Agenda.Min.X {
+			t.Errorf("row %d: chart ends at %d, agenda starts at %d; want the %d px rule gap between",
+				i, r.Chart.Max.X, r.Agenda.Min.X, ruleInset)
+		}
+		if r.Badge.Dy() != minRowH || r.Chart.Min.Y != r.Badge.Min.Y+chartPadY || r.Chart.Max.Y != r.Badge.Max.Y-chartPadY {
+			t.Errorf("row %d: badge %v and chart %v are not one centred block", i, r.Badge, r.Chart)
+		}
+		if mid := (r.Badge.Min.Y + r.Badge.Max.Y) - (r.Bounds.Min.Y + r.Bounds.Max.Y); mid < -1 || mid > 1 {
+			t.Errorf("row %d: badge %v is not centred in the row %v", i, r.Badge, r.Bounds)
+		}
+	}
+}
+
 // Space follows the events: a busy day's row is tall enough for every
 // one of them, and a quiet day's row is shorter than a busy one's.
 func TestPlanRows_HeightFollowsContent(t *testing.T) {
@@ -60,7 +83,7 @@ func TestPlanRows_HeightFollowsContent(t *testing.T) {
 		if r.Lines != max(counts[i], 1) {
 			t.Errorf("row %d has %d lines for %d events, want room for all of them", i, r.Lines, counts[i])
 		}
-		if need := 2*agendaPadY + r.Lines*daygrid.BodyLineH(); r.Bounds.Dy() < need {
+		if need := 2*agendaPadY + r.Lines*drawkit.BodyLineH(); r.Bounds.Dy() < need {
 			t.Errorf("row %d is %d px, too short for its %d lines (%d px)", i, r.Bounds.Dy(), r.Lines, need)
 		}
 	}
@@ -122,7 +145,7 @@ func TestPlanRows_OverflowTakesFromTheBusiestRows(t *testing.T) {
 				t.Errorf("rows end at %d, want %d", end, panel.Max.Y)
 			}
 			for i, r := range got {
-				if need := 2*agendaPadY + r.Lines*daygrid.BodyLineH(); r.Bounds.Dy() < need {
+				if need := 2*agendaPadY + r.Lines*drawkit.BodyLineH(); r.Bounds.Dy() < need {
 					t.Errorf("row %d is %d px, too short for its %d lines", i, r.Bounds.Dy(), r.Lines)
 				}
 			}
@@ -146,7 +169,7 @@ func TestPlanRows_StopsTrimmingAtTheMinimum(t *testing.T) {
 // The minimum row is what keeps the chart readable, and it carries
 // three lines of agenda before a row needs to grow.
 func TestMinRowH_HoldsThreeLines(t *testing.T) {
-	if need := 2*agendaPadY + 3*daygrid.BodyLineH(); minRowH < need {
+	if need := 2*agendaPadY + 3*drawkit.BodyLineH(); minRowH < need {
 		t.Errorf("minRowH = %d, too short for three agenda lines (%d)", minRowH, need)
 	}
 }

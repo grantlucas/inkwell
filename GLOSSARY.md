@@ -79,6 +79,12 @@ The lines above the day-timeline's grid listing today's all-day events, and
 timed events that run through the whole of today.
 _Avoid_: All-day row, banner
 
+**Day badge**:
+The head of one day on a screen: its date and its weather in brief (condition,
+high and low). Day screens draw each day as a day badge, a combined chart and
+an event list, and each of the three can also be placed as a widget of its own.
+_Avoid_: Day header, date block, weather badge
+
 **Fuzzy clock**:
 The time written in words, such as "twenty to eleven".
 _Avoid_: Word clock, text clock

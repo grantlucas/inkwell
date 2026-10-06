@@ -7,7 +7,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 	"golang.org/x/image/font"
 )
@@ -24,7 +24,7 @@ func mustZone(name string) *time.Location {
 
 func newFrame() *image.Paletted {
 	frame := image.NewPaletted(image.Rect(0, 0, 400, 480), widget.PaperPalette)
-	daygrid.FillWhite(frame, frame.Bounds())
+	drawkit.FillWhite(frame, frame.Bounds())
 	return frame
 }
 
@@ -45,10 +45,10 @@ type line struct {
 }
 
 var (
-	bold    = daygrid.BodyBoldFace
-	regular = daygrid.BodyFace
-	ascent  = daygrid.BodyAscent()
-	lineH   = daygrid.BodyLineH()
+	bold    = drawkit.BodyBoldFace
+	regular = drawkit.BodyFace
+	ascent  = drawkit.BodyAscent()
+	lineH   = drawkit.BodyLineH()
 	descent = lineH - ascent
 )
 
@@ -56,7 +56,7 @@ var (
 func drawLines(x int, want []line) *image.Paletted {
 	ref := newFrame()
 	for _, l := range want {
-		daygrid.Scaled(l.face, max(l.scale, 1), widget.PaperBlack).Draw(ref, x+l.x, l.baseline, l.text)
+		drawkit.Scaled(l.face, max(l.scale, 1), widget.PaperBlack).Draw(ref, x+l.x, l.baseline, l.text)
 	}
 	return ref
 }
@@ -113,7 +113,7 @@ func TestDraw_StackedEvent(t *testing.T) {
 // characters, never bytes, so a multi-byte title wraps and cuts on the
 // same columns an ASCII one does.
 func TestDraw_EventText(t *testing.T) {
-	r := image.Rect(0, 0, 12*daygrid.BodyAdvance(), 400)
+	r := image.Rect(0, 0, 12*drawkit.BodyAdvance(), 400)
 	allDay := calendar.Event{Summary: "Holiday", AllDay: true, Start: time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC)}
 	withPlace := timed("Lunch", 16)
 	withPlace.Location = "Cafe"
@@ -293,7 +293,7 @@ func TestDraw_ScaledTimeWithRules(t *testing.T) {
 		{text: "+1 MORE", face: bold, baseline: 2*pitch + ascent},
 	}
 	ref := drawLines(r.Min.X, want)
-	daygrid.DrawHLine(ref, r.Min.X, r.Max.X, height+gap/2, widget.PaperBlack)
+	drawkit.DrawHLine(ref, r.Min.X, r.Max.X, height+gap/2, widget.PaperBlack)
 	assertFrame(t, frame, ref, want)
 }
 
@@ -303,7 +303,7 @@ func TestDraw_ScaledTimeWithRules(t *testing.T) {
 // still says they are there while it has a character of room: hidden
 // events are never unannounced.
 func TestDraw_Width(t *testing.T) {
-	adv := daygrid.BodyAdvance()
+	adv := drawkit.BodyAdvance()
 	tests := []struct {
 		label      string
 		chars      int
@@ -365,7 +365,7 @@ func TestDraw_Width(t *testing.T) {
 // inline one takes one line whatever its title. It is the count Draw
 // lays out, so a caller can size a list before drawing it.
 func TestLines(t *testing.T) {
-	adv := daygrid.BodyAdvance()
+	adv := drawkit.BodyAdvance()
 	inlineWidth := timeColumn + 20*adv
 	long := timed("Platform architecture review", 9)
 	longer := timed("Platform architecture review with the whole infra team", 9)
@@ -417,7 +417,7 @@ func TestDraw_LargeTimeStaysInsideTheList(t *testing.T) {
 			// As tight as the list allows: exactly the time's height, and
 			// just wide enough for "ALL DAY" and its dilation.
 			grow := growAt(scale)
-			r := image.Rect(30, 30, 30+7*scale*daygrid.BodyAdvance()+grow, 30+scale*lineH+grow)
+			r := image.Rect(30, 30, 30+7*scale*drawkit.BodyAdvance()+grow, 30+scale*lineH+grow)
 			frame := newFrame()
 			if hidden := style.Draw(frame, r, []calendar.Event{e}); hidden != 0 {
 				t.Fatalf("scale %d %v: hidden = %d, want the time drawn", scale, e.Start, hidden)
@@ -441,7 +441,7 @@ func TestDraw_LargeTimeStaysInsideTheList(t *testing.T) {
 	}
 }
 
-func growAt(scale int) int { return daygrid.Scaled(bold, scale, widget.PaperBlack).Grow }
+func growAt(scale int) int { return drawkit.Scaled(bold, scale, widget.PaperBlack).Grow }
 
 // An event is as tall as whichever of its lines reaches lowest: the
 // title's descent, or the time's when there is no title or the title
@@ -485,7 +485,7 @@ func TestDraw_EventHeight(t *testing.T) {
 
 // timeColumn is where an inline title starts: past the widest clock
 // label, "ALL DAY", and a space.
-var timeColumn = daygrid.TextWidth(regular, "ALL DAY ")
+var timeColumn = drawkit.TextWidth(regular, "ALL DAY ")
 
 // An inline list puts each event's time and title on one line: the
 // time in the regular cut, the title after the time column so an
@@ -501,8 +501,8 @@ func TestDraw_InlineEvent(t *testing.T) {
 		t.Errorf("hidden = %d, want 0", hidden)
 	}
 	ref := newFrame()
-	daygrid.DrawText(ref, r.Min.X, r.Min.Y+ascent, "10:00", regular, widget.PaperBlack)
-	daygrid.DrawText(ref, r.Min.X+timeColumn, r.Min.Y+ascent, "Standup", regular, widget.PaperBlack)
+	drawkit.DrawText(ref, r.Min.X, r.Min.Y+ascent, "10:00", regular, widget.PaperBlack)
+	drawkit.DrawText(ref, r.Min.X+timeColumn, r.Min.Y+ascent, "Standup", regular, widget.PaperBlack)
 	assertFrame(t, frame, ref, nil)
 }
 
@@ -511,7 +511,7 @@ func TestDraw_InlineEvent(t *testing.T) {
 // says and is cut on characters, not wrapped on words: on one line a
 // word wrap would throw away the rest of a line that had room for it.
 func TestDraw_InlineEventText(t *testing.T) {
-	adv := daygrid.BodyAdvance()
+	adv := drawkit.BodyAdvance()
 	allDay := calendar.Event{Summary: "Holiday", AllDay: true, Start: time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC)}
 	withPlace := timed("Lunch", 16)
 	withPlace.Location = "Cafe"
@@ -531,8 +531,10 @@ func TestDraw_InlineEventText(t *testing.T) {
 		{"title lines do not wrap an inline title", long, eventlist.Style{TitleLines: 3}, 12, "09:00", "Platform ar»"},
 		{"a multi-byte title is cut on characters", timed("Ñandúñandúñandú", 9), eventlist.Style{}, 12, "09:00", "Ñandúñandúñ»"},
 		{"space around a title is dropped", timed("  Standup  ", 9), eventlist.Style{}, 12, "09:00", "Standup"},
-		{"the time is drawn alone with no room for a title", long, eventlist.Style{}, eventlist.MinChars - 1, "09:00", ""},
-		{"a title gets the narrowest room it can use", long, eventlist.Style{}, eventlist.MinChars, "09:00", "Pl»"},
+		// Three characters is the narrowest title the list writes: two and
+		// a » would read as punctuation.
+		{"the time is drawn alone with no room for a title", long, eventlist.Style{}, 2, "09:00", ""},
+		{"a title gets the narrowest room it can use", long, eventlist.Style{}, 3, "09:00", "Pl»"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -544,33 +546,49 @@ func TestDraw_InlineEventText(t *testing.T) {
 				t.Errorf("hidden = %d, want 0", hidden)
 			}
 			ref := newFrame()
-			daygrid.DrawText(ref, 0, ascent, tt.time, regular, widget.PaperBlack)
-			daygrid.DrawText(ref, timeColumn, ascent, tt.title, regular, widget.PaperBlack)
+			drawkit.DrawText(ref, 0, ascent, tt.time, regular, widget.PaperBlack)
+			drawkit.DrawText(ref, timeColumn, ascent, tt.title, regular, widget.PaperBlack)
 			assertFrame(t, frame, ref, []line{{text: tt.time}, {text: tt.title}})
 		})
 	}
 }
 
-// A list with no events says what Empty says, on its first line in the
-// regular cut, cut to the width like every other line. It is held to
-// the same fit rule, and it is a line a caller sizing the list needs.
+// A list with no events says what Empty says, on its first line: in the
+// regular cut at body size, or in the bold cut at a larger scale, from
+// the list's left edge or centred across it, and cut to the width like
+// every other line. It is held to the same fit rule, and it is a line a
+// caller sizing the list needs.
 func TestDraw_Empty(t *testing.T) {
-	adv := daygrid.BodyAdvance()
+	adv := drawkit.BodyAdvance()
 	const msg = eventlist.NothingScheduled
+	note := eventlist.Note{Text: msg}
+	done := eventlist.Note{Text: "DONE FOR TODAY", Scale: 2}
+	dash := eventlist.Note{Text: "--", Centred: true}
 	tests := []struct {
 		label  string
 		style  eventlist.Style
 		width  int
 		height int
-		want   string
+		want   line
 		lines  int
 	}{
-		{"an inline list says it", eventlist.Style{Layout: eventlist.Inline, Empty: msg}, 30 * adv, 400, msg, 1},
-		{"a stacked list says it", eventlist.Style{Empty: msg}, 30 * adv, 400, msg, 1},
-		{"it is cut to the width", eventlist.Style{Layout: eventlist.Inline, Empty: msg}, 10 * adv, 400, "NOTHING S»", 1},
-		{"it needs a whole line", eventlist.Style{Layout: eventlist.Inline, Empty: msg}, 30 * adv, lineH - 1, "", 1},
-		{"too narrow for the list, too narrow for it", eventlist.Style{Layout: eventlist.Inline, Empty: msg}, timeColumn - 1, 400, "", 0},
-		{"without one an empty list draws nothing", eventlist.Style{Layout: eventlist.Inline}, 30 * adv, 400, "", 0},
+		{"an inline list says it", eventlist.Style{Layout: eventlist.Inline, Empty: note}, 30 * adv, 400,
+			line{text: msg, face: regular, baseline: ascent}, 1},
+		{"a stacked list says it", eventlist.Style{Empty: note}, 30 * adv, 400,
+			line{text: msg, face: regular, baseline: ascent}, 1},
+		{"it is cut to the width", eventlist.Style{Layout: eventlist.Inline, Empty: note}, 10 * adv, 400,
+			line{text: "NOTHING S»", face: regular, baseline: ascent}, 1},
+		{"it needs a whole line", eventlist.Style{Layout: eventlist.Inline, Empty: note}, 30 * adv, lineH - 1, line{}, 1},
+		{"too narrow for the list, too narrow for it", eventlist.Style{Layout: eventlist.Inline, Empty: note}, timeColumn - 1, 400, line{}, 0},
+		{"without one an empty list draws nothing", eventlist.Style{Layout: eventlist.Inline}, 30 * adv, 400, line{}, 0},
+		{"a scaled one is bold, a scaled ascent down", eventlist.Style{Empty: done}, 30 * adv, 400,
+			line{text: done.Text, face: bold, scale: 2, baseline: 2 * ascent}, 1},
+		{"a scaled one is cut on scaled characters, clear of its dilation", eventlist.Style{Empty: done}, 10*adv + 1, 400,
+			line{text: "DONE»", face: bold, scale: 2, baseline: 2 * ascent}, 1},
+		{"a scaled one needs a scaled line", eventlist.Style{Empty: done}, 30 * adv, 2 * lineH, line{}, 1},
+		{"a centred one sits in the middle of the list", eventlist.Style{Empty: dash}, 30 * adv, 400,
+			line{text: "--", face: regular, x: 14 * adv, baseline: ascent}, 1},
+		{"a stacked list too narrow to list events is too narrow for it", eventlist.Style{Empty: dash}, 3*adv - 1, 400, line{}, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -580,7 +598,7 @@ func TestDraw_Empty(t *testing.T) {
 			if hidden := style.Draw(frame, image.Rect(0, 0, tt.width, tt.height), nil); hidden != 0 {
 				t.Errorf("hidden = %d, want 0", hidden)
 			}
-			assertLines(t, frame, 0, []line{{text: tt.want, face: regular, baseline: ascent}})
+			assertLines(t, frame, 0, []line{tt.want})
 			if got := style.Lines(nil, tt.width); got != tt.lines {
 				t.Errorf("Lines = %d, want %d", got, tt.lines)
 			}

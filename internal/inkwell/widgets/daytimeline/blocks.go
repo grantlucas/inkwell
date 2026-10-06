@@ -6,7 +6,8 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
 
@@ -38,7 +39,7 @@ type placement struct {
 // a block filling the window, clipped at both ends, and for today it is
 // as good as all day, so it's listed as one. A timed event that starts
 // or ends today, even one crossing a midnight, is a block like any other.
-func place(today daygrid.Day, start, end time.Time) placement {
+func place(today daydata.Day, start, end time.Time) placement {
 	var p placement
 	for _, e := range today.Events {
 		switch {
@@ -72,8 +73,8 @@ func allDayList(loc *time.Location, showLocation bool) eventlist.Style {
 // drawNote writes a note counting events outside the window, at x in
 // band.
 func drawNote(frame *image.Paletted, band image.Rectangle, x int, text string) {
-	daygrid.DrawText(frame, x, band.Min.Y+(band.Dy()-daygrid.BodyLineH())/2+daygrid.BodyAscent(),
-		text, daygrid.BodyBoldFace, widget.PaperBlack)
+	drawkit.DrawText(frame, x, band.Min.Y+(band.Dy()-drawkit.BodyLineH())/2+drawkit.BodyAscent(),
+		text, drawkit.BodyBoldFace, widget.PaperBlack)
 }
 
 // blockRect is where e's block goes: from the row its start falls on to
@@ -89,7 +90,7 @@ func drawNote(frame *image.Paletted, band image.Rectangle, x int, text string) {
 // block is lifted to end where a block clipped at the window's end does,
 // rather than run over the bottom rule.
 func blockRect(col image.Rectangle, tl timeline, e calendar.Event) image.Rectangle {
-	lineH, floor := daygrid.BodyLineH(), tl.bottom-1
+	lineH, floor := drawkit.BodyLineH(), tl.bottom-1
 	top := tl.y(e.Start)
 	bottom := min(max(tl.y(e.End)-1, top+lineH), floor)
 	top = min(top, max(bottom-lineH, tl.top))
@@ -113,14 +114,14 @@ func finished(e calendar.Event, now time.Time) bool {
 // now is the dashboard's clock, in the display zone the label's time is
 // written in. It returns the boxes the label's lines take.
 func drawBlock(frame *image.Paletted, r image.Rectangle, tl timeline, e calendar.Event, now time.Time, showLocation bool) []image.Rectangle {
-	daygrid.FillRect(frame, r, widget.PaperBlack)
+	drawkit.FillRect(frame, r, widget.PaperBlack)
 
 	// Whatever is drawn inside the block is in its contrasting colour:
 	// paper on a solid block, ink inside an outline.
 	inner, ink := r, widget.PaperWhite
 	if finished(e, now) {
 		inner, ink = r.Inset(outlineW), widget.PaperBlack
-		daygrid.FillWhite(frame, inner)
+		drawkit.FillWhite(frame, inner)
 	}
 	labels := drawLabel(frame, inner, e, now.Location(), showLocation, ink)
 	if e.Start.Before(tl.start) {

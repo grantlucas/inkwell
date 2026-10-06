@@ -6,7 +6,7 @@ import (
 	"slices"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 )
 
 const (
@@ -29,7 +29,7 @@ const (
 // shared settings, and the window keys, which parseConfig reads itself.
 // It lists no fixed number of events, so max_events is turned away with
 // the reason rather than the bare list of accepted keys.
-var spec = daygrid.Spec{
+var spec = daydata.Spec{
 	Widget: widgetName,
 	Extra:  slices.Sorted(maps.Keys(ownKeys)),
 	Rejected: map[string]string{
@@ -40,7 +40,7 @@ var spec = daygrid.Spec{
 // Config holds parsed day-timeline configuration: the settings every
 // calendar widget shares, and the window.
 type Config struct {
-	daygrid.Config
+	daydata.Config
 	Window Window
 }
 
@@ -86,7 +86,7 @@ func parseHour(key string, v any) (int, error) {
 // then the window keys, in sorted order so the first error named is the
 // same on every run, then the window as a whole.
 func parseConfig(raw map[string]any, inherit *weather.Provider) (Config, error) {
-	shared, err := daygrid.ParseConfig(spec, raw, inherit)
+	shared, err := daydata.ParseConfig(spec, raw, inherit)
 	cfg := Config{
 		Config: shared,
 		Window: Window{StartHour: defaultStartHour, EndHour: defaultEndHour},

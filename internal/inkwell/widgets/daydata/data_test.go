@@ -1,4 +1,4 @@
-package daygrid_test
+package daydata_test
 
 import (
 	"net/http"
@@ -12,7 +12,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil/fakehttp"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
@@ -77,9 +77,9 @@ func newSeam(t *testing.T, now time.Time) *seam {
 }
 
 // source builds a widget's day data from cfg.
-func (s *seam) source(t *testing.T, cfg daygrid.Config) daygrid.Source {
+func (s *seam) source(t *testing.T, cfg daydata.Config) daydata.Source {
 	t.Helper()
-	src, err := daygrid.New("test-widget", cfg, s.deps)
+	src, err := daydata.New("test-widget", cfg, s.deps)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -87,11 +87,11 @@ func (s *seam) source(t *testing.T, cfg daygrid.Config) daygrid.Source {
 }
 
 // gemConfig is a widget showing feeds with the forecast for Hamilton.
-func gemConfig(feeds ...calendar.Feed) daygrid.Config {
-	return daygrid.Config{
+func gemConfig(feeds ...calendar.Feed) daydata.Config {
+	return daydata.Config{
 		Feeds:   feeds,
 		Refresh: 15 * time.Minute,
-		Weather: daygrid.WeatherConfig{Latitude: 43.25, Longitude: -79.87, TempUnit: "C", Model: weather.ModelGEM},
+		Weather: daydata.WeatherConfig{Latitude: 43.25, Longitude: -79.87, TempUnit: "C", Model: weather.ModelGEM},
 	}
 }
 
@@ -154,7 +154,7 @@ func override(recurrenceID, start, end, status string) string {
 }
 
 // dayEvents is each day's event summaries, comma-joined.
-func dayEvents(data daygrid.Data) []string {
+func dayEvents(data daydata.Data) []string {
 	out := make([]string, len(data.Days))
 	for i, d := range data.Days {
 		out[i] = strings.Join(summaries(d.Events), ",")
@@ -355,7 +355,7 @@ func TestDayData_PerWidgetRulesOnASharedFeed(t *testing.T) {
 
 	for _, c := range []struct {
 		label string
-		data  daygrid.Data
+		data  daydata.Data
 		want  string
 	}{{"renamed", renamed, "Team Sync"}, {"hidden", hidden, ""}, {"plain", plain, "Weekly Sync"}} {
 		if got := dayEvents(c.data)[0]; got != c.want {
@@ -461,7 +461,7 @@ func TestDayData_NoWeather(t *testing.T) {
 	now := time.Date(2026, 10, 5, 8, 0, 0, 0, mustZone(t, "America/Toronto"))
 	s := newSeam(t, now)
 	s.tr.Serve(feedA, ics(weeklySeries))
-	src, err := daygrid.New("test-widget", gemConfig(calendar.Feed{URL: feedA}), s.deps, daygrid.WithoutWeather())
+	src, err := daydata.New("test-widget", gemConfig(calendar.Feed{URL: feedA}), s.deps, daydata.WithoutWeather())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -504,7 +504,7 @@ func TestNew_MissingDeps(t *testing.T) {
 		{"no clock", noClock, "test-widget: no clock"},
 	} {
 		t.Run(c.label, func(t *testing.T) {
-			_, err := daygrid.New("test-widget", gemConfig(), c.deps)
+			_, err := daydata.New("test-widget", gemConfig(), c.deps)
 			if err == nil || err.Error() != c.want {
 				t.Errorf("err = %v, want %q", err, c.want)
 			}

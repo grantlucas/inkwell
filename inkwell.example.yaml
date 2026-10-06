@@ -290,3 +290,104 @@ dashboard:
                                  # refresh cadence above
             # Location, model and temp_unit are inherited from the
             # top-level weather: block; override per widget if needed.
+
+    # A screen of your own, composed from the day widgets: today and
+    # tomorrow side by side, under the clock band. The screens above draw
+    # each day as a day badge (the date and the day's weather in brief),
+    # a combined chart and an event list; those three are also widgets
+    # you can place on their own, so a screen can be laid out however
+    # you like. This one gives each day half the panel.
+    #
+    # Each widget names its day: 0 is today, 1 tomorrow, up to 6. The
+    # charts share one temperature range because each asks for the same
+    # span of days (range_days, counted from today) from the same
+    # forecast; give every chart on a screen the same range_days and a
+    # cold day sits visibly lower than a warm one.
+    #
+    # Uncomment it to add it to the rotation.
+    #
+    #   +---------------------------------------------------+  0
+    #   |               fuzzy_clock, scale 2                |
+    #   +=========================+=========================+  46
+    #   |     day-badge, today    |   day-badge, tomorrow   |
+    #   |     combined-chart      |     combined-chart      |  204
+    #   |-------------------------|-------------------------|  260
+    #   |       event-list        |       event-list        |
+    #   +-------------------------+-------------------------+  480
+    #   0                        400                       800
+    #
+    # - name: today-and-tomorrow
+    #   widgets:
+    #     - type: fuzzy_clock
+    #       bounds: [0, 0, 800, 46]
+    #       refresh: "5m"
+    #       config:
+    #         scale: 2
+    #     - type: separator
+    #       bounds: [0, 46, 800, 48]
+    #       refresh: "static"
+    #     # Today. The day badge's style is one of the shapes the screens
+    #     # above draw it in: column (bold-five's), row (row-agenda's),
+    #     # compact (today-hero's day rows) or hero (today-hero's today).
+    #     # It reads no calendar, so it takes only the weather keys.
+    #     - type: day-badge
+    #       bounds: [0, 48, 400, 204]
+    #       refresh: "1h"
+    #       config:
+    #         style: column
+    #         day: 0
+    #     - type: combined-chart
+    #       bounds: [8, 204, 392, 260]
+    #       refresh: "1h"
+    #       config:
+    #         day: 0
+    #         range_days: 2    # today and tomorrow share one range
+    #     - type: separator
+    #       bounds: [0, 260, 400, 261]
+    #       refresh: "static"
+    #       config:
+    #         thickness: 1
+    #     # The event list's style is the shape the screens above list
+    #     # in: stacked (bold-five's), large (today-hero's agenda) or
+    #     # inline (row-agenda's). It reads no forecast, so it takes only
+    #     # the calendar keys.
+    #     - type: event-list
+    #       bounds: [8, 270, 392, 480]
+    #       refresh: "15m"
+    #       config:
+    #         feeds:
+    #           - "https://example.com/my-calendar.ics"
+    #         style: stacked
+    #         day: 0
+    #     - type: separator
+    #       bounds: [400, 48, 401, 480]
+    #       refresh: "static"
+    #       config:
+    #         thickness: 1
+    #         orientation: vertical
+    #     # Tomorrow: the same three widgets, day 1.
+    #     - type: day-badge
+    #       bounds: [401, 48, 800, 204]
+    #       refresh: "1h"
+    #       config:
+    #         style: column
+    #         day: 1
+    #     - type: combined-chart
+    #       bounds: [409, 204, 792, 260]
+    #       refresh: "1h"
+    #       config:
+    #         day: 1
+    #         range_days: 2
+    #     - type: separator
+    #       bounds: [401, 260, 800, 261]
+    #       refresh: "static"
+    #       config:
+    #         thickness: 1
+    #     - type: event-list
+    #       bounds: [409, 270, 792, 480]
+    #       refresh: "15m"
+    #       config:
+    #         feeds:
+    #           - "https://example.com/my-calendar.ics"
+    #         style: stacked
+    #         day: 1

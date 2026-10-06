@@ -1,4 +1,7 @@
-package daygrid
+// Package drawkit is the text and rule kit every widget that draws a
+// day draws with: the body face in both weights, the scaled drawer that
+// turns size into weight, and fills and rules in palette colours.
+package drawkit
 
 import (
 	"image"
@@ -41,7 +44,7 @@ func init() {
 func mustLoadFace(weight fonts.Weight, size float64, role string) font.Face {
 	f, err := fonts.Face(weight, size)
 	if err != nil {
-		panic("daygrid: load " + role + " font: " + err.Error())
+		panic("drawkit: load " + role + " font: " + err.Error())
 	}
 	return f
 }

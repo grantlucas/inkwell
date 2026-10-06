@@ -57,7 +57,7 @@ keeps `RenderHourlyChart` exactly as it is.
   renderer serves a 312 px hero cell and a 106 px row badge.
 - **One range per screen, and it is required.** The caller hands every chart
   the same `TempRange` (°C), so a cold day sits lower than a warm one. The day
-  data module (`daygrid`) works it out across the days that have a forecast.
+  data module (`daydata`) works it out across the days that have a forecast.
   The warmest value in the range touches the top of the plot and the coldest
   the row above the baseline; temperatures outside it clamp to the edge, and a
   collapsed range widens to one degree.
