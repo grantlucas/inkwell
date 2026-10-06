@@ -7,6 +7,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
 
 const (
@@ -17,25 +18,35 @@ const (
 	outlineW = 1
 )
 
-// placement is today's events sorted against the window: the ones drawn
-// on the grid, and how many fall wholly before or after it.
+// placement is today's events sorted against the window: the ones listed
+// in the all-day strip, the ones drawn on the grid, and how many fall
+// wholly before or after it.
 type placement struct {
+	AllDay         []calendar.Event
 	Placed         []calendar.Event
 	Earlier, Later int
 }
 
-// place sorts events against the window from start to end. An event
-// that only touches an edge from outside is outside: one ending as the
-// window opens is earlier, and one starting as it closes is later. An
-// event with no end is a moment, inside when it falls in [start, end).
+// place sorts today's events against the window from start to end. An
+// event that only touches an edge from outside is outside: one ending as
+// the window opens is earlier, and one starting as it closes is later.
+// An event with no end is a moment, inside when it falls in [start, end).
 //
-// All-day events have no time to place them at, so the grid leaves them
-// out; they belong in a strip of their own above it.
-func place(events []calendar.Event, start, end time.Time) placement {
+// All-day events have no time to place them at, so they're listed in a
+// strip above the grid. So is a timed event running through the whole of
+// today, from before midnight to after the next: on the grid it would be
+// a block filling the window, clipped at both ends, and for today it is
+// as good as all day, so it's listed as one. A timed event that starts
+// or ends today, even one crossing a midnight, is a block like any other.
+func place(today daygrid.Day, start, end time.Time) placement {
 	var p placement
-	for _, e := range events {
+	for _, e := range today.Events {
 		switch {
 		case e.AllDay:
+			p.AllDay = append(p.AllDay, e)
+		case !e.Start.After(today.Start) && !e.End.Before(today.End()):
+			e.AllDay = true
+			p.AllDay = append(p.AllDay, e)
 		case !e.End.After(start) && e.Start.Before(start):
 			p.Earlier++
 		case !e.Start.Before(end):
@@ -45,6 +56,17 @@ func place(events []calendar.Event, start, end time.Time) placement {
 		}
 	}
 	return p
+}
+
+// stripLines is the most lines the all-day strip lists. The second
+// becomes "+N MORE" when there are more events, so a day with a lot on
+// all day doesn't push the grid down the screen.
+const stripLines = 2
+
+// allDayList is how the strip lists its events: one line each, the event
+// list's ALL DAY then the title.
+func allDayList(loc *time.Location, showLocation bool) eventlist.Style {
+	return eventlist.Style{Layout: eventlist.Inline, ShowLocation: showLocation, Location: loc}
 }
 
 // drawNote writes a note counting events outside the window, at x in

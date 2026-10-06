@@ -10,6 +10,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
 
 // testTime is a Monday early afternoon, so today has finished events
@@ -500,6 +501,92 @@ func TestWidget_CountsAThirdSimultaneousEventInATag(t *testing.T) {
 	}
 }
 
+// allDay is an all-day event today, anchored at UTC midnight as the
+// parser anchors a VALUE=DATE.
+func allDay(summary string) ical.Event {
+	return ical.Event{UID: summary, Summary: summary, AllDay: true,
+		Start: time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC), End: time.Date(2026, 3, 17, 0, 0, 0, 0, time.UTC)}
+}
+
+// All-day events, and timed events running through the whole of today,
+// have no time on the grid to sit at, so they're listed in a strip above
+// it through the event list: up to two lines, the second becoming
+// "+N MORE" when there are more. A multi-day timed event reads ALL DAY
+// for today, like the all-day events beside it. The strip takes height
+// only when it has something to list.
+func TestWidget_ListsAllDayEventsInAStripAboveTheGrid(t *testing.T) {
+	conference := span("Conference", at(-15, 0), at(41, 0))
+	tests := []struct {
+		label     string
+		events    []ical.Event
+		wantLines int
+		wantList  []ical.Event
+	}{
+		{label: "no all-day events", events: []ical.Event{span("Lunch", at(12, 0), at(13, 0))}},
+		{
+			label:     "one all-day event",
+			events:    []ical.Event{allDay("Car in for service"), span("Lunch", at(12, 0), at(13, 0))},
+			wantLines: 1,
+			wantList:  []ical.Event{allDay("Car in for service")},
+		},
+		{
+			label:     "two all-day events",
+			events:    []ical.Event{allDay("Car in for service"), allDay("Recycling day")},
+			wantLines: 2,
+			wantList:  []ical.Event{allDay("Car in for service"), allDay("Recycling day")},
+		},
+		{
+			label:     "more than two",
+			events:    []ical.Event{allDay("Car in for service"), allDay("Recycling day"), allDay("Grandma's birthday")},
+			wantLines: 2,
+			wantList:  []ical.Event{allDay("Car in for service"), allDay("Recycling day"), allDay("Grandma's birthday")},
+		},
+		{
+			label:     "a timed event through the whole day",
+			events:    []ical.Event{conference},
+			wantLines: 1,
+			wantList:  []ical.Event{{UID: "Conference", Summary: "Conference", AllDay: true, Start: conference.Start, End: conference.End}},
+		},
+		{
+			label:  "a timed event from yesterday ending today",
+			events: []ical.Event{span("Night shift", at(-2, 0), at(8, 0))},
+		},
+		{
+			label:  "a timed event from today ending tomorrow",
+			events: []ical.Event{span("Night shift", at(20, 0), at(30, 0))},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			frame := renderToFrame(t, newWidget(testBounds, tt.events, defaultConfig()))
+			l := computeLayout(testBounds, sections{AllDay: tt.wantLines})
+
+			if tt.wantLines == 0 {
+				if !l.AllDay.Empty() {
+					t.Fatalf("strip %v with nothing to list", l.AllDay)
+				}
+				if l.Grid.Min.Y != testBounds.Min.Y+gridPadY {
+					t.Errorf("grid starts at %d with no strip, want %d", l.Grid.Min.Y, testBounds.Min.Y+gridPadY)
+				}
+				return
+			}
+			if l.AllDay.Min.Y != testBounds.Min.Y || l.Grid.Min.Y <= l.AllDay.Max.Y-1 {
+				t.Fatalf("strip %v isn't at the top, above the grid at %d", l.AllDay, l.Grid.Min.Y)
+			}
+			if got := l.AllDay.Dy(); got < tt.wantLines*daygrid.BodyLineH() || got >= (tt.wantLines+1)*daygrid.BodyLineH() {
+				t.Errorf("strip is %d px tall, want room for %d lines", got, tt.wantLines)
+			}
+
+			// The strip reads as the event list draws these events.
+			ref := newTestFrame()
+			eventlist.Style{Layout: eventlist.Inline, Location: time.UTC}.Draw(ref, stripText(l), tt.wantList)
+			if !sameIn(frame, ref, l.AllDay) {
+				t.Error("strip differs from the event list of its events")
+			}
+		})
+	}
+}
+
 // A short event at the very end of the window has no line's height left
 // below its start, so its block is lifted to end where the grid does
 // rather than run over the bottom rule.
@@ -725,6 +812,35 @@ func TestWidget_Golden(t *testing.T) {
 				span("Call Mom", at(15, 15), at(15, 45)),
 			},
 		},
+		{
+			label:  "one all-day event",
+			events: append([]ical.Event{allDay("Car in for service")}, typicalDay()...),
+		},
+		{
+			label: "more than two all-day events",
+			events: append([]ical.Event{
+				allDay("Car in for service"),
+				allDay("Recycling day"),
+				allDay("Grandma's birthday"),
+				span("Conference", at(-15, 0), at(41, 0)),
+				span("Gym", at(5, 30), at(6, 30)),
+			}, typicalDay()...),
+		},
+		{
+			label: "a multi-day event through today",
+			events: []ical.Event{
+				span("Cottage weekend", at(-30, 0), at(40, 0)),
+				span("Lunch", at(12, 0), at(13, 0)),
+			},
+		},
+		{
+			label: "neither all-day nor multi-day",
+			events: []ical.Event{
+				span("Night shift", at(-2, 0), at(8, 0)),
+				span("Lunch", at(12, 0), at(13, 0)),
+				span("Red-eye flight", at(21, 0), at(30, 0)),
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -763,6 +879,12 @@ func TestWidget_StaysInsideItsBounds(t *testing.T) {
 		span("Late call", at(22, 0), at(23, 0)),
 		span("Overnight", at(20, 0), at(30, 0)),
 		span("Early", at(4, 0), at(8, 0)),
+		allDay("Car in for service"),
+		allDay("Recycling day"),
+		allDay("Grandma's birthday"),
+		span("Clash", at(13, 0), at(13, 30)),
+		span("Another clash", at(13, 15), at(14, 0)),
+		span("Lock up", at(21, 55), at(22, 0)),
 	)
 	tests := []struct {
 		label  string

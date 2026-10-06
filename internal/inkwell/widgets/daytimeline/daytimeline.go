@@ -47,12 +47,24 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	now := w.Now()
 	today := w.Days.Days(now, 1).Days[0]
 
-	// Which events are outside the window decides whether the note
-	// bands take any height, and so where the grid's rows fall.
+	// What is all day and which events are outside the window decide
+	// whether the strip and the note bands take any height, and so where
+	// the grid's rows fall. The strip lists in the event column, which
+	// is as wide whatever the bands take.
 	start, end := w.Window.on(today.Start)
-	p := place(today.Events, start, end)
-	l := computeLayout(w.Bounds(), sections{Earlier: p.Earlier > 0, Later: p.Later > 0})
+	p := place(today, start, end)
+	list := allDayList(now.Location(), w.Config.ShowLocation)
+	width := computeLayout(w.Bounds(), sections{}).Events.Dx()
+	l := computeLayout(w.Bounds(), sections{
+		AllDay:  min(list.Lines(p.AllDay, width), stripLines),
+		Earlier: p.Earlier > 0,
+		Later:   p.Later > 0,
+	})
 	tl := newTimeline(today.Start, w.Window, l.Grid)
+
+	if len(p.AllDay) > 0 {
+		list.Draw(frame, stripText(l), p.AllDay)
+	}
 
 	drawGrid(frame, l, tl, w.Window)
 	a := arrange(p.Placed, l.Events, tl)
