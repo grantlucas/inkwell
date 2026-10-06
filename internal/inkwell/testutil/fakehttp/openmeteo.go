@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 )
@@ -29,6 +30,15 @@ type OpenMeteo struct {
 	// Days caps the forecast, as a model whose horizon is shorter than
 	// the request would; zero answers every day asked for.
 	Days int
+	// Sky, when set, is the weather instead of epoch hours, for a test
+	// that has to show a day a person would recognise: the temperature
+	// (°C) and chance of rain (percent, as Open-Meteo writes it) for the
+	// hour starting at hour on the forecast's day-th day. Each day's high
+	// and low are then the warmest and coldest of its hours.
+	Sky func(day, hour int) (temp, precip float64)
+	// Codes is each forecast day's WMO weather code; a day past its end
+	// is clear (0).
+	Codes []int
 }
 
 // Reply answers one forecast request.
@@ -69,15 +79,28 @@ func (f OpenMeteo) Reply(req *http.Request) Reply {
 	}
 	for d := range days {
 		day := today.AddDate(0, 0, d)
-		body.Daily.Time = append(body.Daily.Time, day.Format("2006-01-02"))
-		body.Daily.Max = append(body.Daily.Max, float64(20+d))
-		body.Daily.Min = append(body.Daily.Min, float64(10+d))
-		body.Daily.WeatherCode = append(body.Daily.WeatherCode, 0)
-		for h := day; h.Before(day.AddDate(0, 0, 1)); h = h.Add(time.Hour) {
-			body.Hourly.Time = append(body.Hourly.Time, h.Format("2006-01-02T15:04"))
-			body.Hourly.Temperature2m = append(body.Hourly.Temperature2m, EpochHour(h))
-			body.Hourly.PrecipProb = append(body.Hourly.PrecipProb, 0)
+		hi, lo, code := float64(20+d), float64(10+d), 0
+		if d < len(f.Codes) {
+			code = f.Codes[d]
 		}
+		var temps []float64
+		for h := day; h.Before(day.AddDate(0, 0, 1)); h = h.Add(time.Hour) {
+			temp, precip := EpochHour(h), 0.0
+			if f.Sky != nil {
+				temp, precip = f.Sky(d, h.Hour())
+			}
+			temps = append(temps, temp)
+			body.Hourly.Time = append(body.Hourly.Time, h.Format("2006-01-02T15:04"))
+			body.Hourly.Temperature2m = append(body.Hourly.Temperature2m, temp)
+			body.Hourly.PrecipProb = append(body.Hourly.PrecipProb, precip)
+		}
+		if f.Sky != nil {
+			hi, lo = slices.Max(temps), slices.Min(temps)
+		}
+		body.Daily.Time = append(body.Daily.Time, day.Format("2006-01-02"))
+		body.Daily.Max = append(body.Daily.Max, hi)
+		body.Daily.Min = append(body.Daily.Min, lo)
+		body.Daily.WeatherCode = append(body.Daily.WeatherCode, code)
 	}
 	raw, _ := json.Marshal(body)
 	return Reply{Body: string(raw)}

@@ -11,32 +11,44 @@ import (
 
 var _ widget.Widget = (*Widget)(nil)
 
-// Widget draws a horizontal hairline across its full bounds. A multi-row
-// separator anti-aliases the edge rows so the line reads as a soft division
-// rather than a hard 2-bit slab.
+// Widget draws a solid rule across its bounds: a horizontal one along the
+// bottom edge, dividing stacked widgets, or a vertical one down the right
+// edge, dividing side-by-side ones.
 type Widget struct {
 	bounds    image.Rectangle
 	thickness int
+	vertical  bool
 }
 
-// New creates a separator widget.
+// New creates a horizontal separator widget.
 func New(bounds image.Rectangle, thickness int) *Widget {
 	return &Widget{bounds: bounds, thickness: thickness}
+}
+
+// NewVertical creates a vertical separator widget.
+func NewVertical(bounds image.Rectangle, thickness int) *Widget {
+	return &Widget{bounds: bounds, thickness: thickness, vertical: true}
 }
 
 // Bounds returns the widget's display rectangle.
 func (w *Widget) Bounds() image.Rectangle { return w.bounds }
 
-// Render draws a horizontal divider at the bottom of the bounds. Every
-// row renders in PaperBlack: with the BW packer threshold-snapping (no
-// more Bayer dither) a "soft" gray interior just disappears, so the
-// separator is now a solid bar across its full thickness.
+// Render draws the rule at the bottom of the bounds, or down their right
+// edge for a vertical separator. Every pixel renders in PaperBlack: with
+// the BW packer threshold-snapping (no more Bayer dither) a "soft" gray
+// interior just disappears, so the separator is a solid bar across its
+// full thickness.
 func (w *Widget) Render(frame *image.Paletted) error {
 	draw.Draw(frame, w.bounds, image.NewUniform(color.White), image.Point{}, draw.Src)
 
-	topY := max(w.bounds.Max.Y-w.thickness, w.bounds.Min.Y)
-	for y := w.bounds.Max.Y - 1; y >= topY; y-- {
-		for x := w.bounds.Min.X; x < w.bounds.Max.X; x++ {
+	rule := w.bounds
+	if w.vertical {
+		rule.Min.X = max(w.bounds.Max.X-w.thickness, w.bounds.Min.X)
+	} else {
+		rule.Min.Y = max(w.bounds.Max.Y-w.thickness, w.bounds.Min.Y)
+	}
+	for y := rule.Min.Y; y < rule.Max.Y; y++ {
+		for x := rule.Min.X; x < rule.Max.X; x++ {
 			frame.SetColorIndex(x, y, widget.PaperBlack)
 		}
 	}
@@ -61,5 +73,12 @@ func Factory(bounds image.Rectangle, config map[string]any, _ widget.Deps) (widg
 		}
 	}
 
-	return New(bounds, thickness), nil
+	switch v, ok := config["orientation"]; {
+	case !ok || v == "horizontal":
+		return New(bounds, thickness), nil
+	case v == "vertical":
+		return NewVertical(bounds, thickness), nil
+	default:
+		return nil, fmt.Errorf(`separator: orientation must be "horizontal" or "vertical", got %#v`, v)
+	}
 }
