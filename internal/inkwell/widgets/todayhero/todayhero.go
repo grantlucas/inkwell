@@ -15,7 +15,7 @@ var _ widget.Widget = (*Widget)(nil)
 
 // Widget renders the today-hero screen.
 type Widget struct {
-	daydata.Base
+	daydata.Base[daydata.Config]
 }
 
 // New creates a today-hero Widget drawing the days from days. Of cfg it

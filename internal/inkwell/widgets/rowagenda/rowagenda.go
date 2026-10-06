@@ -14,7 +14,7 @@ var _ widget.Widget = (*Widget)(nil)
 
 // Widget renders the row-agenda screen.
 type Widget struct {
-	daydata.Base
+	daydata.Base[daydata.Config]
 }
 
 // New creates a row-agenda Widget drawing the days from days. Of cfg it

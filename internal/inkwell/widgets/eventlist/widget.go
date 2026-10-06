@@ -42,15 +42,12 @@ type Config struct {
 // events, listed into its bounds in one of the presets the full-screen
 // widgets list in.
 type Widget struct {
-	daydata.Base
-	// Config is the widget's parsed settings: the shared ones Base holds
-	// as well, and its own.
-	Config Config
+	daydata.Base[Config]
 }
 
 // New creates an event-list Widget listing cfg.Day's events from days.
 func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg Config) *Widget {
-	return &Widget{Base: daydata.NewBase(bounds, days, now, cfg.Config), Config: cfg}
+	return &Widget{daydata.NewBase(bounds, days, now, cfg)}
 }
 
 // Render lists the day's events into the widget's bounds. The list keeps
@@ -91,11 +88,11 @@ func parseConfig(raw map[string]any, _ *weather.Provider) (Config, error) {
 	}
 
 	shared, err := daydata.ParseConfig(daydata.Spec{
-		Widget:       widgetName,
-		MaxEvents:    defaultMaxEvents[cfg.Preset],
-		Extra:        ownKeys,
-		CalendarOnly: true,
-		OneDay:       true,
+		Widget:    widgetName,
+		MaxEvents: defaultMaxEvents[cfg.Preset],
+		Extra:     ownKeys,
+		Reads:     daydata.CalendarOnly,
+		OneDay:    true,
 	}, raw, nil)
 	if err != nil {
 		return cfg, err

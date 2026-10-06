@@ -69,7 +69,7 @@ func highDrawer() fonts.ScaledDrawer {
 
 // Widget renders today's weather.
 type Widget struct {
-	daydata.Base
+	daydata.Base[daydata.Config]
 }
 
 // New creates a today-weather Widget drawing today from days. Of cfg it

@@ -26,15 +26,12 @@ type Config struct {
 
 // Widget is one day's badge placed on a screen on its own.
 type Widget struct {
-	daydata.Base
-	// Config is the widget's parsed settings: the shared ones Base holds
-	// as well, and its own.
-	Config Config
+	daydata.Base[Config]
 }
 
 // New creates a day-badge Widget drawing cfg.Day's badge from days.
 func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg Config) *Widget {
-	return &Widget{Base: daydata.NewBase(bounds, days, now, cfg.Config), Config: cfg}
+	return &Widget{daydata.NewBase(bounds, days, now, cfg)}
 }
 
 // Render draws the day's badge at the top-left of the widget's bounds.
@@ -61,10 +58,10 @@ func (w *Widget) Render(frame *image.Paletted) error {
 // spec declares day-badge to the shared parser: the weather settings, day
 // and its own style.
 var spec = daydata.Spec{
-	Widget:      widgetName,
-	WeatherOnly: true,
-	OneDay:      true,
-	Extra:       []string{"style"},
+	Widget: widgetName,
+	Reads:  daydata.WeatherOnly,
+	OneDay: true,
+	Extra:  []string{"style"},
 }
 
 // parseConfig reads the shared settings through the shared parser,

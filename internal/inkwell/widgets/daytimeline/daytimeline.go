@@ -17,15 +17,13 @@ var _ widget.Widget = (*Widget)(nil)
 
 // Widget renders the day-timeline.
 type Widget struct {
-	daydata.Base
-	// Window is the span of today the grid shows.
-	Window Window
+	daydata.Base[Config]
 }
 
 // New creates a day-timeline Widget drawing today from days over the
 // window cfg sets.
 func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg Config) *Widget {
-	return &Widget{Base: daydata.NewBase(bounds, days, now, cfg.Config), Window: cfg.Window}
+	return &Widget{daydata.NewBase(bounds, days, now, cfg)}
 }
 
 // Render draws today's hourly grid.
@@ -48,7 +46,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	// whether the strip and the note bands take any height, and so where
 	// the grid's rows fall. The strip lists over the events, which are
 	// as wide whatever the bands take.
-	start, end := w.Window.on(today.Start)
+	start, end := w.Config.Window.on(today.Start)
 	p := place(today, start, end)
 	list := allDayList(now.Location(), w.Config.ShowLocation)
 	width := computeLayout(w.Bounds(), sections{}).Events.Dx()
@@ -57,7 +55,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 		Earlier: p.Earlier > 0,
 		Later:   p.Later > 0,
 	})
-	tl := newTimeline(today.Start, w.Window, l.Grid)
+	tl := newTimeline(today.Start, w.Config.Window, l.Grid)
 
 	if len(p.AllDay) > 0 {
 		list.Draw(frame, stripText(l), p.AllDay)
@@ -66,9 +64,9 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	// The lane goes down before the grid, so the hour rules cross it and
 	// the temperature line, sitting between them, never meets one.
 	if today.Forecast != nil {
-		drawLane(frame, l.Lane, tl, w.Window, today.Forecast.Hourly, data.TempRange)
+		drawLane(frame, l.Lane, tl, w.Config.Window, today.Forecast.Hourly, data.TempRange)
 	}
-	drawGrid(frame, l, tl, w.Window)
+	drawGrid(frame, l, tl, w.Config.Window)
 	a := arrange(p.Placed, l.Events, tl)
 	// The words on the grid, which the now marker passes behind.
 	var labels []image.Rectangle

@@ -15,7 +15,7 @@ var _ widget.Widget = (*Widget)(nil)
 
 // Widget renders the bold-five screen.
 type Widget struct {
-	daydata.Base
+	daydata.Base[daydata.Config]
 }
 
 // New creates a bold-five Widget drawing the days from days. Of cfg it

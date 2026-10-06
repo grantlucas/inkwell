@@ -86,16 +86,13 @@ var (
 
 // Widget renders the weather for the days after today.
 type Widget struct {
-	daydata.Base
-	// Config is the widget's parsed settings: the shared ones Base holds
-	// as well, and its own.
-	Config Config
+	daydata.Base[Config]
 }
 
 // New creates a weather-ahead Widget listing cfg.Days days after today
 // from days.
 func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg Config) *Widget {
-	return &Widget{Base: daydata.NewBase(bounds, days, now, cfg.Config), Config: cfg}
+	return &Widget{daydata.NewBase(bounds, days, now, cfg)}
 }
 
 // Render draws one row per day after today, splitting the bounds' height

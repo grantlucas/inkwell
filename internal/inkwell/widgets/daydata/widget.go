@@ -9,25 +9,26 @@ import (
 )
 
 // Base is what every day widget holds: its bounds, its day data, the
-// dashboard's clock and its parsed settings. A widget embeds it and adds
+// dashboard's clock and its parsed settings, of type C: Config itself, or
+// the widget's own configuration embedding it. A widget embeds it and adds
 // only how it lays its days out.
-type Base struct {
+type Base[C Settings] struct {
 	bounds image.Rectangle
 	// Days is the widget's day data module.
 	Days Source
 	// Now is the dashboard's clock, already in the display zone.
 	Now func() time.Time
-	// Config is the widget's parsed shared settings.
-	Config Config
+	// Config is the widget's parsed settings.
+	Config C
 }
 
 // NewBase holds a day widget's bounds, day data, clock and settings.
-func NewBase(bounds image.Rectangle, days Source, now func() time.Time, cfg Config) Base {
-	return Base{bounds: bounds, Days: days, Now: now, Config: cfg}
+func NewBase[C Settings](bounds image.Rectangle, days Source, now func() time.Time, cfg C) Base[C] {
+	return Base[C]{bounds: bounds, Days: days, Now: now, Config: cfg}
 }
 
 // Bounds returns the rectangle the widget occupies.
-func (b Base) Bounds() image.Rectangle { return b.bounds }
+func (b Base[C]) Bounds() image.Rectangle { return b.bounds }
 
 // Settings is a day widget's parsed configuration: the shared settings,
 // which its day data is built from, and any of its own. A widget's own

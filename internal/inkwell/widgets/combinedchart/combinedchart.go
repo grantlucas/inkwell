@@ -49,15 +49,12 @@ type Config struct {
 
 // Widget is one day's combined chart placed on a screen on its own.
 type Widget struct {
-	daydata.Base
-	// Config is the widget's parsed settings: the shared ones Base holds
-	// as well, and its own.
-	Config Config
+	daydata.Base[Config]
 }
 
 // New creates a combined-chart Widget drawing cfg.Day's chart from days.
 func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg Config) *Widget {
-	return &Widget{Base: daydata.NewBase(bounds, days, now, cfg.Config), Config: cfg}
+	return &Widget{daydata.NewBase(bounds, days, now, cfg)}
 }
 
 // Render draws the day's combined chart into the widget's bounds, on the
@@ -86,10 +83,10 @@ func (w *Widget) Render(frame *image.Paletted) error {
 // spec declares combined-chart to the shared parser: the weather settings,
 // day, and its own range_days.
 var spec = daydata.Spec{
-	Widget:      widgetName,
-	WeatherOnly: true,
-	OneDay:      true,
-	Extra:       []string{"range_days"},
+	Widget: widgetName,
+	Reads:  daydata.WeatherOnly,
+	OneDay: true,
+	Extra:  []string{"range_days"},
 }
 
 // parseConfig reads the shared settings through the shared parser,

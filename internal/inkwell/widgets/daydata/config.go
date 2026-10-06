@@ -59,21 +59,38 @@ type Spec struct {
 	// pasted config, and the reason says what to do about it. Any other
 	// unknown key gets the list of accepted ones.
 	Rejected map[string]string
-	// WeatherOnly is a widget that draws the forecast and no events, so
-	// it reads no calendar. feeds is then not required but rejected,
-	// along with every other calendar setting (refresh, show_location,
-	// max_events), with that as the reason; MaxEvents is ignored. Its
-	// weather settings parse and inherit exactly as a calendar widget's
-	// do.
-	WeatherOnly bool
-	// CalendarOnly is a widget that lists events and draws no forecast,
-	// so it reads no weather. Its weather settings are rejected with that
-	// as the reason.
-	CalendarOnly bool
+	// Reads is which of the calendar and the forecast the widget draws
+	// from: both, the zero value, or only one.
+	Reads Sources
 	// OneDay is a widget placed on a single day rather than drawing
 	// several, so it accepts day: which day, from today, it draws.
 	OneDay bool
 }
+
+// Sources is which of the calendar and the forecast a day widget reads.
+type Sources int
+
+const (
+	// CalendarAndWeather is a widget that draws events and the forecast.
+	CalendarAndWeather Sources = iota
+	// WeatherOnly is a widget that draws the forecast and no events, so
+	// it reads no calendar. feeds is then not required but rejected,
+	// along with every other calendar setting (refresh, show_location,
+	// max_events), with that as the reason; Spec.MaxEvents is ignored.
+	// Its weather settings parse and inherit exactly as any other
+	// widget's do.
+	WeatherOnly
+	// CalendarOnly is a widget that lists events and draws no forecast,
+	// so it reads no weather. Its weather settings are rejected with that
+	// as the reason.
+	CalendarOnly
+)
+
+// calendar reports whether a widget reading s reads the calendar.
+func (s Sources) calendar() bool { return s != WeatherOnly }
+
+// weather reports whether a widget reading s reads the forecast.
+func (s Sources) weather() bool { return s != CalendarOnly }
 
 // calendarKeys are the shared settings that configure a widget's
 // calendar, which a weather-only widget doesn't have.
@@ -99,7 +116,7 @@ func ParseConfig(spec Spec, raw map[string]any, inherit *weather.Provider) (Conf
 
 	// A weather-only widget has had every calendar key rejected above,
 	// so only the weather settings are left to parse.
-	if !spec.WeatherOnly {
+	if spec.Reads.calendar() {
 		f, ok := raw["feeds"]
 		if !ok {
 			return cfg, fmt.Errorf("%s: feeds is required", name) //nolint:goerr113 // config validation message
@@ -156,13 +173,13 @@ func parseRefresh(name string, v any) (time.Duration, error) {
 // wandering rather than counting down.
 func rejectUnknown(spec Spec, raw map[string]any) error {
 	accepted := slices.Clone(spec.Extra)
-	if !spec.CalendarOnly {
+	if spec.Reads.weather() {
 		accepted = append(accepted, weatherKeys...)
 	}
 	if spec.OneDay {
 		accepted = append(accepted, "day")
 	}
-	if !spec.WeatherOnly {
+	if spec.Reads.calendar() {
 		accepted = append(accepted, calendarKeys...)
 		if spec.MaxEvents > 0 {
 			accepted = append(accepted, "max_events")
@@ -176,10 +193,10 @@ func rejectUnknown(spec Spec, raw map[string]any) error {
 		if why, ok := spec.Rejected[key]; ok {
 			return fmt.Errorf("%s: %s is not supported: %s", spec.Widget, key, why)
 		}
-		if spec.WeatherOnly && (slices.Contains(calendarKeys, key) || key == "max_events") {
+		if !spec.Reads.calendar() && (slices.Contains(calendarKeys, key) || key == "max_events") {
 			return fmt.Errorf("%s: %s is not supported: %s shows only the weather, so it reads no calendar", spec.Widget, key, spec.Widget)
 		}
-		if spec.CalendarOnly && slices.Contains(weatherKeys, key) {
+		if !spec.Reads.weather() && slices.Contains(weatherKeys, key) {
 			return fmt.Errorf("%s: %s is not supported: %s shows only events, so it reads no forecast", spec.Widget, key, spec.Widget)
 		}
 		return fmt.Errorf("%s: unsupported setting %q (accepted: %s)", spec.Widget, key, strings.Join(accepted, ", "))

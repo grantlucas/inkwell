@@ -24,9 +24,9 @@ const (
 // every day widget takes, no calendar, and days, which parseConfig reads
 // itself.
 var spec = daydata.Spec{
-	Widget:      widgetName,
-	WeatherOnly: true,
-	Extra:       []string{"days"},
+	Widget: widgetName,
+	Reads:  daydata.WeatherOnly,
+	Extra:  []string{"days"},
 }
 
 // Config is weather-ahead's parsed configuration: the shared weather

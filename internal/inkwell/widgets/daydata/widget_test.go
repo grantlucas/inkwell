@@ -10,7 +10,7 @@ import (
 )
 
 // dayWidget is the smallest day widget: the shared Base and nothing drawn.
-type dayWidget struct{ daydata.Base }
+type dayWidget struct{ daydata.Base[daydata.Config] }
 
 func (dayWidget) Render(*image.Paletted) error { return nil }
 

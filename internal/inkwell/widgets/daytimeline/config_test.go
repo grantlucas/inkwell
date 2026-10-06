@@ -95,7 +95,7 @@ func TestFactory_Window(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Factory: %v", err)
 			}
-			cfg := w.(*Widget).Window
+			cfg := w.(*Widget).Config.Window
 			if cfg.StartHour != tt.wantStart || cfg.EndHour != tt.wantEnd {
 				t.Errorf("window = %d to %d, want %d to %d", cfg.StartHour, cfg.EndHour, tt.wantStart, tt.wantEnd)
 			}

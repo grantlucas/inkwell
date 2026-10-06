@@ -12,8 +12,8 @@ const widgetName = "today-weather"
 // unknown, because the two sit side by side and a key copied between them
 // is the likely mistake.
 var spec = daydata.Spec{
-	Widget:      widgetName,
-	WeatherOnly: true,
+	Widget: widgetName,
+	Reads:  daydata.WeatherOnly,
 	Rejected: map[string]string{
 		"days": "today-weather always shows today; weather-ahead shows the days after it",
 	},
