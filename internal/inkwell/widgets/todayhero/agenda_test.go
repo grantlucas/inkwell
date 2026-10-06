@@ -52,6 +52,25 @@ func TestRenderHeroAgenda_TooNarrowForDone(t *testing.T) {
 	}
 }
 
+// A row's list ends above the rule drawn along the row's last pixel, so
+// a line that would end exactly on the row's edge does not fit: it
+// would sit on the rule. A row one line and its padding tall therefore
+// has no room for an event, nor for the "+N MORE" line.
+func TestRenderDayRow_ListEndsAboveTheRule(t *testing.T) {
+	row := image.Rect(0, 0, 800, rowPadX+daygrid.BodyLineH())
+	day := daygrid.Day{
+		Start:  time.Date(2026, 3, 17, 0, 0, 0, 0, time.UTC),
+		Events: []calendar.Event{{Summary: "Dentist", Start: time.Date(2026, 3, 17, 10, 0, 0, 0, time.UTC)}},
+	}
+	frame := newTestFrame(800, 480)
+	renderDayRow(frame, row, day, dayRowOptions{Agenda: dayRowStyle(false, time.UTC)})
+
+	agenda := image.Rect(rowAgendaDX, 0, 800, 480)
+	if got := countIndexIn(frame, agenda, widget.PaperBlack); got != 0 {
+		t.Errorf("drew %d px in the agenda of a row with no room above its rule", got)
+	}
+}
+
 // A row without a forecast draws no temperatures, because drawing a zero
 // would state a 0°/0° reading nobody forecast.
 func TestRenderRowWeather_MissingForecast(t *testing.T) {

@@ -140,13 +140,15 @@ func dayRowStyle(showLocation bool, loc *time.Location) eventlist.Style {
 	}
 }
 
-// rowAgenda is the rectangle a row's events are listed in, right of the
-// date gutter. A literal rather than image.Rect, which would swap the
-// edges of a row too narrow for the gutter into a list to the left of
-// it; the list draws nothing into a negative width.
+// rowAgenda is the rectangle a row's events are listed in: right of the
+// date gutter, and ending above the rule Render draws along the row's
+// last pixel, so a line that just fits can never touch it. A literal
+// rather than image.Rect, which would swap the edges of a row too
+// narrow for the gutter into a list to the left of it; the list draws
+// nothing into a negative width.
 func rowAgenda(row image.Rectangle) image.Rectangle {
 	return image.Rectangle{
 		Min: image.Pt(row.Min.X+rowAgendaDX, row.Min.Y+rowPadX),
-		Max: image.Pt(row.Max.X-rowPadX, row.Max.Y),
+		Max: image.Pt(row.Max.X-rowPadX, row.Max.Y-1),
 	}
 }

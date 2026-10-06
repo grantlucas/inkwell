@@ -84,13 +84,17 @@ func wrap(text string, maxChars, maxLines int) []string {
 // runeLen counts characters, the unit every text budget here is in.
 func runeLen(s string) int { return utf8.RuneCountInString(s) }
 
-// truncate shortens s to maxChars characters, marking the cut with ».
-// It counts runes, never bytes. Every caller has at least MinChars to
-// give it, so there is always room for the mark.
+// truncate shortens s to maxChars characters, marking the cut with »
+// when there is room for one. It counts runes, never bytes. Today's
+// callers all give it at least MinChars, but a budget of one or less
+// cuts without the mark rather than slicing past the start.
 func truncate(s string, maxChars int) string {
 	r := []rune(s)
 	if len(r) <= maxChars {
 		return s
+	}
+	if maxChars <= 1 {
+		return string(r[:max(maxChars, 0)])
 	}
 	return string(r[:maxChars-1]) + ellipsis
 }

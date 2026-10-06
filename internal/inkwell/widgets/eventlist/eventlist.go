@@ -21,10 +21,12 @@ import (
 	"golang.org/x/image/font"
 )
 
-// MinChars is the narrowest stacked list, in body characters, that
-// draws anything, and the least room an inline title is drawn in. A
-// widget that draws its own empty-day message draws it only from this
-// width up too, so the list and its empty state give out together.
+// MinChars is a width in body characters with two uses. A stacked list
+// narrower than it draws nothing, and an inline title with less room
+// than it past the time column is left off. A widget that draws its own
+// empty-day text beside a stacked list should guard it on the same
+// width, so the list and its empty state give out together; an empty
+// message set as Style.Empty follows the list on its own.
 const MinChars = 3
 
 // Layout is how an event's time and title sit relative to each other.

@@ -43,9 +43,12 @@ func agendaStyle(showLocation bool, loc *time.Location) eventlist.Style {
 }
 
 // agendaWidth is how wide every row's list is in bounds, which is what
-// its line count is measured at before the rows are planned.
+// its line count is measured at before the rows are planned. Every row's
+// agenda column spans the same x range, so it is taken from agendaList
+// over that range rather than worked out a second way.
 func agendaWidth(bounds image.Rectangle) int {
-	return bounds.Dx() - agendaX - 2*agendaPadX
+	column := image.Rect(bounds.Min.X+agendaX, bounds.Min.Y, bounds.Max.X, bounds.Max.Y)
+	return agendaList(rowLayout{Agenda: column}).Dx()
 }
 
 // agendaList is the rectangle a row's list is drawn into: inset from the
