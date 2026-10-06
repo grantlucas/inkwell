@@ -10,8 +10,8 @@
 package weatherahead
 
 import (
+	"fmt"
 	"image"
-	"log"
 	"strings"
 	"time"
 
@@ -109,14 +109,10 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	drawkit.FillWhite(frame, b)
 
 	n := w.Config.Days
-	rowH := b.Dy() / n
-	// The draw helpers clip to the frame, not to the widget, so a widget
-	// too small for its rows would ink its neighbours.
-	if b.Dx() < minWidth || rowH < minRowH {
-		log.Printf("%s: bounds are %dx%d, need at least %dx%d for %d days — drawing nothing",
-			widgetName, b.Dx(), b.Dy(), minWidth, n*minRowH, n)
+	if !daydata.Fits(widgetName, b, image.Pt(minWidth, n*minRowH), fmt.Sprintf("%d days", n)) {
 		return nil
 	}
+	rowH := b.Dy() / n
 
 	// Today is the first day asked for and today-weather's to show; the
 	// rows are the days after it.

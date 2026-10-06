@@ -76,4 +76,4 @@ func (w *Widget) Render(frame *image.Paletted) error {
 // Factory creates a bold-five Widget from config and dependencies. Its
 // settings are the ones every calendar widget shares, so a screen can be
 // swapped between calendar widgets without rewriting its config.
-var Factory = daydata.Factory(spec, New)
+var Factory = daydata.Factory(widgetName, daydata.Parser(spec), New)

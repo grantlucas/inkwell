@@ -245,16 +245,3 @@ func TestFactory(t *testing.T) {
 		})
 	}
 }
-
-// A dashboard wired without a clock is a fault to report at load, not a
-// widget that quietly reads the wall clock.
-func TestFactory_NeedsAClock(t *testing.T) {
-	deps := widget.Deps{
-		Calendar: calendar.NewProvider(fakehttp.New(), fixedClock(widgetTime)),
-		Weather:  weather.NewProvider(fakehttp.New(), time.Hour, fixedClock(widgetTime), weather.Settings{}),
-	}
-	_, err := eventlist.Factory(image.Rect(0, 0, 160, 280), map[string]any{"feeds": []any{"https://example.com/a.ics"}}, deps)
-	if err == nil || err.Error() != "event-list: no clock" {
-		t.Fatalf("err = %v, want %q", err, "event-list: no clock")
-	}
-}

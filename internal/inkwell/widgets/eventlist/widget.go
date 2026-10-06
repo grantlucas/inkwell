@@ -1,11 +1,10 @@
 package eventlist
 
 import (
-	"fmt"
 	"image"
-	"strings"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
@@ -81,18 +80,14 @@ var ownKeys = []string{"empty", "hide_finished", "style"}
 
 // parseConfig reads the widget's preset first, since the default number
 // of events depends on it, then the shared settings through the shared
-// parser, then the rest of its own.
-func parseConfig(raw map[string]any) (Config, error) {
+// parser, then the rest of its own. It draws no forecast, so it has no
+// weather settings to inherit.
+func parseConfig(raw map[string]any, _ *weather.Provider) (Config, error) {
 	cfg := Config{Preset: PresetStacked}
-	if v, ok := raw["style"]; ok {
-		name, ok := v.(string)
-		if !ok {
-			return cfg, fmt.Errorf("%s: style must be a string, got %T", widgetName, v)
-		}
-		if cfg.Preset, ok = ParsePreset(name); !ok {
-			return cfg, fmt.Errorf("%s: style must be one of %s, got %q",
-				widgetName, strings.Join(PresetNames(), ", "), name)
-		}
+	keys := daydata.ReadKeys(widgetName, raw)
+	daydata.Choice(keys, "style", PresetNames, &cfg.Preset)
+	if err := keys.Err(); err != nil {
+		return cfg, err
 	}
 
 	shared, err := daydata.ParseConfig(daydata.Spec{
@@ -107,32 +102,15 @@ func parseConfig(raw map[string]any) (Config, error) {
 	}
 	cfg.Config = shared
 
-	if v, ok := raw["hide_finished"]; ok {
-		if cfg.HideFinished, ok = v.(bool); !ok {
-			return cfg, fmt.Errorf("%s: hide_finished must be a bool, got %T", widgetName, v)
-		}
+	keys.Bool("hide_finished", &cfg.HideFinished)
+	var empty string
+	if keys.String("empty", &empty) {
+		cfg.Empty = &empty
 	}
-	if v, ok := raw["empty"]; ok {
-		s, ok := v.(string)
-		if !ok {
-			return cfg, fmt.Errorf("%s: empty must be a string, got %T", widgetName, v)
-		}
-		cfg.Empty = &s
-	}
-	return cfg, nil
+	return cfg, keys.Err()
 }
 
 // Factory creates an event-list Widget from config and dependencies. Its
 // day data reads the calendar only: it draws no forecast, so it fetches
 // none.
-func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
-	cfg, err := parseConfig(config)
-	if err != nil {
-		return nil, err
-	}
-	days, err := daydata.New(widgetName, cfg.Config, deps, daydata.WithoutWeather())
-	if err != nil {
-		return nil, err
-	}
-	return New(bounds, days, deps.Now, cfg), nil
-}
+var Factory = daydata.Factory(widgetName, parseConfig, New, daydata.WithoutWeather())

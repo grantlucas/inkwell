@@ -118,34 +118,12 @@ func ParseConfig(spec Spec, raw map[string]any, inherit *weather.Provider) (Conf
 		}
 	}
 
-	if v, ok := raw["max_events"]; ok {
-		n, ok := v.(int)
-		if !ok {
-			return cfg, fmt.Errorf("%s: max_events must be an integer, got %T", name, v)
-		}
-		if n <= 0 {
-			return cfg, fmt.Errorf("%s: max_events must be positive, got %d", name, n)
-		}
-		cfg.MaxEvents = n
-	}
-
-	if v, ok := raw["day"]; ok {
-		n, ok := v.(int)
-		if !ok {
-			return cfg, fmt.Errorf("%s: day must be an integer, got %T", name, v)
-		}
-		if n < 0 || n > MaxDay {
-			return cfg, fmt.Errorf("%s: day must be in [0, %d], got %d", name, MaxDay, n)
-		}
-		cfg.Day = n
-	}
-
-	if v, ok := raw["show_location"]; ok {
-		b, ok := v.(bool)
-		if !ok {
-			return cfg, fmt.Errorf("%s: show_location must be a bool, got %T", name, v)
-		}
-		cfg.ShowLocation = b
+	keys := ReadKeys(name, raw)
+	keys.Positive("max_events", &cfg.MaxEvents)
+	keys.Int("day", 0, MaxDay, &cfg.Day)
+	keys.Bool("show_location", &cfg.ShowLocation)
+	if err := keys.Err(); err != nil {
+		return cfg, err
 	}
 
 	if err := parseWeatherKeys(name, raw, &cfg.Weather); err != nil {

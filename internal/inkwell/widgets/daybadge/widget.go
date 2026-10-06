@@ -1,12 +1,10 @@
 package daybadge
 
 import (
-	"fmt"
 	"image"
-	"log"
-	"strings"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
@@ -49,10 +47,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	b := w.Bounds()
 	drawkit.FillWhite(frame, b)
 
-	size := w.Config.Style.Size()
-	if b.Dx() < size.X || b.Dy() < size.Y {
-		log.Printf("%s: bounds are %dx%d, the %s style needs at least %dx%d — drawing nothing",
-			widgetName, b.Dx(), b.Dy(), w.Config.Style, size.X, size.Y)
+	if !daydata.Fits(widgetName, b, w.Config.Style.Size(), "the "+w.Config.Style.String()+" style") {
 		return nil
 	}
 
@@ -73,38 +68,18 @@ var spec = daydata.Spec{
 }
 
 // parseConfig reads the shared settings through the shared parser,
-// inheriting weather settings from the top level through deps, then the
-// style.
-func parseConfig(raw map[string]any, deps widget.Deps) (Config, error) {
-	shared, err := daydata.ParseConfig(spec, raw, deps.Weather)
+// inheriting weather settings from inherit, then the style.
+func parseConfig(raw map[string]any, inherit *weather.Provider) (Config, error) {
+	shared, err := daydata.ParseConfig(spec, raw, inherit)
 	cfg := Config{Config: shared, Style: Column}
 	if err != nil {
 		return cfg, err
 	}
-	v, ok := raw["style"]
-	if !ok {
-		return cfg, nil
-	}
-	name, ok := v.(string)
-	if !ok {
-		return cfg, fmt.Errorf("%s: style must be a string, got %T", widgetName, v)
-	}
-	if cfg.Style, ok = ParseStyle(name); !ok {
-		return cfg, fmt.Errorf("%s: style must be one of %s, got %q", widgetName, strings.Join(StyleNames(), ", "), name)
-	}
-	return cfg, nil
+	keys := daydata.ReadKeys(widgetName, raw)
+	daydata.Choice(keys, "style", StyleNames, &cfg.Style)
+	return cfg, keys.Err()
 }
 
 // Factory creates a day-badge Widget from config and dependencies. Its
 // day data reads the forecast only.
-func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
-	cfg, err := parseConfig(config, deps)
-	if err != nil {
-		return nil, err
-	}
-	days, err := daydata.New(widgetName, cfg.Config, deps)
-	if err != nil {
-		return nil, err
-	}
-	return New(bounds, days, deps.Now, cfg), nil
-}
+var Factory = daydata.Factory(widgetName, parseConfig, New)

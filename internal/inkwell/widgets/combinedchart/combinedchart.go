@@ -17,6 +17,7 @@ import (
 	"image"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
@@ -92,23 +93,18 @@ var spec = daydata.Spec{
 }
 
 // parseConfig reads the shared settings through the shared parser,
-// inheriting weather settings from the top level through deps, then
-// range_days, which must reach the chart's own day.
-func parseConfig(raw map[string]any, deps widget.Deps) (Config, error) {
-	shared, err := daydata.ParseConfig(spec, raw, deps.Weather)
+// inheriting weather settings from inherit, then range_days, which must
+// reach the chart's own day.
+func parseConfig(raw map[string]any, inherit *weather.Provider) (Config, error) {
+	shared, err := daydata.ParseConfig(spec, raw, inherit)
 	cfg := Config{Config: shared, RangeDays: defaultRangeDays}
 	if err != nil {
 		return cfg, err
 	}
-	if v, ok := raw["range_days"]; ok {
-		n, ok := v.(int)
-		if !ok {
-			return cfg, fmt.Errorf("%s: range_days must be an integer, got %T", widgetName, v)
-		}
-		if n < 1 || n > maxRangeDays {
-			return cfg, fmt.Errorf("%s: range_days must be in [1, %d], got %d", widgetName, maxRangeDays, n)
-		}
-		cfg.RangeDays = n
+	keys := daydata.ReadKeys(widgetName, raw)
+	keys.Int("range_days", 1, maxRangeDays, &cfg.RangeDays)
+	if err := keys.Err(); err != nil {
+		return cfg, err
 	}
 	if cfg.RangeDays <= cfg.Day {
 		return cfg, fmt.Errorf("%s: range_days must be at least %d to reach day %d, got %d",
@@ -119,14 +115,4 @@ func parseConfig(raw map[string]any, deps widget.Deps) (Config, error) {
 
 // Factory creates a combined-chart Widget from config and dependencies.
 // Its day data reads the forecast only.
-func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
-	cfg, err := parseConfig(config, deps)
-	if err != nil {
-		return nil, err
-	}
-	days, err := daydata.New(widgetName, cfg.Config, deps)
-	if err != nil {
-		return nil, err
-	}
-	return New(bounds, days, deps.Now, cfg), nil
-}
+var Factory = daydata.Factory(widgetName, parseConfig, New)

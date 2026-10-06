@@ -39,25 +39,11 @@ const (
 	Hero
 )
 
-// styleNames are the names a config gives each style, in Style order.
-var styleNames = []string{"column", "row", "compact", "hero"}
-
-// StyleNames lists every style's config name, in a stable order, for an
-// error that says what is accepted.
-func StyleNames() []string { return append([]string(nil), styleNames...) }
-
-// ParseStyle returns the style a config names, and whether it names one.
-func ParseStyle(name string) (Style, bool) {
-	for i, n := range styleNames {
-		if n == name {
-			return Style(i), true
-		}
-	}
-	return 0, false
-}
+// StyleNames are the names a config gives each style, in Style order.
+var StyleNames = daydata.Names[Style]{"column", "row", "compact", "hero"}
 
 // String is the style's config name.
-func (s Style) String() string { return styleNames[s] }
+func (s Style) String() string { return StyleNames.Name(s) }
 
 // Size is the room the style is drawn in: what the full-screen widget it
 // comes from gives it. Every element sits at a fixed offset from the

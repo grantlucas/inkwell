@@ -3,6 +3,7 @@ package eventlist
 import (
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
@@ -31,26 +32,11 @@ const (
 	PresetInline
 )
 
-// presetNames are the names a config gives each preset, in Preset order.
-var presetNames = []string{"stacked", "large", "inline"}
-
-// PresetNames lists every preset's config name, in a stable order, for
-// an error that says what is accepted.
-func PresetNames() []string { return append([]string(nil), presetNames...) }
-
-// ParsePreset returns the preset a config names, and whether it names
-// one.
-func ParsePreset(name string) (Preset, bool) {
-	for i, n := range presetNames {
-		if n == name {
-			return Preset(i), true
-		}
-	}
-	return 0, false
-}
+// PresetNames are the names a config gives each preset, in Preset order.
+var PresetNames = daydata.Names[Preset]{"stacked", "large", "inline"}
 
 // String is the preset's config name.
-func (p Preset) String() string { return presetNames[p] }
+func (p Preset) String() string { return PresetNames.Name(p) }
 
 const (
 	// presetTitleLines caps a stacked title so one long summary cannot

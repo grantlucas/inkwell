@@ -4,6 +4,7 @@ import (
 	"image"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
@@ -28,21 +29,45 @@ func NewBase(bounds image.Rectangle, days Source, now func() time.Time, cfg Conf
 // Bounds returns the rectangle the widget occupies.
 func (b Base) Bounds() image.Rectangle { return b.bounds }
 
-// Factory is the widget.Factory of a day widget whose settings are exactly
-// the shared ones spec declares. It parses them, builds the widget's day
-// data from the dashboard's dependencies, and hands both, with the
+// Settings is a day widget's parsed configuration: the shared settings,
+// which its day data is built from, and any of its own. A widget's own
+// Config embeds Config, which gives it Shared.
+type Settings interface {
+	Shared() Config
+}
+
+// Shared is the shared settings themselves.
+func (c Config) Shared() Config { return c }
+
+// Factory is the widget.Factory of the day widget named name. It reads the
+// widget's settings with parse, which inherits weather settings from the
+// top-level ones, builds the widget's day data from the shared settings
+// and the dashboard's dependencies with opts, and hands both, with the
 // dashboard's clock, to build. A widget's package then holds only its
-// layout and its constructor.
-func Factory[W widget.Widget](spec Spec, build func(bounds image.Rectangle, days Source, now func() time.Time, cfg Config) W) widget.Factory {
+// settings, its layout and its constructor.
+func Factory[C Settings, W widget.Widget](
+	name string,
+	parse func(raw map[string]any, inherit *weather.Provider) (C, error),
+	build func(bounds image.Rectangle, days Source, now func() time.Time, cfg C) W,
+	opts ...Option,
+) widget.Factory {
 	return func(bounds image.Rectangle, raw map[string]any, deps widget.Deps) (widget.Widget, error) {
-		cfg, err := ParseConfig(spec, raw, deps.Weather)
+		cfg, err := parse(raw, deps.Weather)
 		if err != nil {
 			return nil, err
 		}
-		days, err := New(spec.Widget, cfg, deps)
+		days, err := New(name, cfg.Shared(), deps, opts...)
 		if err != nil {
 			return nil, err
 		}
 		return build(bounds, days, deps.Now, cfg), nil
+	}
+}
+
+// Parser is the parse of a day widget whose settings are exactly the
+// shared ones spec declares.
+func Parser(spec Spec) func(raw map[string]any, inherit *weather.Provider) (Config, error) {
+	return func(raw map[string]any, inherit *weather.Provider) (Config, error) {
+		return ParseConfig(spec, raw, inherit)
 	}
 }

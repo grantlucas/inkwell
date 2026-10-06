@@ -6,7 +6,6 @@ package daytimeline
 import (
 	"fmt"
 	"image"
-	"log"
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
@@ -34,12 +33,8 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	drawkit.FillWhite(frame, w.Bounds())
 
 	// Too small to draw into without a grid too cramped to read, or
-	// spilling past the widget's bounds onto its neighbour. Blank bounds
-	// are a misconfiguration an operator can see; ink on another widget
-	// looks like a fault somewhere else entirely.
-	if w.Bounds().Dx() < minWidth || w.Bounds().Dy() < minHeight {
-		log.Printf("daytimeline: bounds are %dx%d, need at least %dx%d — drawing nothing",
-			w.Bounds().Dx(), w.Bounds().Dy(), minWidth, minHeight)
+	// spilling past the widget's bounds onto its neighbour.
+	if !daydata.Fits(widgetName, w.Bounds(), image.Pt(minWidth, minHeight), "") {
 		return nil
 	}
 
@@ -94,17 +89,5 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	return nil
 }
 
-// Factory creates a day-timeline Widget from config and dependencies. It
-// doesn't use daydata.Factory: the window keys are its own, and the
-// shared factory never hands a widget its raw config.
-func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
-	cfg, err := parseConfig(config, deps.Weather)
-	if err != nil {
-		return nil, err
-	}
-	days, err := daydata.New(widgetName, cfg.Config, deps)
-	if err != nil {
-		return nil, err
-	}
-	return New(bounds, days, deps.Now, cfg), nil
-}
+// Factory creates a day-timeline Widget from config and dependencies.
+var Factory = daydata.Factory(widgetName, parseConfig, New)

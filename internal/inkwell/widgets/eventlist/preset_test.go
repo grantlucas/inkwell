@@ -62,16 +62,16 @@ func TestParsePreset(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := eventlist.ParsePreset(tt.name)
+			got, ok := eventlist.PresetNames.Parse(tt.name)
 			if ok != tt.ok || got != tt.want {
-				t.Fatalf("ParsePreset(%q) = %v, %v; want %v, %v", tt.name, got, ok, tt.want, tt.ok)
+				t.Fatalf("Parse(%q) = %v, %v; want %v, %v", tt.name, got, ok, tt.want, tt.ok)
 			}
 			if ok && got.String() != tt.name {
 				t.Errorf("String() = %q, want %q", got.String(), tt.name)
 			}
 		})
 	}
-	if got := eventlist.PresetNames(); !reflect.DeepEqual(got, []string{"stacked", "large", "inline"}) {
+	if got := eventlist.PresetNames.List(); !reflect.DeepEqual(got, []string{"stacked", "large", "inline"}) {
 		t.Errorf("PresetNames = %v", got)
 	}
 }

@@ -7,7 +7,6 @@ package todayweather
 
 import (
 	"image"
-	"log"
 	"strings"
 	"time"
 
@@ -88,11 +87,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	b := w.Bounds()
 	drawkit.FillWhite(frame, b)
 
-	// The draw helpers clip to the frame, not to the widget, so a widget
-	// too small for its block would ink its neighbours.
-	if b.Dx() < minWidth || b.Dy() < minHeight {
-		log.Printf("%s: bounds are %dx%d, need at least %dx%d — drawing nothing",
-			widgetName, b.Dx(), b.Dy(), minWidth, minHeight)
+	if !daydata.Fits(widgetName, b, image.Pt(minWidth, minHeight), "") {
 		return nil
 	}
 
@@ -135,4 +130,4 @@ func renderForecast(frame *image.Paletted, b image.Rectangle, day weather.DailyF
 }
 
 // Factory creates a today-weather Widget from config and dependencies.
-var Factory = daydata.Factory(spec, New)
+var Factory = daydata.Factory(widgetName, daydata.Parser(spec), New)

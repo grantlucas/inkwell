@@ -38,22 +38,22 @@ func TestFactory_Window(t *testing.T) {
 		{
 			label:   "rejects a fractional start",
 			window:  map[string]any{"start_hour": 7.5},
-			wantErr: "day-timeline: start_hour must be a whole number of hours, got 7.5",
+			wantErr: "day-timeline: start_hour must be a whole number, got 7.5",
 		},
 		{
 			label:   "rejects a string end",
 			window:  map[string]any{"end_hour": "22"},
-			wantErr: `day-timeline: end_hour must be a whole number of hours, got "22"`,
+			wantErr: "day-timeline: end_hour must be an integer, got string",
 		},
 		{
 			label:   "rejects a negative start",
 			window:  map[string]any{"start_hour": -1},
-			wantErr: "day-timeline: start_hour must be from 0 to 24, got -1",
+			wantErr: "day-timeline: start_hour must be in [0, 24], got -1",
 		},
 		{
 			label:   "rejects an end past midnight",
 			window:  map[string]any{"end_hour": 25},
-			wantErr: "day-timeline: end_hour must be from 0 to 24, got 25",
+			wantErr: "day-timeline: end_hour must be in [0, 24], got 25",
 		},
 		{
 			label:   "rejects an end before the start",
