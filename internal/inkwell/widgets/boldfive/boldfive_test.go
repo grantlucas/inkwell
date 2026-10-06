@@ -81,13 +81,15 @@ func sampleEvents() []ical.Event {
 	}
 }
 
+// drawConfig is a config with the knobs bold-five draws with.
+func drawConfig(maxEvents int, unit string) daygrid.Config {
+	return daygrid.Config{MaxEvents: maxEvents, Weather: daygrid.WeatherConfig{TempUnit: unit}}
+}
+
 // newWidget draws the whole panel from the given events and forecast.
 func newWidget(t *testing.T, events []ical.Event, forecast []weather.DailyForecast) *Widget {
 	t.Helper()
-	return New(image.Rect(0, 0, 800, 480), daygrid.InMemory(events, forecast), fixedClock(testTime), Config{
-		MaxEvents: defaultMaxEvents,
-		TempUnit:  "C",
-	})
+	return New(image.Rect(0, 0, 800, 480), daygrid.InMemory(events, forecast), fixedClock(testTime), drawConfig(defaultMaxEvents, "C"))
 }
 
 func renderToFrame(t *testing.T, w *Widget) *image.Paletted {
@@ -296,7 +298,7 @@ func TestWidget_StaysInsideBoundsBelowAHeaderBand(t *testing.T) {
 			frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
 			paintNeighbours(frame, tt.bounds)
 			w := New(tt.bounds, daygrid.InMemory(append(sampleEvents(), busiestDay()...), sampleForecast()),
-				fixedClock(testTime), Config{MaxEvents: 3, TempUnit: "C"})
+				fixedClock(testTime), drawConfig(3, "C"))
 			if err := w.Render(frame); err != nil {
 				t.Fatalf("Render: %v", err)
 			}
@@ -319,7 +321,7 @@ func TestWidget_StaysInsideBoundsBelowAHeaderBand(t *testing.T) {
 func TestWidget_BelowHeaderFitsThreeWrappedEventsAndTheCount(t *testing.T) {
 	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
 	w := New(belowHeader, daygrid.InMemory(busiestDay(), sampleForecast()),
-		fixedClock(testTime), Config{MaxEvents: 3, TempUnit: "C"})
+		fixedClock(testTime), drawConfig(3, "C"))
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -339,7 +341,7 @@ func TestWidget_Golden(t *testing.T) {
 		label    string
 		events   []ical.Event
 		forecast []weather.DailyForecast
-		cfg      func(*Config)
+		cfg      func(*daygrid.Config)
 		// bounds defaults to the whole panel.
 		bounds image.Rectangle
 	}{
@@ -368,13 +370,13 @@ func TestWidget_Golden(t *testing.T) {
 				},
 			},
 			forecast: sampleForecast(),
-			cfg:      func(c *Config) { c.ShowLocation = true },
+			cfg:      func(c *daygrid.Config) { c.ShowLocation = true },
 		},
 		{
 			label:    "fahrenheit",
 			events:   sampleEvents(),
 			forecast: sampleForecast(),
-			cfg:      func(c *Config) { c.TempUnit = "F" },
+			cfg:      func(c *daygrid.Config) { c.Weather.TempUnit = "F" },
 		},
 		// The example config's layout: under a fuzzy_clock header band,
 		// three events a column.
@@ -382,27 +384,27 @@ func TestWidget_Golden(t *testing.T) {
 			label:    "below header dry day",
 			events:   sampleEvents(),
 			forecast: dryForecast(),
-			cfg:      func(c *Config) { c.MaxEvents = 3 },
+			cfg:      func(c *daygrid.Config) { c.MaxEvents = 3 },
 			bounds:   belowHeader,
 		},
 		{
 			label:    "below header rainy day",
 			events:   sampleEvents(),
 			forecast: rainyForecast(),
-			cfg:      func(c *Config) { c.MaxEvents = 3 },
+			cfg:      func(c *daygrid.Config) { c.MaxEvents = 3 },
 			bounds:   belowHeader,
 		},
 		{
 			label:    "below header busiest day",
 			events:   append(busiestDay(), sampleEvents()[5:]...),
 			forecast: sampleForecast(),
-			cfg:      func(c *Config) { c.MaxEvents = 3 },
+			cfg:      func(c *daygrid.Config) { c.MaxEvents = 3 },
 			bounds:   belowHeader,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			cfg := Config{MaxEvents: defaultMaxEvents, TempUnit: "C"}
+			cfg := drawConfig(defaultMaxEvents, "C")
 			if tt.cfg != nil {
 				tt.cfg(&cfg)
 			}
@@ -438,6 +440,11 @@ func TestFactory(t *testing.T) {
 		{label: "builds from typed deps", config: feeds, deps: deps},
 		{label: "defaults the clock", config: feeds, deps: noClock},
 		{label: "rejects its config", config: map[string]any{}, deps: deps, wantErr: "bold-five: feeds is required"},
+		{
+			label: "explains a weekly-calendar key", deps: deps,
+			config:  map[string]any{"feeds": []any{"https://example.com/a.ics"}, "show_weather": false},
+			wantErr: "bold-five: show_weather is not supported: the weather band is part of the layout; a day with no forecast already draws nothing",
+		},
 		{label: "needs the calendar module", config: feeds, deps: widget.Deps{Weather: deps.Weather}, wantErr: "bold-five: no calendar module"},
 	}
 	for _, tt := range tests {
@@ -459,7 +466,7 @@ func TestFactory(t *testing.T) {
 			// The unit comes from the top-level weather settings, and with
 			// no clock injected the widget reads the wall clock rather
 			// than drawing the epoch.
-			if bf.config.TempUnit != "F" || bf.config.MaxEvents != defaultMaxEvents {
+			if bf.config.Weather.TempUnit != "F" || bf.config.MaxEvents != defaultMaxEvents {
 				t.Errorf("config = %+v", bf.config)
 			}
 			if bf.now().Year() < 2024 {
@@ -486,7 +493,7 @@ func TestWidget_TooShortDrawsNothing(t *testing.T) {
 	}
 
 	w := New(image.Rect(0, 0, 800, 150), daygrid.InMemory(sampleEvents(), sampleForecast()),
-		fixedClock(testTime), Config{MaxEvents: defaultMaxEvents, TempUnit: "C"})
+		fixedClock(testTime), drawConfig(defaultMaxEvents, "C"))
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}

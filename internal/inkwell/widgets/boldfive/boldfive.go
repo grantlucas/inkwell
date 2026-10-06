@@ -11,24 +11,18 @@ import (
 
 var _ widget.Widget = (*Widget)(nil)
 
-// Config is how bold-five draws its days. Where the days come from is
-// the day data module's business; see Factory.
-type Config struct {
-	MaxEvents    int
-	ShowLocation bool
-	TempUnit     string
-}
-
 // Widget renders the bold-five screen.
 type Widget struct {
 	bounds image.Rectangle
 	days   daygrid.Source
 	now    func() time.Time
-	config Config
+	config daygrid.Config
 }
 
-// New creates a bold-five Widget drawing the days from days.
-func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg Config) *Widget {
+// New creates a bold-five Widget drawing the days from days. Of cfg it
+// reads only how events are listed and the temperature unit; where the
+// days come from is the day data module's business.
+func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg daygrid.Config) *Widget {
 	return &Widget{bounds: bounds, days: days, now: now, config: cfg}
 }
 
@@ -62,7 +56,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 		renderDayHeader(frame, col.Header, day.Start)
 
 		renderWeatherBand(frame, col.Weather, day.Forecast, weatherOptions{
-			TempUnit:  w.config.TempUnit,
+			TempUnit:  w.config.Weather.TempUnit,
 			TempRange: data.TempRange,
 			// Today is always the leftmost column, so the marker goes
 			// there and nowhere else — "now" is not a point on any
@@ -104,9 +98,5 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 	if now == nil {
 		now = time.Now
 	}
-	return New(bounds, days, now, Config{
-		MaxEvents:    cfg.MaxEvents,
-		ShowLocation: cfg.ShowLocation,
-		TempUnit:     cfg.Weather.TempUnit,
-	}), nil
+	return New(bounds, days, now, cfg), nil
 }
