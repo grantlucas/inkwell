@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 )
@@ -26,14 +27,29 @@ func TestRenderEvents_EmptyDay(t *testing.T) {
 	}
 }
 
-// A column too narrow for the event list is too narrow for the empty-day
-// dash too: centred "--" would overhang the dividers either side.
-func TestRenderEvents_TooNarrowForTheEmptyDayDash(t *testing.T) {
-	frame := newTestFrame(160, 480)
-	narrow := image.Rect(0, 216, 2*eventsPadX+2*daygrid.BodyAdvance(), 480)
-	renderEvents(frame, narrow, nil, agendaStyle(defaultMaxEvents, false, time.UTC))
-	if got := countIndex(frame, widget.PaperBlack); got != narrow.Dx() {
-		t.Errorf("%d px inked, want only the %d px rule", got, narrow.Dx())
+// A column too narrow to list events is too narrow for the empty-day dash
+// too: centred "--" would overhang the dividers either side. Events it
+// cannot list are still announced: the list's "+N MORE" line is cut to
+// the width.
+func TestRenderEvents_TooNarrowToList(t *testing.T) {
+	at := time.Date(2026, 3, 16, 9, 0, 0, 0, time.UTC)
+	tests := []struct {
+		label      string
+		events     []calendar.Event
+		wantBeyond bool
+	}{
+		{"an empty day draws only the rule", nil, false},
+		{"hidden events are still announced", []calendar.Event{{Summary: "Standup", Start: at, End: at.Add(time.Hour)}}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			frame := newTestFrame(160, 480)
+			narrow := image.Rect(0, 216, 2*eventsPadX+2*daygrid.BodyAdvance(), 480)
+			renderEvents(frame, narrow, tt.events, agendaStyle(defaultMaxEvents, false, time.UTC))
+			if got := countIndex(frame, widget.PaperBlack); (got > narrow.Dx()) != tt.wantBeyond {
+				t.Errorf("%d px inked against the %d px rule; want ink beyond it: %v", got, narrow.Dx(), tt.wantBeyond)
+			}
+		})
 	}
 }
 

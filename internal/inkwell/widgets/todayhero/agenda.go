@@ -59,14 +59,13 @@ func renderHeroAgenda(frame *image.Paletted, bounds image.Rectangle, events []ca
 	daygrid.DrawHLine(frame, bounds.Min.X+heroPadX, bounds.Max.X-heroPadX, bounds.Min.Y, widget.PaperBlack)
 
 	list := image.Rect(bounds.Min.X+heroPadX, bounds.Min.Y+agendaTopPad, bounds.Max.X-heroPadX, bounds.Max.Y)
-	if list.Dx() < eventlist.MinChars*daygrid.BodyAdvance() {
-		// Too narrow for the list, and so for "DONE FOR TODAY", which
-		// would run over the divider.
-		return
-	}
 	if len(events) == 0 {
-		daygrid.Scaled(daygrid.BodyBoldFace, doneScale, widget.PaperBlack).Draw(
-			frame, list.Min.X, list.Min.Y+daygrid.BodyAscent()*doneScale, doneText)
+		// Unless the agenda is too narrow to list events: there "DONE FOR
+		// TODAY" would run over the divider.
+		if list.Dx() >= eventlist.MinChars*daygrid.BodyAdvance() {
+			daygrid.Scaled(daygrid.BodyBoldFace, doneScale, widget.PaperBlack).Draw(
+				frame, list.Min.X, list.Min.Y+daygrid.BodyAscent()*doneScale, doneText)
+		}
 		return
 	}
 	style.Draw(frame, list, events)

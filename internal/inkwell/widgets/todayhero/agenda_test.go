@@ -40,15 +40,29 @@ func TestRemainingToday(t *testing.T) {
 	}
 }
 
-// An agenda too narrow for the event list is too narrow for "DONE FOR
-// TODAY" too: drawn anyway, it would run over the divider.
-func TestRenderHeroAgenda_TooNarrowForDone(t *testing.T) {
-	frame := newTestFrame(800, 480)
-	narrow := image.Rect(0, 280, 2*heroPadX+2*daygrid.BodyAdvance(), 480)
-	renderHeroAgenda(frame, narrow, nil, heroStyle(3, false, time.UTC))
-	rule := narrow.Dx() - 2*heroPadX
-	if got := countIndexIn(frame, frame.Bounds(), widget.PaperBlack); got != rule {
-		t.Errorf("%d px inked, want only the %d px rule", got, rule)
+// An agenda too narrow to list events is too narrow for "DONE FOR TODAY"
+// too: drawn anyway, it would run over the divider. Events it cannot list
+// are still announced: the list's "+N MORE" line is cut to the width.
+func TestRenderHeroAgenda_TooNarrowToList(t *testing.T) {
+	at := time.Date(2026, 3, 16, 15, 0, 0, 0, time.UTC)
+	tests := []struct {
+		label      string
+		events     []calendar.Event
+		wantBeyond bool
+	}{
+		{"an empty day draws only the rule", nil, false},
+		{"hidden events are still announced", []calendar.Event{{Summary: "Standup", Start: at, End: at.Add(time.Hour)}}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			frame := newTestFrame(800, 480)
+			narrow := image.Rect(0, 280, 2*heroPadX+2*daygrid.BodyAdvance(), 480)
+			renderHeroAgenda(frame, narrow, tt.events, heroStyle(3, false, time.UTC))
+			rule := narrow.Dx() - 2*heroPadX
+			if got := countIndexIn(frame, frame.Bounds(), widget.PaperBlack); (got > rule) != tt.wantBeyond {
+				t.Errorf("%d px inked against the %d px rule; want ink beyond it: %v", got, rule, tt.wantBeyond)
+			}
+		})
 	}
 }
 
