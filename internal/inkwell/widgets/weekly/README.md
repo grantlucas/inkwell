@@ -1,5 +1,13 @@
 # Weekly Calendar Widget
 
+> **Deprecated, pending removal.** weekly-calendar has left the example
+> config and will be deleted, with this README, once the screens that
+> replace it have run on the panel for a while (#127). Its inverted today
+> header fills the same place on every refresh, a burn-in risk. Use
+> `day-timeline`, `bold-five`, `today-hero` or `row-agenda` instead; the
+> [configuration reference](../../../../docs/guides/configuration.md#widget-reference)
+> documents them.
+
 Renders a rolling calendar-and-weather dashboard of up to seven days, one
 column per day starting with **today**. Set [`days`](#configuration) to show
 fewer — `days: 5` buys wider columns and so more room for event text. Each

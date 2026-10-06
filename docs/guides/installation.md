@@ -99,8 +99,8 @@ example, which lives in the release archive:
 cp inkwell.example.yaml inkwell.yaml
 ```
 
-Edit `inkwell.yaml` to suit your setup. The example wires up a full
-dashboard (date header, clock, separator, weekly calendar + weather).
+Edit `inkwell.yaml` to suit your setup. The example rotates through four
+full screens of calendar and weather, starting with the day-timeline.
 The most important fields to review:
 
 ```yaml
@@ -119,10 +119,10 @@ weather:
 
 dashboard:
   screens:
-    - name: weekly
+    - name: row-agenda
       widgets:
-        - type: weekly-calendar
-          bounds: [0, 52, 800, 480]
+        - type: row-agenda
+          bounds: [0, 0, 800, 480]
           refresh: "15m"       # required: how often this widget may refresh the panel
           config:
             feeds:

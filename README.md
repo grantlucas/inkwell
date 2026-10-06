@@ -35,15 +35,24 @@ from `inkwell.yaml`:
 |------|---------|
 | `date` | Formatted date header (Go-format strings, e.g. `"Monday, January 2"`). |
 | `clock` | Current time, right-aligned variant available. |
-| `separator` | Soft horizontal hairline; thickness-configurable. |
-| `weekly-calendar` | Rolling calendar + weather dashboard of up to 7 days (`days`, default 7). Fetches events from one or more iCal feeds and forecasts from an Open-Meteo ensemble (GFS / ECMWF / GEM). |
+| `fuzzy_clock` | Approximate time in words ("About half past eight"), at a whole-number `scale` for a large header band. Refreshes every five minutes rather than every minute. |
+| `separator` | Solid black rule, horizontal or vertical; thickness-configurable. |
+| `bold-five` | Five days as columns, today first, sized to read from across the room: events plus a combined precipitation-and-temperature chart per day. |
+| `today-hero` | Today large down the left (date, fuzzy clock, weather, the rest of today's agenda), the next four days as rows down the right. |
+| `row-agenda` | Five days as full-width rows with one event column each, so titles rarely truncate; each row carries a combined chart. |
+| `day-timeline` | Today on an hourly grid: events at their real start and end, an hourly weather lane beside them, and a now marker. |
+| `today-weather` | Today's forecast as one block: condition icon, high, low and condition name. |
+| `weather-ahead` | The next days (default four) as rows of weather: weekday, icon, high, low and a combined chart. |
+| `weekly-calendar` | **Deprecated, pending removal.** The original rolling calendar + weather view of up to 7 days. Use `day-timeline`, `bold-five`, `today-hero` or `row-agenda` instead. |
 <!-- markdownlint-enable MD013 -->
 
-The weekly calendar widget integrates a built-in iCal parser, an HTTP feed
-source with per-feed deduplication, a TTL-based cache, and per-day event /
-weather columns with a temperature polyline and precipitation bars. See
-[docs/demos/weekly-calendar-dashboard.md](docs/demos/weekly-calendar-dashboard.md)
-for the full configuration walkthrough.
+The calendar widgets read one or more iCal feeds through a built-in parser,
+with per-feed rules to rewrite or drop events, and the weather widgets share
+one cached Open-Meteo forecast (GFS, ECMWF or GEM). The
+[configuration reference](docs/guides/configuration.md#widget-reference)
+documents every widget's settings, and its
+[worked examples](docs/guides/configuration.md#worked-examples) include the
+day-timeline screen composed from the widgets above.
 
 ## Architecture
 
@@ -101,10 +110,11 @@ defaults to the **device** rendering (post-dither, 1-bit) so what you see
 matches what would land on the panel; toggle to **source** for the smooth
 grayscale design view.
 
-The bundled `inkwell.example.yaml` wires up a date header, clock, separator
-and the weekly calendar + weather widget — a working dashboard out of the
-box. Point its `feeds:` at any iCal URL and set `latitude` / `longitude` for
-your location.
+The bundled `inkwell.example.yaml` rotates through four screens, starting
+with the day-timeline: today's agenda by the hour beside today's weather and
+the days ahead, under a fuzzy clock. bold-five, today-hero and row-agenda
+follow, fifteen minutes each. Point its `feeds:` at any iCal URL and set
+`latitude` / `longitude` for your location.
 
 A minimal `inkwell.yaml` for just the preview backend looks like:
 
@@ -115,7 +125,7 @@ preview:
   port: 8080
 ```
 
-For iterating on the calendar widget without a live feed, `cmd/testcal`
+For iterating on the calendar widgets without a live feed, `cmd/testcal`
 serves a synthetic iCal endpoint locally:
 
 ```bash
@@ -197,7 +207,7 @@ The `docs/` directory contains detailed reference material:
   - Palette quantization and the no-dithering rule
   - Refresh waveform strategy and the per-widget refresh queue
 - **Demos** ([docs/demos/](docs/demos/)) — feature-level walkthroughs
-  (e.g. the weekly calendar dashboard and the grayscale refresh).
+  (e.g. the grayscale refresh).
 
 ## Contributing
 
