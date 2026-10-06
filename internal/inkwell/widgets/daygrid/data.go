@@ -53,12 +53,15 @@ func New(widgetName string, cfg Config, deps widget.Deps) (Source, error) {
 	if err := RequireDeps(widgetName, deps); err != nil {
 		return nil, err
 	}
-	return &module{
+	m := &module{
 		widget:   widgetName,
 		cal:      deps.Calendar.Source(cfg.Feeds, cfg.Refresh),
-		weather:  deps.Weather.SourceForModel(cfg.Weather.Model),
 		location: cfg.Weather.Location(),
-	}, nil
+	}
+	if !cfg.NoWeather {
+		m.weather = deps.Weather.SourceForModel(cfg.Weather.Model)
+	}
+	return m, nil
 }
 
 // module is the production adapter.

@@ -29,6 +29,12 @@ type Config struct {
 	Weather      WeatherConfig
 	MaxEvents    int
 	ShowLocation bool
+
+	// NoWeather leaves the forecast unfetched, so every day's Forecast is
+	// nil. It is not a shared setting: weekly-calendar sets it from its
+	// own show_weather, so a screen that hides its weather doesn't fetch
+	// a forecast to throw away.
+	NoWeather bool
 }
 
 // Spec is what a calendar widget tells the shared parser about itself.

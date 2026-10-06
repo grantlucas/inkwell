@@ -355,6 +355,30 @@ func TestDayData_NoFeeds(t *testing.T) {
 	}
 }
 
+// A widget that shows no weather gets its days and events with no forecast,
+// and asks for none rather than fetching one to throw away.
+func TestDayData_NoWeather(t *testing.T) {
+	now := time.Date(2026, 10, 5, 8, 0, 0, 0, mustZone(t, "America/Toronto"))
+	s := newSeam(t, now)
+	s.tr.Serve(feedA, ics(weeklySeries))
+	cfg := gemConfig(calendar.Feed{URL: feedA})
+	cfg.NoWeather = true
+
+	got := s.source(t, cfg).Days(now, 4)
+
+	for i, day := range got.Days {
+		if day.Forecast != nil {
+			t.Errorf("day %d has a forecast", i)
+		}
+	}
+	if g := dayEvents(got); !slices.Contains(g, "Weekly Sync") {
+		t.Errorf("events by day = %q, want the weekly series", g)
+	}
+	if got := s.tr.Requests(gemURL); got != 0 {
+		t.Errorf("forecast fetched %d times, want none", got)
+	}
+}
+
 // A widget built without the calendar module or the weather provider fails
 // rather than building its own, and says which widget.
 func TestNew_MissingDeps(t *testing.T) {
