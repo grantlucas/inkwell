@@ -41,32 +41,16 @@ type weatherOptions struct {
 	TempRange weatherview.TempRange
 }
 
-// sharedTempRange is the one temperature scale every column's chart is
-// drawn against. Only the days the forecast actually reached count: a
-// missing day is a zero DailyForecast, and its 0°C would drag the scale
-// down to a temperature nobody forecast.
-func sharedTempRange(days []weather.DailyForecast) weatherview.TempRange {
-	var known []weather.DailyForecast
-	for _, d := range days {
-		if !d.Date.IsZero() {
-			known = append(known, d)
-		}
-	}
-	return weatherview.GlobalTempRange(known)
-}
-
 // renderWeatherBand draws one column's weather: condition icon, the
 // hi/lo pair, and the precipitation chart beneath them.
 //
-// A day the forecast never covered draws nothing at all. The zero
-// DailyForecast is indistinguishable from a real reading — a clear sky
-// at 0°C is entirely plausible in Hamilton in January — so drawing it
-// would state a temperature nobody forecast, and an operator could not
-// tell an outage from the weather. An empty band is unmistakably an
-// empty band. weekly-calendar collapses its whole weather zone for the
-// same reason.
-func renderWeatherBand(frame *image.Paletted, bounds image.Rectangle, day weather.DailyForecast, opts weatherOptions) {
-	if day.Date.IsZero() {
+// A day the forecast never covered (a nil day) draws nothing at all.
+// Drawing anything would state a temperature nobody forecast, and an
+// operator could not tell an outage from the weather. An empty band is
+// unmistakably an empty band. weekly-calendar collapses its whole
+// weather zone for the same reason.
+func renderWeatherBand(frame *image.Paletted, bounds image.Rectangle, day *weather.DailyForecast, opts weatherOptions) {
+	if day == nil {
 		return
 	}
 
@@ -74,7 +58,7 @@ func renderWeatherBand(frame *image.Paletted, bounds image.Rectangle, day weathe
 
 	weatherview.DrawIcon(frame, bounds.Min.X+iconX, top+iconY, iconSize, day.Condition)
 
-	temps := weatherview.NewHighLow(day, opts.TempUnit)
+	temps := weatherview.NewHighLow(*day, opts.TempUnit)
 	rightEdge := bounds.Max.X - tempPadX
 	daygrid.Scaled(daygrid.BodyBoldFace, hiScale, widget.PaperBlack).DrawRight(
 		frame, rightEdge, top+hiBaseline, temps.High(),

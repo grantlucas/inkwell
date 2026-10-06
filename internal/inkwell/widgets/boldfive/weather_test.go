@@ -33,7 +33,7 @@ func countIndexIn(frame *image.Paletted, r image.Rectangle, idx uint8) int {
 }
 
 // wetDay builds a forecast day with rain concentrated in the afternoon.
-func wetDay(high, low float64) weather.DailyForecast {
+func wetDay(high, low float64) *weather.DailyForecast {
 	var hourly []weather.HourlyPoint
 	for h := range 24 {
 		prob := 0.0
@@ -46,7 +46,7 @@ func wetDay(high, low float64) weather.DailyForecast {
 			PrecipitationProb: prob,
 		})
 	}
-	return weather.DailyForecast{
+	return &weather.DailyForecast{
 		Date:      time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC),
 		High:      high,
 		Low:       low,
@@ -56,7 +56,7 @@ func wetDay(high, low float64) weather.DailyForecast {
 }
 
 // dryDay is the same shape with no rain anywhere.
-func dryDay(high, low float64) weather.DailyForecast {
+func dryDay(high, low float64) *weather.DailyForecast {
 	d := wetDay(high, low)
 	for i := range d.Hourly {
 		d.Hourly[i].PrecipitationProb = 0
@@ -145,14 +145,12 @@ func TestRenderWeatherBand_StaysInsideTheBand(t *testing.T) {
 	}
 }
 
-// A day the forecast never reached is a zero DailyForecast, and a zero
-// DailyForecast is indistinguishable from a real reading — clear sky at
-// 0°C is entirely plausible in a Hamilton January. Drawing it would
-// state a temperature nobody forecast and leave an operator unable to
-// tell an outage from the weather, so the whole band stays empty.
+// A day the forecast never reached has no forecast. Drawing anything
+// would state a temperature nobody forecast and leave an operator unable
+// to tell an outage from the weather, so the whole band stays empty.
 func TestRenderWeatherBand_MissingForecastDrawsNothing(t *testing.T) {
 	frame := newTestFrame(160, 480)
-	renderWeatherBand(frame, weatherRect(), weather.DailyForecast{}, weatherOptions{TempUnit: "C"})
+	renderWeatherBand(frame, weatherRect(), nil, weatherOptions{TempUnit: "C"})
 
 	for y := range 480 {
 		for x := range 160 {
@@ -163,8 +161,8 @@ func TestRenderWeatherBand_MissingForecastDrawsNothing(t *testing.T) {
 	}
 }
 
-// The guard keys off the forecast's date, not its values: a genuine
-// forecast of 0°C on a clear day must still be drawn.
+// The guard keys off whether there is a forecast, not its values: a
+// genuine forecast of 0°C on a clear day must still be drawn.
 func TestRenderWeatherBand_RealZeroDegreesIsDrawn(t *testing.T) {
 	day := dryDay(0, 0)
 	frame := newTestFrame(160, 480)
@@ -172,31 +170,5 @@ func TestRenderWeatherBand_RealZeroDegreesIsDrawn(t *testing.T) {
 
 	if countIndexIn(frame, weatherRect(), widget.PaperBlack) == 0 {
 		t.Error("a real 0°C forecast drew nothing")
-	}
-}
-
-// The shared scale spans only the days the forecast reached. A day it did
-// not reach is a zero DailyForecast, and counting its 0°C would squash a
-// summer week's lines against the top of every chart.
-func TestSharedTempRange(t *testing.T) {
-	warm := dryDay(30, 20)
-	for i := range warm.Hourly {
-		warm.Hourly[i].Temperature = 25
-	}
-	tests := []struct {
-		label    string
-		days     []weather.DailyForecast
-		min, max float64
-	}{
-		{"spans the forecast days", []weather.DailyForecast{warm, dryDay(12, 4)}, 4, 30},
-		{"ignores days the forecast missed", []weather.DailyForecast{warm, {}, {}}, 20, 30},
-	}
-	for _, tt := range tests {
-		t.Run(tt.label, func(t *testing.T) {
-			got := sharedTempRange(tt.days)
-			if got.Min != tt.min || got.Max != tt.max {
-				t.Errorf("range = %+v, want {%v %v}", got, tt.min, tt.max)
-			}
-		})
 	}
 }
