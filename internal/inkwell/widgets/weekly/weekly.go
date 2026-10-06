@@ -1,7 +1,6 @@
 package weekly
 
 import (
-	"fmt"
 	"image"
 	"time"
 
@@ -18,31 +17,6 @@ const defaultWeatherH = 145
 // defaultDays is the number of day columns rendered when `days` is omitted,
 // and the most the panel can fit.
 const defaultDays = 7
-
-// widgetName prefixes every config error so a dashboard that fails to
-// load says which widget rejected it.
-const widgetName = "weekly-calendar"
-
-// spec declares weekly-calendar to the shared calendar-widget parser: the
-// shared settings, a default of five events a column, and the keys only
-// this widget takes, which parseConfig reads itself.
-var spec = daygrid.Spec{
-	Widget:    widgetName,
-	MaxEvents: 5,
-	Extra:     []string{"days", "week_start", "show_weather", "show_weather_label", "highlight_hour"},
-}
-
-// Config holds parsed weekly-calendar configuration: the settings every
-// calendar widget shares, and this widget's own.
-type Config struct {
-	daygrid.Config
-
-	WeekStart        time.Weekday
-	Days             int
-	ShowWeather      bool
-	ShowWeatherLabel bool
-	HighlightHour    int
-}
 
 // Widget renders a rolling multi-day calendar+weather dashboard.
 type Widget struct {
@@ -142,7 +116,12 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 	if err != nil {
 		return nil, err
 	}
-	days, err := daygrid.New(widgetName, cfg.Config, deps)
+	// A screen that hides its weather fetches none to throw away.
+	var opts []daygrid.Option
+	if !cfg.ShowWeather {
+		opts = append(opts, daygrid.WithoutWeather())
+	}
+	days, err := daygrid.New(widgetName, cfg.Config, deps, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -152,78 +131,4 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 		now = time.Now
 	}
 	return New(bounds, days, now, cfg), nil
-}
-
-// parseConfig validates and extracts config values: the shared settings
-// through the shared parser, inheriting weather settings from inherit,
-// then this widget's own keys.
-func parseConfig(config map[string]any, inherit *weather.Provider) (Config, error) {
-	shared, err := daygrid.ParseConfig(spec, config, inherit)
-	cfg := Config{
-		Config:           shared,
-		WeekStart:        time.Monday,
-		Days:             defaultDays,
-		ShowWeather:      true,
-		ShowWeatherLabel: true,
-		HighlightHour:    15,
-	}
-	if err != nil {
-		return cfg, err
-	}
-
-	if v, ok := config["week_start"]; ok {
-		s, ok := v.(string)
-		if !ok {
-			return cfg, fmt.Errorf("weekly-calendar: week_start must be a string, got %T", v)
-		}
-		switch s {
-		case "monday":
-			cfg.WeekStart = time.Monday
-		case "sunday":
-			cfg.WeekStart = time.Sunday
-		default:
-			return cfg, fmt.Errorf("weekly-calendar: invalid week_start %q (must be monday or sunday)", s)
-		}
-	}
-
-	if v, ok := config["days"]; ok {
-		n, ok := v.(int)
-		if !ok {
-			return cfg, fmt.Errorf("weekly-calendar: days must be an integer, got %T", v)
-		}
-		if n < 1 || n > defaultDays {
-			return cfg, fmt.Errorf("weekly-calendar: days must be in [1, %d], got %d", defaultDays, n)
-		}
-		cfg.Days = n
-	}
-
-	if v, ok := config["show_weather"]; ok {
-		b, ok := v.(bool)
-		if !ok {
-			return cfg, fmt.Errorf("weekly-calendar: show_weather must be a bool, got %T", v)
-		}
-		cfg.ShowWeather = b
-	}
-	// A screen that hides its weather fetches none to throw away.
-	cfg.NoWeather = !cfg.ShowWeather
-
-	if v, ok := config["show_weather_label"]; ok {
-		b, ok := v.(bool)
-		if !ok {
-			return cfg, fmt.Errorf("weekly-calendar: show_weather_label must be a bool, got %T", v)
-		}
-		cfg.ShowWeatherLabel = b
-	}
-	if v, ok := config["highlight_hour"]; ok {
-		n, ok := v.(int)
-		if !ok {
-			return cfg, fmt.Errorf("weekly-calendar: highlight_hour must be an integer, got %T", v)
-		}
-		if n < 0 || n > 23 {
-			return cfg, fmt.Errorf("weekly-calendar: highlight_hour must be in [0, 23], got %d", n)
-		}
-		cfg.HighlightHour = n
-	}
-
-	return cfg, nil
 }

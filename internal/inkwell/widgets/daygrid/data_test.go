@@ -361,15 +361,20 @@ func TestDayData_NoWeather(t *testing.T) {
 	now := time.Date(2026, 10, 5, 8, 0, 0, 0, mustZone(t, "America/Toronto"))
 	s := newSeam(t, now)
 	s.tr.Serve(feedA, ics(weeklySeries))
-	cfg := gemConfig(calendar.Feed{URL: feedA})
-	cfg.NoWeather = true
+	src, err := daygrid.New("test-widget", gemConfig(calendar.Feed{URL: feedA}), s.deps, daygrid.WithoutWeather())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 
-	got := s.source(t, cfg).Days(now, 4)
+	got := src.Days(now, 4)
 
 	for i, day := range got.Days {
 		if day.Forecast != nil {
 			t.Errorf("day %d has a forecast", i)
 		}
+	}
+	if got.ForecastArrived {
+		t.Error("ForecastArrived with no forecast asked for")
 	}
 	if g := dayEvents(got); !slices.Contains(g, "Weekly Sync") {
 		t.Errorf("events by day = %q, want the weekly series", g)

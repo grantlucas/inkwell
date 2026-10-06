@@ -263,31 +263,37 @@ func TestFactory(t *testing.T) {
 func TestFactory_FetchesWeatherOnlyWhenShown(t *testing.T) {
 	const feed = "https://example.com/cal.ics"
 	const gem = "https://api.open-meteo.com/v1/gem"
-	for _, show := range []bool{true, false} {
-		tr := fakehttp.New()
-		tr.Serve(feed, "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n")
-		tr.Handle(gem, fakehttp.OpenMeteo{Now: testTime, Site: time.UTC}.Reply)
-		deps := widget.Deps{
-			Now:      fixedClock(testTime),
-			Calendar: calendar.NewProvider(tr, fixedClock(testTime)),
-			Weather:  weather.NewProvider(tr, time.Hour, fixedClock(testTime), weather.Settings{Model: weather.ModelGEM, TempUnit: "C"}),
-		}
-		w, err := Factory(image.Rect(0, 52, 800, 480), withKey("show_weather", show), deps)
-		if err != nil {
-			t.Fatalf("Factory: %v", err)
-		}
-		render(t, w.(*Widget))
+	tests := []struct {
+		label            string
+		showWeather      bool
+		forecastRequests int
+	}{
+		{label: "weather shown", showWeather: true, forecastRequests: 1},
+		{label: "weather hidden", showWeather: false, forecastRequests: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			tr := fakehttp.New()
+			tr.Serve(feed, "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n")
+			tr.Handle(gem, fakehttp.OpenMeteo{Now: testTime, Site: time.UTC}.Reply)
+			deps := widget.Deps{
+				Now:      fixedClock(testTime),
+				Calendar: calendar.NewProvider(tr, fixedClock(testTime)),
+				Weather:  weather.NewProvider(tr, time.Hour, fixedClock(testTime), weather.Settings{Model: weather.ModelGEM, TempUnit: "C"}),
+			}
+			w, err := Factory(image.Rect(0, 52, 800, 480), withKey("show_weather", tt.showWeather), deps)
+			if err != nil {
+				t.Fatalf("Factory: %v", err)
+			}
+			render(t, w.(*Widget))
 
-		want := 0
-		if show {
-			want = 1
-		}
-		if got := tr.Requests(gem); got != want {
-			t.Errorf("show_weather %v: forecast requests = %d, want %d", show, got, want)
-		}
-		if got := tr.Requests(feed); got != 1 {
-			t.Errorf("show_weather %v: feed requests = %d, want 1", show, got)
-		}
+			if got := tr.Requests(gem); got != tt.forecastRequests {
+				t.Errorf("forecast requests = %d, want %d", got, tt.forecastRequests)
+			}
+			if got := tr.Requests(feed); got != 1 {
+				t.Errorf("feed requests = %d, want 1", got)
+			}
+		})
 	}
 }
 
@@ -304,7 +310,7 @@ func TestParseConfig_OwnKeys(t *testing.T) {
 	}{
 		{label: "default days", check: func(c Config) bool { return c.Days == 7 }},
 		{label: "default max_events", check: func(c Config) bool { return c.MaxEvents == 5 }},
-		{label: "weather shown by default", check: func(c Config) bool { return c.ShowWeather && c.ShowWeatherLabel && !c.NoWeather }},
+		{label: "weather shown by default", check: func(c Config) bool { return c.ShowWeather && c.ShowWeatherLabel }},
 		{label: "days", key: "days", value: 5, check: func(c Config) bool { return c.Days == 5 }},
 		{label: "days lower boundary", key: "days", value: 1, check: func(c Config) bool { return c.Days == 1 }},
 		{label: "days upper boundary", key: "days", value: 7, check: func(c Config) bool { return c.Days == 7 }},
@@ -312,7 +318,7 @@ func TestParseConfig_OwnKeys(t *testing.T) {
 		{label: "days negative", key: "days", value: -1, wantErr: "days must be in [1, 7]"},
 		{label: "days above range", key: "days", value: 8, wantErr: "days must be in [1, 7]"},
 		{label: "days not an integer", key: "days", value: "five", wantErr: "days must be an integer"},
-		{label: "show_weather off", key: "show_weather", value: false, check: func(c Config) bool { return !c.ShowWeather && c.NoWeather }},
+		{label: "show_weather off", key: "show_weather", value: false, check: func(c Config) bool { return !c.ShowWeather }},
 		{label: "show_weather not a bool", key: "show_weather", value: "yes", wantErr: "show_weather must be a bool"},
 		{label: "show_weather_label off", key: "show_weather_label", value: false, check: func(c Config) bool { return !c.ShowWeatherLabel }},
 		{label: "show_weather_label not a bool", key: "show_weather_label", value: 1, wantErr: "show_weather_label must be a bool"},

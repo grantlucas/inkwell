@@ -55,19 +55,31 @@ type Data struct {
 // New builds a widget's day data module from its configuration and the
 // dependencies the app hands every widget. A missing dependency is a
 // wiring fault, reported with widgetName.
-func New(widgetName string, cfg Config, deps widget.Deps) (Source, error) {
+func New(widgetName string, cfg Config, deps widget.Deps, opts ...Option) (Source, error) {
 	if err := requireDeps(widgetName, deps); err != nil {
 		return nil, err
 	}
 	m := &module{
 		widget:   widgetName,
 		cal:      deps.Calendar.Source(cfg.Feeds, cfg.Refresh),
+		weather:  deps.Weather.SourceForModel(cfg.Weather.Model),
 		location: cfg.Weather.location(),
 	}
-	if !cfg.NoWeather {
-		m.weather = deps.Weather.SourceForModel(cfg.Weather.Model)
+	for _, opt := range opts {
+		opt(m)
 	}
 	return m, nil
+}
+
+// Option adjusts how New builds a widget's module.
+type Option func(*module)
+
+// WithoutWeather leaves the forecast unfetched, so every day's Forecast is
+// nil and ForecastArrived is false. weekly-calendar passes it for
+// show_weather: false, so a screen that hides its weather doesn't fetch a
+// forecast to throw away.
+func WithoutWeather() Option {
+	return func(m *module) { m.weather = nil }
 }
 
 // module is the production adapter.
