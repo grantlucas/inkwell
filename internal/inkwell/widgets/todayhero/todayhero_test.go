@@ -186,18 +186,6 @@ func withTemps(f []weather.DailyForecast, i int, temp func(hour int) float64) []
 	return f
 }
 
-// sameIn reports whether two frames agree on every pixel in r.
-func sameIn(a, b *image.Paletted, r image.Rectangle) bool {
-	for y := r.Min.Y; y < r.Max.Y; y++ {
-		for x := r.Min.X; x < r.Max.X; x++ {
-			if a.ColorIndexAt(x, y) != b.ColorIndexAt(x, y) {
-				return false
-			}
-		}
-	}
-	return true
-}
-
 func renderForecast(t *testing.T, f []weather.DailyForecast) *image.Paletted {
 	t.Helper()
 	return renderToFrame(t, newWidget(sampleEvents(), f, testTime))
@@ -231,7 +219,7 @@ func TestWidget_ChartsCarryTheTemperatureLine(t *testing.T) {
 			after := renderForecast(t, withTemps(tt.base(), tt.day, func(h int) float64 {
 				return 8 + float64(tt.day) + 2*math.Abs(float64(h-12))/6
 			}))
-			if sameIn(before, after, tt.chart) {
+			if testutil.SameIn(before, after, tt.chart) {
 				t.Error("reshaping the day's temperatures did not change its chart — no temperature line")
 			}
 		})
@@ -246,37 +234,9 @@ func TestWidget_ChartsShareOneTemperatureRange(t *testing.T) {
 	chart := computeHero(image.Rect(0, 0, 800, 480)).Chart
 	before := renderForecast(t, dryForecast())
 	after := renderForecast(t, withTemps(dryForecast(), dayRows, func(int) float64 { return 35 }))
-	if sameIn(before, after, chart) {
+	if testutil.SameIn(before, after, chart) {
 		t.Error("a hot day four rows down did not move today's line — the charts are not on one range")
 	}
-}
-
-// hasSolidSquare reports whether frame holds a side x side square that
-// is entirely PaperBlack.
-func hasSolidSquare(frame *image.Paletted, side int) bool {
-	b := frame.Bounds()
-	// run[x] is how many PaperBlack pixels end at (x, y) going up.
-	run := make([]int, b.Dx())
-	for y := b.Min.Y; y < b.Max.Y; y++ {
-		wide := 0
-		for x := b.Min.X; x < b.Max.X; x++ {
-			i := x - b.Min.X
-			if frame.ColorIndexAt(x, y) == widget.PaperBlack {
-				run[i]++
-			} else {
-				run[i] = 0
-			}
-			if run[i] >= side {
-				wide++
-			} else {
-				wide = 0
-			}
-			if wide >= side {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // No large filled area may sit in a fixed position: a black block that
@@ -297,26 +257,10 @@ func TestWidget_NoLargeFixedFill(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			frame := renderToFrame(t, newWidget(sampleEvents(), tt.f(), tt.clock))
-			if hasSolidSquare(frame, 20) {
+			if testutil.HasSolidSquare(frame, 20) {
 				t.Error("found a solid black 20x20 block — a fixed fill is a burn-in risk")
 			}
 		})
-	}
-}
-
-// The guard has to be able to fail: a block of the size the old
-// identity band drew is caught.
-func TestHasSolidSquare(t *testing.T) {
-	frame := newTestFrame(100, 100)
-	if hasSolidSquare(frame, 20) {
-		t.Fatal("blank paper reported a solid square")
-	}
-	drawkit.FillRect(frame, image.Rect(30, 40, 50, 60), widget.PaperBlack)
-	if !hasSolidSquare(frame, 20) {
-		t.Error("missed a 20x20 black square")
-	}
-	if hasSolidSquare(frame, 21) {
-		t.Error("reported a 21x21 square inside a 20x20 one")
 	}
 }
 

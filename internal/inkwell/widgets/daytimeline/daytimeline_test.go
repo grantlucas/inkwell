@@ -295,7 +295,7 @@ func TestWidget_TallBlocksWrapTheTitle(t *testing.T) {
 			for i, line := range tt.want[1:] {
 				drawkit.DrawText(clip, x, baseline+(i+1)*drawkit.BodyLineH(), line, drawkit.BodyFace, contrast)
 			}
-			if !sameIn(frame, ref, block) {
+			if !testutil.SameIn(frame, ref, block) {
 				t.Errorf("block doesn't read %q", tt.want)
 			}
 		})
@@ -348,7 +348,7 @@ func TestWidget_ShortBlocksGetAWholeLine(t *testing.T) {
 			}
 			drawkit.DrawText(ref, inner.Min.X+labelPadX, labelBaseline(inner), tt.from.Format("15:04"), drawkit.BodyBoldFace, contrast)
 			drawkit.DrawText(ref, inner.Min.X+labelPadX+6*drawkit.BodyAdvance(), labelBaseline(inner), "Standup", drawkit.BodyFace, contrast)
-			if !sameIn(frame, ref, block) {
+			if !testutil.SameIn(frame, ref, block) {
 				t.Errorf("block doesn't read %q in full", tt.from.Format("15:04")+" Standup")
 			}
 		})
@@ -499,7 +499,7 @@ func TestWidget_CountsAThirdSimultaneousEventInATag(t *testing.T) {
 			}
 			ref := newTestFrame()
 			drawTag(ref, tg)
-			if !sameIn(frame, ref, tg.Rect) {
+			if !testutil.SameIn(frame, ref, tg.Rect) {
 				t.Errorf("no %q tag at %v", tt.wantTag, tg.Rect)
 			}
 			// The tag reads as ink on paper.
@@ -600,7 +600,7 @@ func TestWidget_ListsAllDayEventsInAStripAboveTheGrid(t *testing.T) {
 			// The strip reads as the event list draws these events.
 			ref := newTestFrame()
 			eventlist.List{Layout: eventlist.Inline, Location: time.UTC}.Draw(ref, stripText(l), tt.wantList)
-			if !sameIn(frame, ref, l.AllDay) {
+			if !testutil.SameIn(frame, ref, l.AllDay) {
 				t.Error("strip differs from the event list of its events")
 			}
 		})
@@ -666,27 +666,15 @@ func TestWidget_LabelTimeIsInTheDisplayZone(t *testing.T) {
 	ref := newTestFrame()
 	drawkit.FillRect(ref, block, widget.PaperBlack)
 	drawLabel(ref, block, e, toronto, false, widget.PaperWhite)
-	if !sameIn(frame, ref, block) {
+	if !testutil.SameIn(frame, ref, block) {
 		t.Error("label differs from one written at 15:00")
 	}
 	wrong := newTestFrame()
 	drawkit.FillRect(wrong, block, widget.PaperBlack)
 	drawLabel(wrong, block, e, time.UTC, false, widget.PaperWhite)
-	if sameIn(frame, wrong, block) {
+	if testutil.SameIn(frame, wrong, block) {
 		t.Error("label matches one written in UTC")
 	}
-}
-
-// sameIn reports whether a and b agree on every pixel of r.
-func sameIn(a, b *image.Paletted, r image.Rectangle) bool {
-	for y := r.Min.Y; y < r.Max.Y; y++ {
-		for x := r.Min.X; x < r.Max.X; x++ {
-			if a.ColorIndexAt(x, y) != b.ColorIndexAt(x, y) {
-				return false
-			}
-		}
-	}
-	return true
 }
 
 // Every hour in the window gets a label in the gutter and a rule across
@@ -954,18 +942,6 @@ func TestWidget_Golden(t *testing.T) {
 	}
 }
 
-// paintNeighbours inks every pixel of the frame outside bounds, standing
-// in for the widgets around this one.
-func paintNeighbours(frame *image.Paletted, bounds image.Rectangle) {
-	for y := range frame.Bounds().Dy() {
-		for x := range frame.Bounds().Dx() {
-			if !image.Pt(x, y).In(bounds) {
-				frame.SetColorIndex(x, y, widget.PaperBlack)
-			}
-		}
-	}
-}
-
 // The draw helpers clip to the frame, not the widget, so everything the
 // widget draws has to land inside its bounds by construction: on a busy
 // day, with notes on both sides, and at the smallest size it draws at.
@@ -993,7 +969,7 @@ func TestWidget_StaysInsideItsBounds(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			frame := newTestFrame()
-			paintNeighbours(frame, tt.bounds)
+			testutil.PaintOutside(frame, tt.bounds)
 			w := newWidget(tt.bounds, busy, defaultConfig())
 			if err := w.Render(frame); err != nil {
 				t.Fatalf("Render: %v", err)
@@ -1026,7 +1002,7 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			frame := newTestFrame()
-			paintNeighbours(frame, tt.bounds)
+			testutil.PaintOutside(frame, tt.bounds)
 			drawkit.FillRect(frame, tt.bounds, widget.PaperBlack)
 			if err := newWidget(tt.bounds, typicalDay(), defaultConfig()).Render(frame); err != nil {
 				t.Fatalf("Render: %v", err)

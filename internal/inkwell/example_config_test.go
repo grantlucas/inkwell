@@ -242,7 +242,7 @@ func TestExampleConfig_Rotation(t *testing.T) {
 			screen, frame := renderExampleScreen(t, name, exampleUpstream())
 			assertTiles(t, screen.Widgets(), image.Rect(0, 0, 800, 480))
 			for _, w := range screen.Widgets() {
-				if !inked(frame, w.Bounds()) {
+				if !testutil.Inked(frame, w.Bounds()) {
 					t.Errorf("%T at %v drew nothing", w, w.Bounds())
 				}
 			}
@@ -305,12 +305,12 @@ func TestExampleConfig_DayTimelineScreen_SourceDown(t *testing.T) {
 			unaffected := map[string]bool{}
 			for _, w := range screen.Widgets() {
 				kind := fmt.Sprintf("%T", w)
-				if !inked(frame, w.Bounds()) {
+				if !testutil.Inked(frame, w.Bounds()) {
 					t.Errorf("%s at %v drew nothing", kind, w.Bounds())
 				}
 				if slices.Contains(tt.unaffected, kind) {
 					unaffected[kind] = true
-					if !samePixels(frame, healthy, w.Bounds()) {
+					if !testutil.SameIn(frame, healthy, w.Bounds()) {
 						t.Errorf("%s at %v changed though its data arrived", kind, w.Bounds())
 					}
 				}
@@ -321,28 +321,4 @@ func TestExampleConfig_DayTimelineScreen_SourceDown(t *testing.T) {
 			testutil.AssertGoldenPNG(t, frame)
 		})
 	}
-}
-
-// inked reports whether anything but paper is drawn in r.
-func inked(frame *image.Paletted, r image.Rectangle) bool {
-	for y := r.Min.Y; y < r.Max.Y; y++ {
-		for x := r.Min.X; x < r.Max.X; x++ {
-			if frame.ColorIndexAt(x, y) != widget.PaperWhite {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// samePixels reports whether a and b match everywhere in r.
-func samePixels(a, b *image.Paletted, r image.Rectangle) bool {
-	for y := r.Min.Y; y < r.Max.Y; y++ {
-		for x := r.Min.X; x < r.Max.X; x++ {
-			if a.ColorIndexAt(x, y) != b.ColorIndexAt(x, y) {
-				return false
-			}
-		}
-	}
-	return true
 }

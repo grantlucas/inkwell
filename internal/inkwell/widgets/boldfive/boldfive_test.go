@@ -255,19 +255,6 @@ func TestWidget_ColumnsShareOneTemperatureScale(t *testing.T) {
 // fuzzy_clock header band and the rule beneath it.
 var belowHeader = image.Rect(0, 48, 800, 480)
 
-// paintNeighbours inks every frame row outside bounds solid black,
-// standing in for the widgets the compositor put above and below.
-func paintNeighbours(frame *image.Paletted, bounds image.Rectangle) {
-	for y := range frame.Bounds().Dy() {
-		if y >= bounds.Min.Y && y < bounds.Max.Y {
-			continue
-		}
-		for x := range frame.Bounds().Dx() {
-			frame.SetColorIndex(x, y, widget.PaperBlack)
-		}
-	}
-}
-
 // busiestDay is a Monday packed with wrapped titles, more than the
 // column can hold.
 func busiestDay() []ical.Event {
@@ -297,7 +284,7 @@ func TestWidget_StaysInsideBoundsBelowAHeaderBand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
-			paintNeighbours(frame, tt.bounds)
+			testutil.PaintOutside(frame, tt.bounds)
 			w := New(tt.bounds, daydata.InMemory(append(sampleEvents(), busiestDay()...), sampleForecast()),
 				fixedClock(testTime), drawConfig(3, "C"))
 			if err := w.Render(frame); err != nil {

@@ -13,7 +13,6 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 // testTime is a Monday mid-afternoon.
@@ -90,18 +89,6 @@ func TestWidget_Golden(t *testing.T) {
 	}
 }
 
-// paintOutside inks every frame pixel outside bounds solid black,
-// standing in for the widgets the compositor put around it.
-func paintOutside(frame *image.Paletted, bounds image.Rectangle) {
-	for y := frame.Rect.Min.Y; y < frame.Rect.Max.Y; y++ {
-		for x := frame.Rect.Min.X; x < frame.Rect.Max.X; x++ {
-			if !image.Pt(x, y).In(bounds) {
-				frame.SetColorIndex(x, y, widget.PaperBlack)
-			}
-		}
-	}
-}
-
 // The draw helpers clip to the frame, not the widget, so anything the
 // widget drew past its edge would land on a neighbour. Whatever the
 // forecast, every pixel stays inside its bounds, wherever on the panel
@@ -129,7 +116,7 @@ func TestWidget_StaysInsideItsBounds(t *testing.T) {
 		for _, f := range forecasts {
 			t.Run(p.label+" "+f.label, func(t *testing.T) {
 				frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
-				paintOutside(frame, p.bounds)
+				testutil.PaintOutside(frame, p.bounds)
 				w := New(p.bounds, daydata.InMemory(nil, f.forecast), fixedClock(testTime), unitConfig(f.unit))
 				if err := w.Render(frame); err != nil {
 					t.Fatalf("Render: %v", err)
@@ -141,24 +128,12 @@ func TestWidget_StaysInsideItsBounds(t *testing.T) {
 						}
 					}
 				}
-				if !inked(frame, p.bounds) {
+				if !testutil.Inked(frame, p.bounds) {
 					t.Error("drew nothing")
 				}
 			})
 		}
 	}
-}
-
-// inked reports whether any pixel inside r is PaperBlack.
-func inked(frame *image.Paletted, r image.Rectangle) bool {
-	for y := r.Min.Y; y < r.Max.Y; y++ {
-		for x := r.Min.X; x < r.Max.X; x++ {
-			if frame.ColorIndexAt(x, y) == widget.PaperBlack {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // A failed forecast fetch is not a render error: the compositor drops the
@@ -214,7 +189,7 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			w := New(tt.bounds, daydata.InMemory(nil, today(weather.Rain, 12, 6)), fixedClock(testTime), unitConfig("C"))
-			if inked(render(t, w), tt.bounds) {
+			if testutil.Inked(render(t, w), tt.bounds) {
 				t.Error("drew into bounds too small to hold the block")
 			}
 		})
@@ -230,54 +205,10 @@ func TestWidget_NoLargeFixedFill(t *testing.T) {
 	} {
 		t.Run(cond.Label(), func(t *testing.T) {
 			w := New(goldenBox, daydata.InMemory(nil, today(cond, -12, -18)), fixedClock(testTime), unitConfig("C"))
-			if hasSolidSquare(render(t, w), 20) {
+			if testutil.HasSolidSquare(render(t, w), 20) {
 				t.Error("found a solid black 20x20 block — a fixed fill is a burn-in risk")
 			}
 		})
-	}
-}
-
-// hasSolidSquare reports whether frame holds a side x side square that
-// is entirely PaperBlack.
-func hasSolidSquare(frame *image.Paletted, side int) bool {
-	b := frame.Bounds()
-	// run[x] is how many PaperBlack pixels end at (x, y) going up.
-	run := make([]int, b.Dx())
-	for y := b.Min.Y; y < b.Max.Y; y++ {
-		wide := 0
-		for x := b.Min.X; x < b.Max.X; x++ {
-			i := x - b.Min.X
-			if frame.ColorIndexAt(x, y) == widget.PaperBlack {
-				run[i]++
-			} else {
-				run[i] = 0
-			}
-			if run[i] >= side {
-				wide++
-			} else {
-				wide = 0
-			}
-			if wide >= side {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// The guard has to be able to fail.
-func TestHasSolidSquare(t *testing.T) {
-	frame := image.NewPaletted(image.Rect(0, 0, 100, 100), widget.PaperPalette)
-	drawkit.FillWhite(frame, frame.Rect)
-	if hasSolidSquare(frame, 20) {
-		t.Fatal("blank paper reported a solid square")
-	}
-	drawkit.FillRect(frame, image.Rect(30, 40, 50, 60), widget.PaperBlack)
-	if !hasSolidSquare(frame, 20) {
-		t.Error("missed a 20x20 black square")
-	}
-	if hasSolidSquare(frame, 21) {
-		t.Error("reported a 21x21 square inside a 20x20 one")
 	}
 }
 

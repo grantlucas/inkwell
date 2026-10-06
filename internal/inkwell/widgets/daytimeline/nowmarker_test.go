@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar/ical"
+	"github.com/grantlucas/inkwell/internal/inkwell/testutil"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
@@ -103,11 +104,11 @@ func TestNowMarker_PassesBehindALabel(t *testing.T) {
 	crossing, unmarked := render(now), render(at(6, 0))
 
 	text := image.Rect(block.Min.X+labelPadX, until-capH, block.Min.X+labelPadX+len(second)*drawkit.BodyAdvance(), until+capH)
-	if !sameIn(crossing, unmarked, text) {
+	if !testutil.SameIn(crossing, unmarked, text) {
 		t.Error("the marker changes the label it crosses")
 	}
 	right := image.Rect(block.Max.X-markClear, block.Min.Y, block.Max.X, block.Max.Y)
-	if sameIn(crossing, unmarked, right) {
+	if testutil.SameIn(crossing, unmarked, right) {
 		t.Error("no marker across the block right of its label")
 	}
 }
