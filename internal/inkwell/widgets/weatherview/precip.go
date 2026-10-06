@@ -102,21 +102,36 @@ func (l precipLayout) slotX(hour int) int {
 	return l.bounds.Min.X + int(float64(hour-precipStartHour)*l.step)
 }
 
-// barHeight scales a probability to pixels, flooring a trace chance at a
-// visible stub — "1%" and "0%" are different claims, and the gap in the
-// bar shape is what says which.
+// barHeight scales a probability to the plot's height.
+func (l precipLayout) barHeight(prob float64) int {
+	return BarLength(prob, l.barMaxH)
+}
+
+// BarLength scales a precipitation probability to a bar's length in a
+// plot room pixels long, whichever way the bar grows: up in the combined
+// chart, sideways in the day-timeline's weather lane. A trace chance
+// floors at a visible stub — "1%" and "0%" are different claims, and the
+// gap in the bar shape is what says which.
 //
 // The probability is clamped to [0,1] rather than trusted: it reaches us
 // as whatever the forecast API returned divided by 100, so a malformed
-// response would otherwise scale a bar clean off the top of the cell and
-// over the widget above. The stub is capped at the plot height for the
-// same reason — a 1 px plot cannot carry a 2 px stub.
-func (l precipLayout) barHeight(prob float64) int {
-	h := int(math.Round(min(max(prob, 0), 1) * float64(l.barMaxH)))
+// response would otherwise scale a bar clean out of the cell and over a
+// neighbouring widget. The stub is capped at room for the same reason — a
+// 1 px plot cannot carry a 2 px stub.
+func BarLength(prob float64, room int) int {
+	h := int(math.Round(min(max(prob, 0), 1) * float64(room)))
 	if h < 1 && prob > 0 {
-		return min(precipTraceH, l.barMaxH)
+		return min(precipTraceH, room)
 	}
 	return h
+}
+
+// Dry reports whether points are a dry day: no hour's chance reaches
+// dryThreshold. A dry day draws its temperature line and no bars, since a
+// flat row of stubs reads as a broken widget where the line alone says
+// the day is dry. The caller passes the hours its chart shows.
+func Dry(points []weather.HourlyPoint) bool {
+	return peakProb(points) < dryThreshold
 }
 
 // drawPrecipNowMarker draws a 2-px solid PaperBlack vertical stroke at

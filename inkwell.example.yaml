@@ -265,7 +265,10 @@ dashboard:
     # and events wholly outside it are counted in a "+N EARLIER" or
     # "+N LATER" note. Two overlapping events sit side by side, and a
     # third at the same time is counted in a "+N" tag. All-day events
-    # are listed in a strip above the grid. The widget fills the left of
+    # are listed in a strip above the grid. Beside the hour labels, the
+    # weather lane shows today's chance of rain as bars and the
+    # temperature as a line, hour by hour, and a now marker crosses the
+    # lane and the grid at the current time. The widget fills the left of
     # the screen; the right is where the weather for today and the days
     # ahead will go.
     #

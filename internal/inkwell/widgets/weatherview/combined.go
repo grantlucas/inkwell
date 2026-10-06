@@ -77,7 +77,7 @@ func RenderCombinedChart(frame *image.Paletted, bounds image.Rectangle, hourly [
 	// Below the dry threshold the bars are stubs a pixel or two tall,
 	// and a flat row of those reads as a broken widget from across the
 	// room; the line alone says the day is dry.
-	if peakProb(filtered) >= dryThreshold {
+	if !Dry(filtered) {
 		drawPrecipBars(frame, l, filtered)
 	}
 	drawPrecipAxis(frame, l)
@@ -99,12 +99,27 @@ func (r TempRange) span() float64 {
 // tempLineW thick, so the warmest day's line starts on top and the
 // coldest day's ends on the plot's last row.
 func (r TempRange) y(temp float64, top, height int) int {
+	return top + height - tempLineW - r.offset(temp, height)
+}
+
+// X maps a temperature to the left column of a line running down a plot
+// that starts at left and runs width columns, as the day-timeline's
+// weather lane draws it: the coldest on the left edge and the warmest as
+// far right as the tempLineW-wide line still fits. It clamps and reads a
+// NaN the way y does.
+func (r TempRange) X(temp float64, left, width int) int {
+	return left + r.offset(temp, width)
+}
+
+// offset is how far from the plot's cold edge temp's line sits, in a
+// plot length pixels long: from 0 for the coldest to length less the
+// line's thickness for the warmest.
+func (r TempRange) offset(temp float64, length int) int {
 	norm := 0.0
 	if !math.IsNaN(temp) {
 		norm = min(max((temp-r.Min)/r.span(), 0), 1)
 	}
-	travel := height - tempLineW
-	return top + travel - int(norm*float64(travel)+0.5)
+	return int(norm*float64(length-tempLineW) + 0.5)
 }
 
 // drawTempLine draws the temperature line across the plot above the
@@ -119,11 +134,35 @@ func drawTempLine(frame *image.Paletted, l precipLayout, points []weather.Hourly
 	for i, hp := range points {
 		pts[i] = image.Pt(l.slotX(hp.Hour)+l.barW/2, rng.y(hp.Temperature, l.bounds.Min.Y, l.barMaxH))
 	}
-	DrawContrastLine(frame, pts)
+	DrawContrastLine(frame, pts, RunsAcross)
 }
 
-// DrawContrastLine draws a 2 px polyline through pts, each vertex being
-// the line's top row at that x.
+// LineRun is the way a contrast line mostly runs, which decides the side
+// its thickness goes on.
+type LineRun int
+
+const (
+	// RunsAcross is a line drawn left to right, like the combined
+	// chart's: each vertex is the line's top row, and it is thickened
+	// downward.
+	RunsAcross LineRun = iota
+	// RunsDown is a line drawn top to bottom, like the day-timeline's
+	// weather lane: each vertex is the line's left column, and it is
+	// thickened to the right. Thickened downward, a mostly vertical line
+	// would be a single pixel wide.
+	RunsDown
+)
+
+// thicken is the step from one pixel of the line's thickness to the next.
+func (r LineRun) thicken() image.Point {
+	if r == RunsDown {
+		return image.Pt(1, 0)
+	}
+	return image.Pt(0, 1)
+}
+
+// DrawContrastLine draws a 2 px polyline through pts, thickened across
+// the way it runs.
 //
 // Each pixel is black over bare paper and white over anything already
 // drawn — a bar's fill or cap, or the now marker. That is decided from the
@@ -136,11 +175,12 @@ func drawTempLine(frame *image.Paletted, l precipLayout, points []weather.Hourly
 //
 // It is the combined chart's own rule, exported so other drawing code
 // that lays a temperature line over its own fills reads the same way.
-func DrawContrastLine(frame *image.Paletted, pts []image.Point) {
+func DrawContrastLine(frame *image.Paletted, pts []image.Point, run LineRun) {
 	var line []image.Point
+	step := run.thicken()
 	add := func(x, y int) {
-		for dy := range tempLineW {
-			line = append(line, image.Pt(x, y+dy))
+		for i := range tempLineW {
+			line = append(line, image.Pt(x, y).Add(step.Mul(i)))
 		}
 	}
 	for i, p := range pts {

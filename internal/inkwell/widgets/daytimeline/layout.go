@@ -14,18 +14,26 @@ const (
 	// gutterW is the hour-label column: two digits and a little paper on
 	// each side.
 	gutterW = 29
+	// laneW is the weather lane between the labels and the rule. Wide
+	// enough that an hour's bar shows its chance to a few percent and the
+	// temperature line has room to swing, narrow enough to leave the
+	// events most of the width.
+	laneW = 80
 	// ruleW is the solid rule between the labels and lane on its left
 	// and the events on its right.
 	ruleW = 1
 	// eventsPadX is the paper between the rule and the blocks, and
 	// between the blocks and the right edge.
 	eventsPadX = 4
+	// minEventsW is the narrowest event column worth drawing: room for a
+	// label's time, a few characters of title and a continuation mark.
+	minEventsW = 120
 
 	// The widget will not draw into less than this. Below it the hour
 	// rows are thinner than a line of text and the blocks narrower than
 	// a few characters; the helpers clip to the frame, not the bounds, so
 	// it draws nothing rather than spill onto a neighbour.
-	minWidth  = 160
+	minWidth  = gutterW + laneW + ruleW + 2*eventsPadX + minEventsW
 	minHeight = 160
 )
 
@@ -65,7 +73,7 @@ type layout struct {
 	// Gutter is the hour-label column on the grid's left.
 	Gutter image.Rectangle
 	// Lane is the weather lane between the labels and the rule, sharing
-	// the grid's rows. It has no width until the lane is drawn.
+	// the grid's rows.
 	Lane image.Rectangle
 	// Events is the column the blocks are drawn in.
 	Events image.Rectangle
@@ -92,7 +100,7 @@ func computeLayout(bounds image.Rectangle, s sections) layout {
 	}
 	l.Grid = image.Rect(agenda.Min.X, top, agenda.Max.X, bottom)
 	l.Gutter = image.Rect(l.Grid.Min.X, top, l.Grid.Min.X+gutterW, bottom)
-	l.Lane = image.Rect(l.Gutter.Max.X, top, l.Gutter.Max.X, bottom)
+	l.Lane = image.Rect(l.Gutter.Max.X, top, l.Gutter.Max.X+laneW, bottom)
 	l.Events = image.Rect(l.Lane.Max.X+ruleW+eventsPadX, top, l.Grid.Max.X-eventsPadX, bottom)
 	return l
 }
