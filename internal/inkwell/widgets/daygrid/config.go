@@ -11,9 +11,9 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 )
 
-// DefaultRefresh is how fresh a calendar widget wants its feeds when it
+// defaultRefresh is how fresh a calendar widget wants its feeds when it
 // doesn't set config.refresh.
-const DefaultRefresh = 15 * time.Minute
+const defaultRefresh = 15 * time.Minute
 
 // Config is the configuration every calendar widget shares: its feeds,
 // how fresh it wants them, where its forecast is for, and how its events
@@ -63,7 +63,7 @@ var sharedKeys = []string{
 // settings the widget doesn't set are inherited from the top-level ones
 // inherit carries; inherit may be nil.
 func ParseConfig(spec Spec, raw map[string]any, inherit *weather.Provider) (Config, error) {
-	cfg := Config{Refresh: DefaultRefresh, MaxEvents: spec.MaxEvents}
+	cfg := Config{Refresh: defaultRefresh, MaxEvents: spec.MaxEvents}
 	name := spec.Widget
 
 	if err := rejectUnknown(spec, raw); err != nil {
@@ -74,7 +74,7 @@ func ParseConfig(spec Spec, raw map[string]any, inherit *weather.Provider) (Conf
 	if !ok {
 		return cfg, fmt.Errorf("%s: feeds is required", name) //nolint:goerr113 // config validation message
 	}
-	feeds, err := ParseFeeds(name, f)
+	feeds, err := parseFeeds(name, f)
 	if err != nil {
 		return cfg, err
 	}
@@ -105,10 +105,10 @@ func ParseConfig(spec Spec, raw map[string]any, inherit *weather.Provider) (Conf
 		cfg.ShowLocation = b
 	}
 
-	if err := ParseWeatherKeys(name, raw, &cfg.Weather); err != nil {
+	if err := parseWeatherKeys(name, raw, &cfg.Weather); err != nil {
 		return cfg, err
 	}
-	ResolveDefaults(&cfg.Weather, inherit)
+	resolveDefaults(&cfg.Weather, inherit)
 	return cfg, nil
 }
 
@@ -129,9 +129,10 @@ func parseRefresh(name string, v any) (time.Duration, error) {
 }
 
 // rejectUnknown fails on the first key, in sorted order, that the widget
-// doesn't accept, with the widget's reason when it gave one. Sorted, because ranging a map would name an arbitrary
-// one of several bad keys per run, so fixing them one at a time would
-// look like the error was wandering rather than counting down.
+// doesn't accept, with the widget's reason when it gave one. Sorted,
+// because ranging a map would name an arbitrary one of several bad keys
+// per run, so fixing them one at a time would look like the error was
+// wandering rather than counting down.
 func rejectUnknown(spec Spec, raw map[string]any) error {
 	accepted := slices.Concat(sharedKeys, spec.Extra)
 	if spec.MaxEvents > 0 {

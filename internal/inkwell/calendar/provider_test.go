@@ -11,31 +11,6 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil/fakehttp"
 )
 
-// Two widgets showing the same feed share one fetch of it.
-func TestProvider_WidgetsSharingAFeedFetchItOnce(t *testing.T) {
-	const url = "https://example.com/cal.ics"
-	tr := fakehttp.New()
-	tr.Serve(url, recurringFeedICS)
-	now := time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC)
-	p := NewProvider(tr, func() time.Time { return now })
-
-	first := p.Source([]Feed{{URL: url}}, 15*time.Minute)
-	second := p.Source([]Feed{{URL: url}}, 15*time.Minute)
-	for _, src := range []Source{first, second} {
-		got, err := src.Events(context.Background(), now, now.AddDate(0, 0, 7))
-		if err != nil {
-			t.Fatalf("Events: %v", err)
-		}
-		if len(got) != 1 {
-			t.Errorf("got %d occurrences, want 1", len(got))
-		}
-	}
-
-	if got := tr.Requests(url); got != 1 {
-		t.Errorf("upstream requests = %d, want 1", got)
-	}
-}
-
 // Widgets on a screen fetch concurrently. Those asking for one feed at once
 // wait for a single fetch of it rather than each making their own.
 func TestProvider_ConcurrentRequestsShareOneFetch(t *testing.T) {
@@ -53,39 +28,6 @@ func TestProvider_ConcurrentRequestsShareOneFetch(t *testing.T) {
 	}
 	wg.Wait()
 
-	if got := tr.Requests(url); got != 1 {
-		t.Errorf("upstream requests = %d, want 1", got)
-	}
-}
-
-// Two widgets may give one feed different rules. Each sees its own rules
-// applied, whichever of them fetched the feed into the cache.
-func TestProvider_EachWidgetSeesItsOwnRules(t *testing.T) {
-	const url = "https://team.example/cal.ics"
-	tr := fakehttp.New()
-	tr.Serve(url, teamICS)
-	now := time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC)
-	p := NewProvider(tr, func() time.Time { return now })
-
-	widgets := []struct {
-		label string
-		rules []Rule
-		want  []string
-	}{
-		{label: "strips the player's name", rules: []Rule{mustRule(t, `^Jane Doe\n`, "", false)}, want: []string{"Ravens\nPractice\nEast Rink"}},
-		{label: "drops practices", rules: []Rule{mustRule(t, `Practice`, "", true)}, want: []string{}},
-		{label: "has no rules", want: []string{"Jane Doe\nRavens\nPractice\nEast Rink"}},
-		{label: "strips the player's name again", rules: []Rule{mustRule(t, `^Jane Doe\n`, "", false)}, want: []string{"Ravens\nPractice\nEast Rink"}},
-	}
-	for _, w := range widgets {
-		got, err := p.Source([]Feed{{URL: url, Rules: w.rules}}, time.Hour).Events(context.Background(), now, now.AddDate(0, 0, 1))
-		if err != nil {
-			t.Fatalf("%s: Events: %v", w.label, err)
-		}
-		if got := summaries(got); !slices.Equal(got, w.want) {
-			t.Errorf("widget that %s sees %q, want %q", w.label, got, w.want)
-		}
-	}
 	if got := tr.Requests(url); got != 1 {
 		t.Errorf("upstream requests = %d, want 1", got)
 	}

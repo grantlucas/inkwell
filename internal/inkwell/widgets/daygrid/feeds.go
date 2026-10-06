@@ -6,11 +6,11 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 )
 
-// ParseFeeds reads the `feeds` list, where each entry is either a bare
+// parseFeeds reads the `feeds` list, where each entry is either a bare
 // URL string or an object carrying that feed's rewrite rules. Both
 // forms coexist so a dashboard that needs no rewriting keeps the
 // one-line form it has always had.
-func ParseFeeds(widgetName string, raw any) ([]calendar.Feed, error) {
+func parseFeeds(widgetName string, raw any) ([]calendar.Feed, error) {
 	list, ok := raw.([]any)
 	if !ok {
 		return nil, fmt.Errorf("%s: feeds must be a list, got %T", widgetName, raw)

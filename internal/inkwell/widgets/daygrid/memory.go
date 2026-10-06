@@ -24,5 +24,5 @@ type memory struct {
 }
 
 func (m memory) Days(now time.Time, n int) Data {
-	return assemble(Days(now, n), m.events, m.forecast)
+	return assemble(daysFrom(now, n), m.events, m.forecast, m.forecast != nil)
 }

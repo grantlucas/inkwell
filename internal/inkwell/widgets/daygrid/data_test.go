@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -208,6 +209,15 @@ func TestDayData_EventsLandOnTheirDays(t *testing.T) {
 			want:  []string{"", "", "", "Trip", "", "", "", ""},
 		},
 		{
+			// DTEND is exclusive, so a trip ending on the Sunday is over
+			// by then.
+			label: "a multi-day all-day event, on each date it spans",
+			served: map[string]string{feedA: ics("BEGIN:VEVENT\r\nUID:trip@example.com\r\n" +
+				"DTSTART;VALUE=DATE:20261008\r\nDTEND;VALUE=DATE:20261011\r\nSUMMARY:Trip\r\nEND:VEVENT\r\n")},
+			feeds: []calendar.Feed{{URL: feedA}},
+			want:  []string{"", "", "", "Trip", "Trip", "Trip", "", ""},
+		},
+		{
 			label:  "a feed that fails to fetch",
 			served: map[string]string{},
 			feeds:  []calendar.Feed{{URL: feedA}},
@@ -231,6 +241,96 @@ func TestDayData_EventsLandOnTheirDays(t *testing.T) {
 				t.Error("no forecast for Today")
 			}
 		})
+	}
+}
+
+// A day lists its all-day events first and then its timed ones by start.
+// East of UTC an all-day event's UTC-midnight anchor falls after the
+// morning's timed events, so ordering by instant alone would bury it
+// mid-morning.
+func TestDayData_AllDayEventsComeFirst(t *testing.T) {
+	now := time.Date(2026, 10, 6, 7, 0, 0, 0, mustZone(t, "Asia/Tokyo"))
+	s := newSeam(t, now)
+	s.tr.Serve(feedA, ics(
+		oneOff("lunch", "Lunch", "20261006T030000Z", "20261006T040000Z"),         // 12:00 in Tokyo
+		oneOff("breakfast", "Breakfast", "20261005T230000Z", "20261006T000000Z"), // 08:00 in Tokyo
+		"BEGIN:VEVENT\r\nUID:holiday\r\nDTSTART;VALUE=DATE:20261006\r\nDTEND;VALUE=DATE:20261007\r\n"+
+			"SUMMARY:Holiday\r\nEND:VEVENT\r\n",
+	))
+
+	got := s.source(t, gemConfig(calendar.Feed{URL: feedA})).Days(now, 1)
+
+	if g, want := dayEvents(got)[0], "Holiday,Breakfast,Lunch"; g != want {
+		t.Errorf("Today lists %q, want %q", g, want)
+	}
+}
+
+// Asking for no days gets none.
+func TestDayData_NoDaysAskedFor(t *testing.T) {
+	now := time.Date(2026, 10, 5, 8, 0, 0, 0, mustZone(t, "America/Toronto"))
+	for _, n := range []int{0, -1} {
+		if got := newSeam(t, now).source(t, gemConfig()).Days(now, n); len(got.Days) != 0 {
+			t.Errorf("Days(now, %d) gave %d days, want none", n, len(got.Days))
+		}
+	}
+}
+
+// The calendar and the forecast are fetched together under one deadline.
+// Fetched in turn, a calendar that ate the whole budget handed the
+// forecast an expired context and that render drew no weather (#111).
+// Here the calendar answers only once the forecast has been asked for, so
+// the render gets both only if the two run at once.
+func TestDayData_CalendarAndForecastFetchTogether(t *testing.T) {
+	toronto := mustZone(t, "America/Toronto")
+	now := time.Date(2026, 10, 5, 8, 0, 0, 0, toronto)
+	s := newSeam(t, now)
+
+	var (
+		mu        sync.Mutex
+		deadlines = map[string]time.Time{}
+		once      sync.Once
+		asked     = make(chan struct{})
+	)
+	record := func(r *http.Request, side string) {
+		d, _ := r.Context().Deadline()
+		mu.Lock()
+		deadlines[side] = d
+		mu.Unlock()
+	}
+	forecast := fakehttp.OpenMeteo{Now: now, Site: toronto}
+	s.tr.Handle(gemURL, func(r *http.Request) fakehttp.Reply {
+		record(r, "forecast")
+		once.Do(func() { close(asked) })
+		return forecast.Reply(r)
+	})
+	s.tr.Handle(feedA, func(r *http.Request) fakehttp.Reply {
+		record(r, "calendar")
+		select {
+		case <-asked:
+			return fakehttp.Reply{Body: ics(weeklySeries)}
+		case <-r.Context().Done():
+			return fakehttp.Reply{Err: r.Context().Err()}
+		}
+	})
+
+	src := s.source(t, gemConfig(calendar.Feed{URL: feedA}))
+	before := time.Now()
+	got := src.Days(now, 1)
+	after := time.Now()
+
+	if g := dayEvents(got)[0]; g != "Weekly Sync" {
+		t.Errorf("Today lists %q, want the calendar's answer", g)
+	}
+	if got.Days[0].Forecast == nil {
+		t.Error("no forecast for Today")
+	}
+	cal, fc := deadlines["calendar"], deadlines["forecast"]
+	if cal.IsZero() || !cal.Equal(fc) {
+		t.Errorf("deadlines: calendar %v, forecast %v; want one shared deadline", cal, fc)
+	}
+	// The one budget bounds the render: ten seconds from when it began.
+	if cal.Before(before.Add(10*time.Second)) || cal.After(after.Add(10*time.Second)) {
+		t.Errorf("deadline %v, want ten seconds after the render began (%v to %v)", cal, before, after)
 	}
 }
 
@@ -355,13 +455,44 @@ func TestDayData_NoFeeds(t *testing.T) {
 	}
 }
 
-// A widget built without the calendar module or the weather provider fails
-// rather than building its own, and says which widget.
+// A widget that shows no weather gets its days and events with no forecast,
+// and asks for none rather than fetching one to throw away.
+func TestDayData_NoWeather(t *testing.T) {
+	now := time.Date(2026, 10, 5, 8, 0, 0, 0, mustZone(t, "America/Toronto"))
+	s := newSeam(t, now)
+	s.tr.Serve(feedA, ics(weeklySeries))
+	src, err := daygrid.New("test-widget", gemConfig(calendar.Feed{URL: feedA}), s.deps, daygrid.WithoutWeather())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	got := src.Days(now, 4)
+
+	for i, day := range got.Days {
+		if day.Forecast != nil {
+			t.Errorf("day %d has a forecast", i)
+		}
+	}
+	if got.ForecastArrived {
+		t.Error("ForecastArrived with no forecast asked for")
+	}
+	if g := dayEvents(got); !slices.Contains(g, "Weekly Sync") {
+		t.Errorf("events by day = %q, want the weekly series", g)
+	}
+	if got := s.tr.Requests(gemURL); got != 0 {
+		t.Errorf("forecast fetched %d times, want none", got)
+	}
+}
+
+// A widget built without the calendar module, the weather provider or the
+// dashboard's clock fails rather than building its own or reading the wall
+// clock, and says which widget.
 func TestNew_MissingDeps(t *testing.T) {
 	s := newSeam(t, time.Now())
-	noCalendar, noWeather := s.deps, s.deps
+	noCalendar, noWeather, noClock := s.deps, s.deps, s.deps
 	noCalendar.Calendar = nil
 	noWeather.Weather = nil
+	noClock.Now = nil
 
 	for _, c := range []struct {
 		label string
@@ -370,6 +501,7 @@ func TestNew_MissingDeps(t *testing.T) {
 	}{
 		{"no calendar module", noCalendar, "test-widget: no calendar module"},
 		{"no weather provider", noWeather, "test-widget: no weather provider"},
+		{"no clock", noClock, "test-widget: no clock"},
 	} {
 		t.Run(c.label, func(t *testing.T) {
 			_, err := daygrid.New("test-widget", gemConfig(), c.deps)
@@ -383,7 +515,10 @@ func TestNew_MissingDeps(t *testing.T) {
 // A day the forecast doesn't reach has no forecast rather than a zero one,
 // and the shared temperature range is taken across the days that have one,
 // so a missing day can't drag it to a 0°C nobody forecast. With no forecast
-// at all the range falls back to 0-25°C.
+// at all the range falls back to 0-25°C. A forecast that arrived carrying
+// no days is still reported as arrived, so a layout sized on its arrival
+// doesn't reflow for a cycle. The calendar is drawn whatever the forecast
+// did.
 func TestDayData_DayWithNoForecast(t *testing.T) {
 	toronto := mustZone(t, "America/Toronto")
 	now := time.Date(2026, 10, 5, 8, 0, 0, 0, toronto)
@@ -394,6 +529,7 @@ func TestDayData_DayWithNoForecast(t *testing.T) {
 		reply        func(*fakehttp.Client)
 		wantForecast []bool
 		wantRange    weatherview.TempRange
+		wantArrived  bool
 	}{
 		{
 			label: "a forecast that stops short",
@@ -403,7 +539,18 @@ func TestDayData_DayWithNoForecast(t *testing.T) {
 			wantForecast: []bool{true, true, false, false},
 			// Day 0's low is 10°C; the warmest reading is the last hour
 			// of day 1, which the fake writes as its epoch hour.
-			wantRange: weatherview.TempRange{Min: 10, Max: fakehttp.EpochHour(lastHour)},
+			wantRange:   weatherview.TempRange{Min: 10, Max: fakehttp.EpochHour(lastHour)},
+			wantArrived: true,
+		},
+		{
+			label: "a forecast carrying no days",
+			reply: func(tr *fakehttp.Client) {
+				tr.Serve(gemURL, `{"hourly":{"time":[],"temperature_2m":[],"precipitation_probability":[]},`+
+					`"daily":{"time":[],"temperature_2m_max":[],"temperature_2m_min":[],"weather_code":[]}}`)
+			},
+			wantForecast: []bool{false, false, false, false},
+			wantRange:    weatherview.TempRange{Min: 0, Max: 25},
+			wantArrived:  true,
 		},
 		{
 			label:        "no forecast at all",
@@ -415,9 +562,17 @@ func TestDayData_DayWithNoForecast(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			s := newSeam(t, now)
+			s.tr.Serve(feedA, ics(weeklySeries))
 			tt.reply(s.tr)
 
-			got := s.source(t, gemConfig()).Days(now, 4)
+			got := s.source(t, gemConfig(calendar.Feed{URL: feedA})).Days(now, 4)
+
+			if g := dayEvents(got)[0]; g != "Weekly Sync" {
+				t.Errorf("Today lists %q, want the calendar's events", g)
+			}
+			if got.ForecastArrived != tt.wantArrived {
+				t.Errorf("ForecastArrived = %v, want %v", got.ForecastArrived, tt.wantArrived)
+			}
 
 			for i, day := range got.Days {
 				if has := day.Forecast != nil; has != tt.wantForecast[i] {

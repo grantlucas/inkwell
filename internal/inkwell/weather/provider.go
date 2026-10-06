@@ -2,6 +2,8 @@ package weather
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"sync"
 	"time"
 )
@@ -29,7 +31,7 @@ type Provider struct {
 	defaults Settings
 
 	mu     sync.Mutex
-	caches map[string]*CachedSource
+	caches map[string]*forecastCache
 }
 
 // NewProvider creates a Provider that fetches with client, caches each
@@ -51,7 +53,7 @@ func NewProvider(client HTTPClient, ttl time.Duration, now func() time.Time, def
 		ttl:      ttl,
 		now:      now,
 		defaults: defaults,
-		caches:   make(map[string]*CachedSource),
+		caches:   make(map[string]*forecastCache),
 	}
 }
 
@@ -71,7 +73,7 @@ const ForecastHorizon = 8
 // widgets asking for different spans — and concurrent callers — share a single
 // upstream fetch.
 func (p *Provider) Forecast(ctx context.Context, loc Location, model Model, days int) (*Forecast, error) {
-	fc, err := p.cacheFor(model, loc).Forecast(ctx, loc, ForecastHorizon)
+	fc, err := p.cacheFor(model, loc).forecast(ctx, p, loc)
 	return daysFromToday(fc, p.now(), days), err
 }
 
@@ -96,22 +98,48 @@ func daysFromToday(fc *Forecast, now time.Time, n int) *Forecast {
 	return &out
 }
 
-// cacheFor returns the CachedSource for a (model, location) key, lazily
-// creating it on first use. Each key gets its own cache so different locations
-// or models never evict one another.
-func (p *Provider) cacheFor(model Model, loc Location) *CachedSource {
-	// cacheKey rounds the location, so each wrapped CachedSource only ever sees
-	// this one rounded location — its own location-change detection is
-	// intentionally redundant here; the map key is what separates locations.
-	key := string(model) + "|" + cacheKey(loc, ForecastHorizon)
+// cacheFor returns the cache for a (model, location) key, lazily creating it
+// on first use. Each key gets its own cache so different locations or models
+// never evict one another. The location is rounded to a tenth of a degree, so
+// two widgets a few streets apart share one fetch.
+func (p *Provider) cacheFor(model Model, loc Location) *forecastCache {
+	key := fmt.Sprintf("%s|%.1f,%.1f", model, math.Round(loc.Latitude*10)/10, math.Round(loc.Longitude*10)/10)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	cs, ok := p.caches[key]
+	c, ok := p.caches[key]
 	if !ok {
-		cs = NewCachedSource(NewOpenMeteoSource(model, p.client, p.now().Location()), p.ttl, p.now)
-		p.caches[key] = cs
+		c = &forecastCache{source: newOpenMeteoSource(model, p.client, p.now().Location())}
+		p.caches[key] = c
 	}
-	return cs
+	return c
+}
+
+// forecastCache is one (model, location)'s last good forecast. Its lock is
+// held across a fetch, so concurrent requests for one key wait for that fetch
+// rather than each making their own.
+type forecastCache struct {
+	source *openMeteoSource
+
+	mu      sync.Mutex
+	last    *Forecast
+	fetched time.Time
+}
+
+// forecast returns the cached forecast while it is younger than the
+// Provider's ttl, and otherwise fetches ForecastHorizon days. On a failed
+// fetch the last good forecast, if any, comes back with the error.
+func (c *forecastCache) forecast(ctx context.Context, p *Provider, loc Location) (*Forecast, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.last != nil && p.now().Sub(c.fetched) < p.ttl {
+		return c.last, nil
+	}
+	fc, err := c.source.Forecast(ctx, loc, ForecastHorizon)
+	if err != nil {
+		return c.last, err
+	}
+	c.last, c.fetched = fc, p.now()
+	return fc, nil
 }
 
 // SourceForModel returns a Source bound to model that delegates to this

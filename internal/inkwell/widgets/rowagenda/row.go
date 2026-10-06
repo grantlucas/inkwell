@@ -75,17 +75,17 @@ func renderGutter(frame *image.Paletted, bounds image.Rectangle, day daygrid.Day
 // The chart is on every row whether or not rain is due, so a dry day
 // still shows the shape of its temperature rather than a blank cell,
 // and a cold day visibly sits lower than a warm one.
-func renderBadge(frame *image.Paletted, bounds image.Rectangle, forecast weather.DailyForecast, unit string, isToday, marker bool, nowHour int, rng weatherview.TempRange) {
-	if forecast.Date.IsZero() {
-		// A zero DailyForecast is indistinguishable from a real
-		// reading, so drawing it would state a forecast nobody made.
+func renderBadge(frame *image.Paletted, bounds image.Rectangle, forecast *weather.DailyForecast, unit string, isToday, marker bool, nowHour int, rng weatherview.TempRange) {
+	if forecast == nil {
+		// No forecast reaches this day. Drawing a zero would state a
+		// forecast nobody made.
 		return
 	}
 	top := bounds.Min.Y
 
 	weatherview.DrawIcon(frame, bounds.Min.X+badgeIconX, top+badgeIconY, badgeIconSz, forecast.Condition)
 
-	temps := weatherview.NewHighLow(forecast, unit)
+	temps := weatherview.NewHighLow(*forecast, unit)
 	// Body size, not scaled. A 2x high is 120 px at its widest, which
 	// runs straight through the chart — the badge is 222 px and cannot
 	// hold a 38 px icon, a display-sized temperature and a legible

@@ -1,11 +1,9 @@
 package weekly
 
 import (
-	"fmt"
 	"image"
 	"time"
 
-	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
@@ -20,52 +18,27 @@ const defaultWeatherH = 145
 // and the most the panel can fit.
 const defaultDays = 7
 
-// widgetName prefixes every config error so a dashboard that fails to
-// load says which widget rejected it.
-const widgetName = "weekly-calendar"
-
-// Config holds parsed weekly-calendar configuration.
-type Config struct {
-	Feeds            []calendar.Feed
-	Refresh          time.Duration
-	WeekStart        time.Weekday
-	Days             int
-	MaxEvents        int
-	ShowLocation     bool
-	ShowWeather      bool
-	ShowWeatherLabel bool
-	HighlightHour    int
-
-	// Weather carries the location, unit and model, along with which of
-	// them this widget set. Factory fills the rest from the shared
-	// Provider's defaults, so a dashboard sets them once at the top
-	// level and any widget may override them.
-	Weather daygrid.WeatherConfig
-}
-
 // Widget renders a rolling multi-day calendar+weather dashboard.
 type Widget struct {
-	bounds  image.Rectangle
-	cal     calendar.Source
-	weather weather.Source
-	now     func() time.Time
-	config  Config
+	bounds image.Rectangle
+	days   daygrid.Source
+	now    func() time.Time
+	config Config
 }
 
-// New creates a weekly Widget with pre-built data sources. A cfg.Days that
+// New creates a weekly Widget drawing the days from days. A cfg.Days that
 // was never set falls back to the full week, so a hand-built Config (rather
 // than one through parseConfig, which defaults it) still renders columns
 // instead of none.
-func New(bounds image.Rectangle, cal calendar.Source, ws weather.Source, now func() time.Time, cfg Config) *Widget {
+func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg Config) *Widget {
 	if cfg.Days < 1 {
 		cfg.Days = defaultDays
 	}
 	return &Widget{
-		bounds:  bounds,
-		cal:     cal,
-		weather: ws,
-		now:     now,
-		config:  cfg,
+		bounds: bounds,
+		days:   days,
+		now:    now,
+		config: cfg,
 	}
 }
 
@@ -82,57 +55,47 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	// from it rather than re-resolving a zone here. Events carry whatever
 	// zone their feed serialized them with, so they still need converting.
 	now := w.now()
-	loc := now.Location()
-	days := daygrid.Days(now, w.config.Days)
-
-	ctx, cancel := daygrid.FetchContext()
-	defer cancel()
-
-	// show_weather off means the source is never consulted, so the
-	// weather half of the fetch is skipped rather than fetched and
-	// discarded.
-	ws := w.weather
-	if !w.config.ShowWeather {
-		ws = nil
-	}
-	fetched := daygrid.Fetch(ctx, widgetName, w.cal, ws, days, w.config.Weather.Location())
-	events, forecastDays := fetched.Events, fetched.Days()
+	data := w.days.Days(now, w.config.Days)
 
 	// The band's height follows from whether a forecast came back at
 	// all, not from whether it carried any days: a 200 response with
-	// no daily data is a non-nil Forecast with none, and collapsing
-	// the band for that would reflow the whole screen for one cycle.
+	// no daily data is a forecast with none, and collapsing the band
+	// for that would reflow the whole screen for one cycle.
 	weatherH := 0
-	if fetched.HasForecast() {
+	if w.config.ShowWeather && data.ForecastArrived {
 		weatherH = defaultWeatherH
 	}
 
 	cols := computeColumns(w.bounds, weatherH, w.config.Days)
-	rng := weatherview.GlobalTempRange(forecastDays)
 
 	for i, col := range cols {
-		day := days[i]
+		day := data.Days[i]
 
 		renderDayHeader(frame, col.Header, day.Start, day.IsToday)
 
 		if weatherH > 0 {
-			dayForecast := daygrid.FindForecast(forecastDays, day)
+			// A day the forecast doesn't reach still gets its cell, as
+			// it always has; #127 retires this widget rather than
+			// changing what it draws.
+			var dayForecast weather.DailyForecast
+			if day.Forecast != nil {
+				dayForecast = *day.Forecast
+			}
 			opts := weatherview.Options{
 				TempUnit:      w.config.Weather.TempUnit,
 				ShowLabel:     w.config.ShowWeatherLabel,
-				GlobalTempMin: rng.Min,
-				GlobalTempMax: rng.Max,
+				GlobalTempMin: data.TempRange.Min,
+				GlobalTempMax: data.TempRange.Max,
 				HighlightHour: now.Hour(),
 				IsToday:       day.IsToday,
 			}
 			weatherview.RenderDayWeather(frame, col.Weather, dayForecast, opts)
 		}
 
-		dayEvents := daygrid.FilterEventsForDay(events, day)
-		renderEvents(frame, col.Events, dayEvents, eventOptions{
+		renderEvents(frame, col.Events, day.Events, eventOptions{
 			MaxEvents:    w.config.MaxEvents,
 			ShowLocation: w.config.ShowLocation,
-			Location:     loc,
+			Location:     now.Location(),
 		})
 
 		if !col.IsLast {
@@ -148,149 +111,21 @@ func (w *Widget) Render(frame *image.Paletted) error {
 }
 
 // Factory creates a weekly-calendar Widget from config and dependencies.
+// It doesn't use daygrid.Factory: its settings extend the shared ones, and
+// whether it fetches weather at all depends on one of its own.
 func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
-	cfg, err := parseConfig(config)
+	cfg, err := parseConfig(config, deps.Weather)
 	if err != nil {
 		return nil, err
 	}
-	if err := daygrid.RequireDeps("weekly-calendar", deps); err != nil {
+	// A screen that hides its weather fetches none to throw away.
+	var opts []daygrid.Option
+	if !cfg.ShowWeather {
+		opts = append(opts, daygrid.WithoutWeather())
+	}
+	days, err := daygrid.New(widgetName, cfg.Config, deps, opts...)
+	if err != nil {
 		return nil, err
 	}
-
-	now := deps.Now
-	if now == nil {
-		now = time.Now
-	}
-
-	// Draw from the shared calendar module, so every widget showing a feed
-	// shares one cache of it.
-	cal := deps.Calendar.Source(cfg.Feeds, cfg.Refresh)
-
-	daygrid.ResolveDefaults(&cfg.Weather, deps.Weather)
-
-	var ws weather.Source
-	if cfg.ShowWeather {
-		// Draw from the shared Provider, bound to the resolved model so every
-		// weather widget deduplicates fetches through one cache.
-		ws = deps.Weather.SourceForModel(cfg.Weather.Model)
-	}
-
-	return New(bounds, cal, ws, now, cfg), nil
-}
-
-// parseConfig validates and extracts config values.
-func parseConfig(config map[string]any) (Config, error) {
-	cfg := Config{
-		Refresh:          15 * time.Minute,
-		WeekStart:        time.Monday,
-		Days:             defaultDays,
-		MaxEvents:        5,
-		ShowWeather:      true,
-		ShowWeatherLabel: true,
-		HighlightHour:    15,
-	}
-
-	f, ok := config["feeds"]
-	if !ok {
-		return cfg, fmt.Errorf("weekly-calendar: feeds is required")
-	}
-	feeds, err := daygrid.ParseFeeds(widgetName, f)
-	if err != nil {
-		return cfg, err
-	}
-	cfg.Feeds = feeds
-
-	if v, ok := config["refresh"]; ok {
-		s, ok := v.(string)
-		if !ok {
-			return cfg, fmt.Errorf("weekly-calendar: refresh must be a string, got %T", v)
-		}
-		d, err := time.ParseDuration(s)
-		if err != nil {
-			return cfg, fmt.Errorf("weekly-calendar: invalid refresh %q: %w", s, err)
-		}
-		if d < time.Minute {
-			return cfg, fmt.Errorf("weekly-calendar: refresh must be >= 1m, got %v", d)
-		}
-		cfg.Refresh = d
-	}
-
-	if v, ok := config["week_start"]; ok {
-		s, ok := v.(string)
-		if !ok {
-			return cfg, fmt.Errorf("weekly-calendar: week_start must be a string, got %T", v)
-		}
-		switch s {
-		case "monday":
-			cfg.WeekStart = time.Monday
-		case "sunday":
-			cfg.WeekStart = time.Sunday
-		default:
-			return cfg, fmt.Errorf("weekly-calendar: invalid week_start %q (must be monday or sunday)", s)
-		}
-	}
-
-	if v, ok := config["max_events"]; ok {
-		n, ok := v.(int)
-		if !ok {
-			return cfg, fmt.Errorf("weekly-calendar: max_events must be an integer, got %T", v)
-		}
-		if n <= 0 {
-			return cfg, fmt.Errorf("weekly-calendar: max_events must be positive, got %d", n)
-		}
-		cfg.MaxEvents = n
-	}
-
-	if v, ok := config["days"]; ok {
-		n, ok := v.(int)
-		if !ok {
-			return cfg, fmt.Errorf("weekly-calendar: days must be an integer, got %T", v)
-		}
-		if n < 1 || n > defaultDays {
-			return cfg, fmt.Errorf("weekly-calendar: days must be in [1, %d], got %d", defaultDays, n)
-		}
-		cfg.Days = n
-	}
-
-	if v, ok := config["show_location"]; ok {
-		b, ok := v.(bool)
-		if !ok {
-			return cfg, fmt.Errorf("weekly-calendar: show_location must be a bool, got %T", v)
-		}
-		cfg.ShowLocation = b
-	}
-
-	if v, ok := config["show_weather"]; ok {
-		b, ok := v.(bool)
-		if !ok {
-			return cfg, fmt.Errorf("weekly-calendar: show_weather must be a bool, got %T", v)
-		}
-		cfg.ShowWeather = b
-	}
-	if v, ok := config["show_weather_label"]; ok {
-		b, ok := v.(bool)
-		if !ok {
-			return cfg, fmt.Errorf("weekly-calendar: show_weather_label must be a bool, got %T", v)
-		}
-		cfg.ShowWeatherLabel = b
-	}
-	if v, ok := config["highlight_hour"]; ok {
-		n, ok := v.(int)
-		if !ok {
-			return cfg, fmt.Errorf("weekly-calendar: highlight_hour must be an integer, got %T", v)
-		}
-		if n < 0 || n > 23 {
-			return cfg, fmt.Errorf("weekly-calendar: highlight_hour must be in [0, 23], got %d", n)
-		}
-		cfg.HighlightHour = n
-	}
-
-	// Location, unit and model are shared with every other
-	// calendar-plus-weather screen, so they are parsed once in daygrid
-	// rather than restated here.
-	if err := daygrid.ParseWeatherKeys(widgetName, config, &cfg.Weather); err != nil {
-		return cfg, err
-	}
-
-	return cfg, nil
+	return New(bounds, days, deps.Now, cfg), nil
 }

@@ -503,7 +503,7 @@ func mustLoad(t *testing.T, name string) *time.Location {
 	return loc
 }
 
-// TestColumnAndLabelAgreeAcrossZones is the bucketing audit. daygrid.FilterEventsForDay
+// TestColumnAndLabelAgreeAcrossZones is the bucketing audit. The day data module
 // buckets timed events by true instant overlap and all-day events by bare date
 // components, both deliberately zone-independent; planEvents then labels in the
 // display zone. The invariant that matters to a viewer is that the two agree —
@@ -633,7 +633,7 @@ func TestColumnAndLabelAgreeAcrossZones(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
-			dayEvents := daygrid.FilterEventsForDay(tc.events, daygrid.Day{Start: tc.day})
+			dayEvents := daygrid.InMemory(tc.events, nil).Days(tc.day, 1).Days[0].Events
 			plan := planEvents(dayEvents, 40, 20, eventOptions{MaxEvents: 10, Location: tc.loc})
 
 			var got []string

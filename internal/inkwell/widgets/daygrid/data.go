@@ -7,7 +7,7 @@
 // inside it, so a widget is only layout and drawing.
 //
 // The part that really must not be copied is the all-day bucketing in
-// FilterEventsForDay: an iCal VALUE=DATE is anchored to UTC midnight by
+// filterEventsForDay: an iCal VALUE=DATE is anchored to UTC midnight by
 // the parser while days are built in the viewer's local zone, so comparing
 // them as instants leaks an all-day event into the previous local day in
 // any negative-UTC zone. Independent copies of that would drift, and the
@@ -44,21 +44,42 @@ type Data struct {
 	// have a forecast, so every chart a widget draws compares on one
 	// scale. With no forecast at all it is GlobalTempRange's fallback.
 	TempRange weatherview.TempRange
+	// ForecastArrived is whether a forecast came back at all, even one
+	// that reaches none of the days. Whether a day has weather is its own
+	// Forecast; this is for a layout that sizes itself on the forecast's
+	// arrival, as weekly-calendar's band does, so a 200 response with no
+	// daily data doesn't reflow the screen for one cycle.
+	ForecastArrived bool
 }
 
 // New builds a widget's day data module from its configuration and the
 // dependencies the app hands every widget. A missing dependency is a
 // wiring fault, reported with widgetName.
-func New(widgetName string, cfg Config, deps widget.Deps) (Source, error) {
-	if err := RequireDeps(widgetName, deps); err != nil {
+func New(widgetName string, cfg Config, deps widget.Deps, opts ...Option) (Source, error) {
+	if err := requireDeps(widgetName, deps); err != nil {
 		return nil, err
 	}
-	return &module{
+	m := &module{
 		widget:   widgetName,
 		cal:      deps.Calendar.Source(cfg.Feeds, cfg.Refresh),
 		weather:  deps.Weather.SourceForModel(cfg.Weather.Model),
-		location: cfg.Weather.Location(),
-	}, nil
+		location: cfg.Weather.location(),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m, nil
+}
+
+// Option adjusts how New builds a widget's module.
+type Option func(*module)
+
+// WithoutWeather leaves the forecast unfetched, so every day's Forecast is
+// nil and ForecastArrived is false. weekly-calendar passes it for
+// show_weather: false, so a screen that hides its weather doesn't fetch a
+// forecast to throw away.
+func WithoutWeather() Option {
+	return func(m *module) { m.weather = nil }
 }
 
 // module is the production adapter.
@@ -70,23 +91,24 @@ type module struct {
 }
 
 func (m *module) Days(now time.Time, n int) Data {
-	days := Days(now, n)
-	ctx, cancel := FetchContext()
+	days := daysFrom(now, n)
+	ctx, cancel := fetchContext()
 	defer cancel()
-	fetched := Fetch(ctx, m.widget, m.cal, m.weather, days, m.location)
-	return assemble(days, fetched.Events, fetched.Days())
+	got := fetch(ctx, m.widget, m.cal, m.weather, days, m.location)
+	return assemble(days, got.events, got.forecast, got.arrived)
 }
 
 // assemble gives each day its events and its forecast, and takes the
-// shared temperature range across the days that have one.
-func assemble(days []Day, events []calendar.Event, forecast []weather.DailyForecast) Data {
+// shared temperature range across the days that have one. arrived is
+// whether a forecast came back at all.
+func assemble(days []Day, events []calendar.Event, forecast []weather.DailyForecast, arrived bool) Data {
 	var known []weather.DailyForecast
 	for i := range days {
-		days[i].Events = FilterEventsForDay(events, days[i])
+		days[i].Events = filterEventsForDay(events, days[i])
 		if f := forecastFor(forecast, days[i]); f != nil {
 			days[i].Forecast = f
 			known = append(known, *f)
 		}
 	}
-	return Data{Days: days, TempRange: weatherview.GlobalTempRange(known)}
+	return Data{Days: days, TempRange: weatherview.GlobalTempRange(known), ForecastArrived: arrived}
 }

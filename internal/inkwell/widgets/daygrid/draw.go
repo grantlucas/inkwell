@@ -31,14 +31,14 @@ var (
 )
 
 func init() {
-	BodyFace = MustLoadFace(fonts.Regular, 16, "body")
-	BodyBoldFace = MustLoadFace(fonts.Bold, 16, "body bold")
+	BodyFace = mustLoadFace(fonts.Regular, 16, "body")
+	BodyBoldFace = mustLoadFace(fonts.Bold, 16, "body bold")
 }
 
-// MustLoadFace loads a face or panics. It is a separate function so the
+// mustLoadFace loads a face or panics. It is a separate function so the
 // failure branch stays reachable from tests via fonts.SwapDataForTest;
 // role names the face in the panic so a failure says which one.
-func MustLoadFace(weight fonts.Weight, size float64, role string) font.Face {
+func mustLoadFace(weight fonts.Weight, size float64, role string) font.Face {
 	f, err := fonts.Face(weight, size)
 	if err != nil {
 		panic("daygrid: load " + role + " font: " + err.Error())
@@ -116,19 +116,19 @@ func DrawTextRight(frame *image.Paletted, xRight, y int, text string, f font.Fac
 // DrawHLine draws a horizontal rule.
 func DrawHLine(frame *image.Paletted, x1, x2, y int, idx uint8) {
 	for x := x1; x < x2; x++ {
-		SetPixel(frame, x, y, idx)
+		setPixel(frame, x, y, idx)
 	}
 }
 
 // DrawVLine draws a vertical rule.
 func DrawVLine(frame *image.Paletted, x, y1, y2 int, idx uint8) {
 	for y := y1; y < y2; y++ {
-		SetPixel(frame, x, y, idx)
+		setPixel(frame, x, y, idx)
 	}
 }
 
-// SetPixel inks one pixel, clipping to the frame.
-func SetPixel(frame *image.Paletted, x, y int, idx uint8) {
+// setPixel inks one pixel, clipping to the frame.
+func setPixel(frame *image.Paletted, x, y int, idx uint8) {
 	if image.Pt(x, y).In(frame.Bounds()) {
 		frame.SetColorIndex(x, y, idx)
 	}

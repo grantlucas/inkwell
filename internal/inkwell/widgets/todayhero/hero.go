@@ -77,18 +77,18 @@ func renderIdentity(frame *image.Paletted, bounds image.Rectangle, now time.Time
 
 // renderHeroWeather draws today's condition icon, its high and low, and
 // the condition label.
-func renderHeroWeather(frame *image.Paletted, bounds image.Rectangle, day weather.DailyForecast, unit string) {
-	if day.Date.IsZero() {
-		// A zero DailyForecast is indistinguishable from a real
-		// reading — a clear sky at 0°C is plausible here in January —
-		// so drawing it would state a forecast nobody made.
+func renderHeroWeather(frame *image.Paletted, bounds image.Rectangle, day *weather.DailyForecast, unit string) {
+	if day == nil {
+		// No forecast reaches today. Drawing a zero would state a
+		// forecast nobody made — a clear sky at 0°C is plausible here
+		// in January.
 		return
 	}
 
 	top := bounds.Min.Y
 	weatherview.DrawIcon(frame, bounds.Min.X+heroIconX, top+heroIconY-weatherTop, heroIconSize, day.Condition)
 
-	temps := weatherview.NewHighLow(day, unit)
+	temps := weatherview.NewHighLow(*day, unit)
 	x := bounds.Min.X + hiX
 	drawer := daygrid.Scaled(daygrid.BodyBoldFace, hiScale, widget.PaperBlack)
 	drawer.Draw(frame, x, top+hiBaseline-weatherTop, temps.High())
@@ -109,26 +109,12 @@ func renderHeroWeather(frame *image.Paletted, bounds image.Rectangle, day weathe
 // rng is the screen's shared range, so today's line sits at the same
 // height as a row's line for the same temperature. A dry day still
 // draws the line, so the chart is never blank.
-func renderHeroChart(frame *image.Paletted, bounds image.Rectangle, day weather.DailyForecast, nowHour int, rng weatherview.TempRange) {
-	if day.Date.IsZero() {
+func renderHeroChart(frame *image.Paletted, bounds image.Rectangle, day *weather.DailyForecast, nowHour int, rng weatherview.TempRange) {
+	if day == nil {
 		return
 	}
 	weatherview.RenderCombinedChart(frame, bounds, day.Hourly, rng, weatherview.CombinedOptions{
 		NowHour:       nowHour,
 		ShowNowMarker: true,
 	})
-}
-
-// sharedRange is the one temperature scale every chart on the screen
-// plots against, taken across the days the screen shows. A day with no
-// forecast is left out: its zero value would read as a 0° day and drag
-// the scale towards it.
-func sharedRange(forecasts []weather.DailyForecast) weatherview.TempRange {
-	var shown []weather.DailyForecast
-	for _, f := range forecasts {
-		if !f.Date.IsZero() {
-			shown = append(shown, f)
-		}
-	}
-	return weatherview.GlobalTempRange(shown)
 }

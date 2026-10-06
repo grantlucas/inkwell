@@ -28,6 +28,17 @@ func feedsAnd(k string, v any) map[string]any {
 	return c
 }
 
+// withFeed is a config whose one feed is feed.
+func withFeed(feed any) map[string]any { return map[string]any{"feeds": []any{feed}} }
+
+// withRules is a config whose one feed has rules.
+func withRules(rules any) map[string]any {
+	return withFeed(map[string]any{"url": feedA, "rules": rules})
+}
+
+// withRule is a config whose one feed has one rule.
+func withRule(rule map[string]any) map[string]any { return withRules([]any{rule}) }
+
 // Every calendar widget's shared settings are parsed by one parser, so a
 // setting is accepted the same way on every widget, and widget-level
 // weather settings inherit from the top-level ones.
@@ -107,13 +118,31 @@ func TestParseConfig_Accepts(t *testing.T) {
 			},
 		},
 		{
-			label: "a feed with rules", spec: listing, inherit: topLevel,
-			raw: map[string]any{"feeds": []any{map[string]any{
-				"url": feedA, "name": "Team", "rules": []any{map[string]any{"match": "^x", "exclude": true}},
-			}}},
+			// A bare URL needs no rewriting; the object form carries a
+			// name and rules, or just a name to label the feed.
+			label: "both forms of feed", spec: listing, inherit: topLevel,
+			raw: map[string]any{"feeds": []any{
+				feedB,
+				map[string]any{"url": feedA, "name": "Team", "rules": []any{
+					map[string]any{"match": `^Jane Doe\n`},
+					map[string]any{"match": "vs ", "replace": "v "},
+					map[string]any{"match": "Tournament", "exclude": true},
+				}},
+				map[string]any{"url": feedA, "name": "Labelled"},
+			}},
 			check: func(t *testing.T, c daygrid.Config) {
-				if len(c.Feeds) != 1 || c.Feeds[0].Name != "Team" || len(c.Feeds[0].Rules) != 1 {
-					t.Errorf("Feeds = %+v", c.Feeds)
+				f := c.Feeds
+				if len(f) != 3 {
+					t.Fatalf("Feeds = %+v, want 3", f)
+				}
+				if f[0].URL != feedB || f[0].Name != "" || len(f[0].Rules) != 0 {
+					t.Errorf("bare feed = %+v", f[0])
+				}
+				if f[1].URL != feedA || f[1].Name != "Team" || len(f[1].Rules) != 3 {
+					t.Errorf("feed with rules = %+v", f[1])
+				}
+				if f[2].URL != feedA || f[2].Name != "Labelled" || len(f[2].Rules) != 0 {
+					t.Errorf("labelled feed = %+v", f[2])
 				}
 			},
 		},
@@ -168,6 +197,23 @@ func TestParseConfig_Rejects(t *testing.T) {
 		{"feeds missing", listing, map[string]any{}, "feeds is required"},
 		{"feeds not a list", listing, map[string]any{"feeds": feedA}, "feeds must be a list"},
 		{"feeds empty", listing, map[string]any{"feeds": []any{}}, "feeds must not be empty"},
+		{"a feed neither a URL nor an object", listing, withFeed(123), "feeds[0] must be a URL string or a feed object"},
+		{"a feed object without a url", listing, withFeed(map[string]any{"name": "nameless"}), "feeds[0]: url is required"},
+		{"a feed url not a string", listing, withFeed(map[string]any{"url": 42}), "feeds[0]: url must be a string"},
+		{"a feed name not a string", listing, withFeed(map[string]any{"url": feedA, "name": 42}), "feeds[0]: name must be a string"},
+		{"rules not a list", listing, withRules("nope"), "feeds[0]: rules must be a list"},
+		{"a rule not an object", listing, withRules([]any{"nope"}), "feeds[0]: rules[0] must be an object"},
+		{"a rule without a match", listing, withRule(map[string]any{"replace": "x"}), "rules[0]: match is required"},
+		{"a match not a string", listing, withRule(map[string]any{"match": 42}), "rules[0]: match must be a string"},
+		{"a replace not a string", listing, withRule(map[string]any{"match": "x", "replace": 42}), "rules[0]: replace must be a string"},
+		{"an exclude not a bool", listing, withRule(map[string]any{"match": "x", "exclude": "yes"}), "rules[0]: exclude must be a bool"},
+		{"an invalid match", listing, withRule(map[string]any{"match": "(unclosed"}), "rules[0]: invalid match"},
+		{"replace and exclude together", listing, withRule(map[string]any{"match": "x", "replace": "y", "exclude": true}), "both replace and exclude"},
+		// A bare index into a list of long URLs tells an operator
+		// nothing, so a named feed is called by its name.
+		{"a rule error names its feed", listing, withFeed(map[string]any{
+			"url": feedA, "name": "Team calendar", "rules": []any{map[string]any{"match": "(unclosed"}},
+		}), "feeds[0] (Team calendar): rules[0]: invalid match"},
 		{"refresh not a string", listing, feedsAnd("refresh", 5), "refresh must be a string"},
 		{"refresh unparseable", listing, feedsAnd("refresh", "soon"), "invalid refresh"},
 		{"refresh under a minute", listing, feedsAnd("refresh", "30s"), "refresh must be >= 1m"},

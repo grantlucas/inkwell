@@ -13,33 +13,27 @@ var _ widget.Widget = (*Widget)(nil)
 
 // Widget renders the bold-five screen.
 type Widget struct {
-	bounds image.Rectangle
-	days   daygrid.Source
-	now    func() time.Time
-	config daygrid.Config
+	daygrid.Base
 }
 
 // New creates a bold-five Widget drawing the days from days. Of cfg it
 // reads only how events are listed and the temperature unit; where the
 // days come from is the day data module's business.
 func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg daygrid.Config) *Widget {
-	return &Widget{bounds: bounds, days: days, now: now, config: cfg}
+	return &Widget{daygrid.NewBase(bounds, days, now, cfg)}
 }
-
-// Bounds returns the rectangle this widget occupies.
-func (w *Widget) Bounds() image.Rectangle { return w.bounds }
 
 // Render draws five day columns starting with today.
 func (w *Widget) Render(frame *image.Paletted) error {
-	daygrid.FillWhite(frame, w.bounds)
+	daygrid.FillWhite(frame, w.Bounds())
 
 	// Too short to draw into without spilling past the widget's bounds
 	// and over its neighbour on the shared frame. A blank region is a
 	// misconfiguration an operator can see; ink on top of another
 	// widget looks like a rendering fault somewhere else entirely.
-	if w.bounds.Dy() < minHeight {
+	if w.Bounds().Dy() < minHeight {
 		log.Printf("boldfive: bounds are %d px tall, need at least %d — drawing nothing",
-			w.bounds.Dy(), minHeight)
+			w.Bounds().Dy(), minHeight)
 		return nil
 	}
 
@@ -47,16 +41,17 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	// everything day- and hour-derived reads from it rather than
 	// re-resolving a zone here. Events carry whatever zone their feed
 	// serialized them with, so they still need converting.
-	now := w.now()
-	data := w.days.Days(now, columns)
+	now := w.Now()
+	data := w.Days.Days(now, columns)
+	agenda := agendaStyle(w.Config.MaxEvents, w.Config.ShowLocation, now.Location())
 
-	for i, col := range computeColumns(w.bounds) {
+	for i, col := range computeColumns(w.Bounds()) {
 		day := data.Days[i]
 
 		renderDayHeader(frame, col.Header, day.Start)
 
 		renderWeatherBand(frame, col.Weather, day.Forecast, weatherOptions{
-			TempUnit:  w.config.Weather.TempUnit,
+			TempUnit:  w.Config.Weather.TempUnit,
 			TempRange: data.TempRange,
 			// Today is always the leftmost column, so the marker goes
 			// there and nowhere else — "now" is not a point on any
@@ -65,17 +60,13 @@ func (w *Widget) Render(frame *image.Paletted) error {
 			NowHour:       now.Hour(),
 		})
 
-		renderEvents(frame, col.Events, day.Events, eventOptions{
-			MaxEvents:    w.config.MaxEvents,
-			ShowLocation: w.config.ShowLocation,
-			Location:     now.Location(),
-		})
+		renderEvents(frame, col.Events, day.Events, agenda)
 
 		if !col.IsLast {
 			// Solid PaperBlack: a PaperGrayNN hairline snaps to white
 			// under the BW threshold and vanishes into Gray4's light
 			// bucket, so it would read as a divider on neither mode.
-			daygrid.DrawVLine(frame, col.Bounds.Max.X-1, w.bounds.Min.Y, w.bounds.Max.Y, widget.PaperBlack)
+			daygrid.DrawVLine(frame, col.Bounds.Max.X-1, w.Bounds().Min.Y, w.Bounds().Max.Y, widget.PaperBlack)
 		}
 	}
 	return nil
@@ -84,19 +75,4 @@ func (w *Widget) Render(frame *image.Paletted) error {
 // Factory creates a bold-five Widget from config and dependencies. Its
 // settings are the ones every calendar widget shares, so a screen can be
 // swapped between calendar widgets without rewriting its config.
-func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
-	cfg, err := daygrid.ParseConfig(spec, config, deps.Weather)
-	if err != nil {
-		return nil, err
-	}
-	days, err := daygrid.New(widgetName, cfg, deps)
-	if err != nil {
-		return nil, err
-	}
-
-	now := deps.Now
-	if now == nil {
-		now = time.Now
-	}
-	return New(bounds, days, now, cfg), nil
-}
+var Factory = daygrid.Factory(spec, New)

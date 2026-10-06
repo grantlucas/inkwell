@@ -1,19 +1,15 @@
 package rowagenda
 
 import (
-	"context"
-	"errors"
+	"fmt"
 	"image"
-	nethttp "net/http"
-	"slices"
-	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar/ical"
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil"
+	"github.com/grantlucas/inkwell/internal/inkwell/testutil/fakehttp"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
@@ -44,34 +40,9 @@ func countIndexIn(frame *image.Paletted, r image.Rectangle, idx uint8) int {
 	return n
 }
 
-type stubCalSource struct {
-	events           []ical.Event
-	err              error
-	gotStart, gotEnd time.Time
-}
-
-func (s *stubCalSource) Events(_ context.Context, start, end time.Time) ([]ical.Event, error) {
-	s.gotStart, s.gotEnd = start, end
-	if s.err != nil {
-		return nil, s.err
-	}
-	return s.events, nil
-}
-
-type stubWeatherSource struct {
-	forecast *weather.Forecast
-	err      error
-	gotDays  int
-}
-
-func (s *stubWeatherSource) Forecast(_ context.Context, _ weather.Location, days int) (*weather.Forecast, error) {
-	s.gotDays = days
-	return s.forecast, s.err
-}
-
 // sampleForecast covers today plus the four rows, with rain today (so
 // the hero chart draws bars and its marker) and a dry last day.
-func sampleForecast() *weather.Forecast {
+func sampleForecast() []weather.DailyForecast {
 	var days []weather.DailyForecast
 	for i := range rows {
 		var hourly []weather.HourlyPoint
@@ -94,16 +65,16 @@ func sampleForecast() *weather.Forecast {
 			Hourly:    hourly,
 		})
 	}
-	return &weather.Forecast{Days: days}
+	return days
 }
 
 // dryForecast is the same shape with no rain anywhere, for the
 // "NO RAIN TODAY" path.
-func dryForecast() *weather.Forecast {
+func dryForecast() []weather.DailyForecast {
 	f := sampleForecast()
-	for i := range f.Days {
-		for h := range f.Days[i].Hourly {
-			f.Days[i].Hourly[h].PrecipitationProb = 0
+	for i := range f {
+		for h := range f[i].Hourly {
+			f[i].Hourly[h].PrecipitationProb = 0
 		}
 	}
 	return f
@@ -172,10 +143,13 @@ func withoutToday(events []ical.Event) []ical.Event {
 	return out
 }
 
-func newWidget(cal calendar.Source, ws weather.Source, clock time.Time) *Widget {
-	return New(image.Rect(0, 0, 800, 480), cal, ws, fixedClock(clock), Config{
-		Weather: daygrid.WeatherConfig{TempUnit: "C"},
-	})
+// drawConfig is a config with the knobs row-agenda draws with.
+func drawConfig(unit string, showLocation bool) daygrid.Config {
+	return daygrid.Config{ShowLocation: showLocation, Weather: daygrid.WeatherConfig{TempUnit: unit}}
+}
+
+func newWidget(events []ical.Event, forecast []weather.DailyForecast, clock time.Time) *Widget {
+	return New(image.Rect(0, 0, 800, 480), daygrid.InMemory(events, forecast), fixedClock(clock), drawConfig("C", false))
 }
 
 func renderToFrame(t *testing.T, w *Widget) *image.Paletted {
@@ -188,54 +162,30 @@ func renderToFrame(t *testing.T, w *Widget) *image.Paletted {
 }
 
 func TestWidget_Bounds(t *testing.T) {
-	if got := newWidget(&stubCalSource{}, nil, testTime).Bounds(); got != image.Rect(0, 0, 800, 480) {
+	if got := newWidget(nil, nil, testTime).Bounds(); got != image.Rect(0, 0, 800, 480) {
 		t.Errorf("Bounds = %v", got)
 	}
 }
 
-// The window covers today plus the four rows — the span the panel
-// actually shows.
-func TestWidget_RequestsFiveDays(t *testing.T) {
-	cal := &stubCalSource{}
-	ws := &stubWeatherSource{forecast: sampleForecast()}
-	renderToFrame(t, newWidget(cal, ws, testTime))
-
-	if want := time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC); !cal.gotStart.Equal(want) {
-		t.Errorf("start = %v, want %v", cal.gotStart, want)
-	}
-	if got := cal.gotEnd.Sub(cal.gotStart); got != 5*24*time.Hour {
-		t.Errorf("window = %v, want 120h", got)
-	}
-	if ws.gotDays != rows {
-		t.Errorf("forecast days = %d, want %d", ws.gotDays, rows)
-	}
-}
-
-// A fetch failure on either side must leave a usable panel.
-func TestWidget_RendersDespiteFetchFailures(t *testing.T) {
+// A screen missing its events, its forecast or both still draws a usable
+// panel: a fetch that failed must not blank it.
+func TestWidget_RendersWithMissingData(t *testing.T) {
 	tests := []struct {
-		label string
-		cal   *stubCalSource
-		ws    *stubWeatherSource
+		label    string
+		events   []ical.Event
+		forecast []weather.DailyForecast
 	}{
-		{"calendar fails", &stubCalSource{err: errors.New("boom")}, &stubWeatherSource{forecast: sampleForecast()}},
-		{"weather fails", &stubCalSource{events: sampleEvents()}, &stubWeatherSource{err: errors.New("boom")}},
-		{"both fail", &stubCalSource{err: errors.New("boom")}, &stubWeatherSource{err: errors.New("boom")}},
+		{"no events", nil, sampleForecast()},
+		{"no forecast", sampleEvents(), nil},
+		{"neither", nil, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			frame := renderToFrame(t, newWidget(tt.cal, tt.ws, testTime))
+			frame := renderToFrame(t, newWidget(tt.events, tt.forecast, testTime))
 			if countIndexIn(frame, frame.Bounds(), widget.PaperBlack) == 0 {
 				t.Error("nothing rendered at all")
 			}
 		})
-	}
-}
-
-func TestWidget_NoWeatherSource(t *testing.T) {
-	frame := renderToFrame(t, newWidget(&stubCalSource{events: sampleEvents()}, nil, testTime))
-	if countIndexIn(frame, frame.Bounds(), widget.PaperBlack) == 0 {
-		t.Error("nothing rendered")
 	}
 }
 
@@ -258,9 +208,7 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 			_ = neighbour
 			daygrid.FillRect(frame, image.Rect(0, 0, 800, 480), widget.PaperWhite)
 
-			w := New(tt.bounds, &stubCalSource{events: sampleEvents()},
-				&stubWeatherSource{forecast: sampleForecast()}, fixedClock(testTime),
-				Config{Weather: daygrid.WeatherConfig{TempUnit: "C"}})
+			w := New(tt.bounds, daygrid.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), drawConfig("C", false))
 			if err := w.Render(frame); err != nil {
 				t.Fatalf("Render: %v", err)
 			}
@@ -271,123 +219,12 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 	}
 }
 
-// typedDeps is what the app hands every widget: one transport behind both
-// the calendar fetch and the shared weather provider.
-func typedDeps(client *recordingTransport) widget.Deps {
-	return widget.Deps{
-		Now:      fixedClock(testTime),
-		Calendar: calendar.NewProvider(client, fixedClock(testTime)),
-		Weather: weather.NewProvider(client, time.Hour, fixedClock(testTime), weather.Settings{
-			Location: weather.Location{Latitude: 43.25, Longitude: -79.87},
-			TempUnit: "C",
-			Model:    weather.ModelGEM,
-		}),
-	}
-}
-
-func TestFactory(t *testing.T) {
-	cfg := map[string]any{"feeds": []any{"https://example.com/a.ics"}}
-	w, err := Factory(image.Rect(0, 0, 800, 480), cfg, typedDeps(&recordingTransport{}))
-	if err != nil {
-		t.Fatalf("Factory: %v", err)
-	}
-	if got := w.Bounds(); got != image.Rect(0, 0, 800, 480) {
-		t.Errorf("Bounds = %v", got)
-	}
-}
-
-func TestFactory_InvalidConfig(t *testing.T) {
-	_, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{}, typedDeps(&recordingTransport{}))
-	if err == nil {
-		t.Fatal("expected an error for missing feeds")
-	}
-	if !strings.Contains(err.Error(), "feeds is required") {
-		t.Errorf("error = %q", err)
-	}
-}
-
-// A widget built without its dependencies fails instead of falling back
-// to a calendar cache of its own.
-func TestFactory_MissingDeps(t *testing.T) {
-	_, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{
-		"feeds": []any{"https://example.com/a.ics"},
-	}, widget.Deps{Now: fixedClock(testTime)})
-	if err == nil || !strings.Contains(err.Error(), "row-agenda: no calendar module") {
-		t.Errorf("error = %v, want a missing calendar module error", err)
-	}
-}
-
-// With no clock injected the widget falls back to the wall clock rather
-// than a zero time, which would render the epoch.
-func TestFactory_DefaultsTheClock(t *testing.T) {
-	deps := typedDeps(&recordingTransport{})
-	deps.Now = nil
-	w, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{
-		"feeds": []any{"https://example.com/a.ics"},
-	}, deps)
-	if err != nil {
-		t.Fatalf("Factory: %v", err)
-	}
-	if got := w.(*Widget).now().Year(); got < 2024 {
-		t.Errorf("clock year = %d, want the real wall clock", got)
-	}
-}
-
-// The calendar feed goes out through the injected client, and the forecast
-// through the shared provider at its default location, so a dashboard sets
-// its location once at the top level.
-func TestFactory_FetchesThroughTypedDeps(t *testing.T) {
-	client := &recordingTransport{}
-	w, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{
-		"feeds": []any{"https://example.com/a.ics"},
-	}, typedDeps(client))
-	if err != nil {
-		t.Fatalf("Factory: %v", err)
-	}
-	renderToFrame(t, w.(*Widget))
-
-	if !client.requested("https://example.com/a.ics") {
-		t.Errorf("calendar feed not fetched through the injected client; requests: %v", client.urls())
-	}
-	if !client.requested("api.open-meteo.com/v1/gem", "latitude=43.2500") {
-		t.Errorf("forecast not fetched through the shared provider; requests: %v", client.urls())
-	}
-}
-
-// recordingTransport records every URL it is asked for and answers none,
-// so a test can see what a widget fetched without a network.
-type recordingTransport struct {
-	mu   sync.Mutex
-	seen []string
-}
-
-func (r *recordingTransport) Do(req *nethttp.Request) (*nethttp.Response, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.seen = append(r.seen, req.URL.String())
-	return nil, context.DeadlineExceeded
-}
-
-func (r *recordingTransport) urls() []string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return slices.Clone(r.seen)
-}
-
-// requested reports whether any one request carried every fragment.
-func (r *recordingTransport) requested(fragments ...string) bool {
-	return slices.ContainsFunc(r.urls(), func(u string) bool {
-		return !slices.ContainsFunc(fragments, func(f string) bool { return !strings.Contains(u, f) })
-	})
-}
-
 // Today is shown by position — it is the first row — and never by a
 // fill. The date gutter is the same plain date on every row, so no
 // large black area lands in the same place every refresh and burns into
 // the panel.
 func TestWidget_NoFilledDateGutter(t *testing.T) {
-	frame := renderToFrame(t, newWidget(&stubCalSource{events: sampleEvents()},
-		&stubWeatherSource{forecast: sampleForecast()}, testTime))
+	frame := renderToFrame(t, newWidget(sampleEvents(), sampleForecast(), testTime))
 
 	const band = 48
 	for y := 0; y < 480; y += band {
@@ -401,71 +238,168 @@ func TestWidget_NoFilledDateGutter(t *testing.T) {
 	}
 }
 
+// A row that lost lines to a crowded week gives the last line it kept to
+// "+N MORE", counting every event it could not show, rather than
+// overprinting an event or dropping them silently.
+func TestWidget_ARowThatLostEventsSaysHowMany(t *testing.T) {
+	frame := renderToFrame(t, newWidget(overflowingEvents(), sampleForecast(), testTime))
+
+	// Monday carries nine events and is the busiest row, so it loses
+	// lines first.
+	row := planRows(panel, []int{9, 2, 7, 1, 6})[0]
+	if row.Lines >= 9 {
+		t.Fatalf("Monday kept %d lines for 9 events; the week should have trimmed it", row.Lines)
+	}
+	x := row.Agenda.Min.X + agendaPadX
+	baseline := row.Agenda.Min.Y + agendaPadY + (row.Lines-1)*daygrid.BodyLineH() + daygrid.BodyAscent()
+	box := image.Rect(x, baseline-daygrid.BodyAscent(), row.Agenda.Max.X, baseline-daygrid.BodyAscent()+daygrid.BodyLineH())
+
+	want := newTestFrame(800, 480)
+	daygrid.DrawText(want, x, baseline, fmt.Sprintf("+%d MORE", 9-(row.Lines-1)), daygrid.BodyBoldFace, widget.PaperBlack)
+	for y := box.Min.Y; y < box.Max.Y; y++ {
+		for xx := box.Min.X; xx < box.Max.X; xx++ {
+			if frame.ColorIndexAt(xx, y) != want.ColorIndexAt(xx, y) {
+				t.Fatalf("Monday's last line differs from %q at (%d,%d)", fmt.Sprintf("+%d MORE", 9-(row.Lines-1)), xx, y)
+			}
+		}
+	}
+}
+
+// At the narrowest bounds the widget accepts, "NOTHING SCHEDULED" is
+// wider than the agenda. It is cut like every other line, so it never
+// paints past the widget's edge over whatever shares the frame.
+func TestWidget_EmptyDayStaysInBounds(t *testing.T) {
+	frame := newTestFrame(800, 480)
+	w := New(image.Rect(0, 0, minWidth, 480), daygrid.InMemory(nil, nil), fixedClock(testTime), drawConfig("C", false))
+	if err := w.Render(frame); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if got := countIndexIn(frame, image.Rect(minWidth, 0, 800, 480), widget.PaperBlack); got != 0 {
+		t.Errorf("drew %d px past the widget's %d px edge", got, minWidth)
+	}
+	if countIndexIn(frame, image.Rect(agendaX, 0, minWidth, 480), widget.PaperBlack) == 0 {
+		t.Error("the empty days said nothing")
+	}
+}
+
 func TestWidget_Golden(t *testing.T) {
 	tests := []struct {
-		label string
-		cal   *stubCalSource
-		ws    *stubWeatherSource
-		cfg   func(*Config)
+		label    string
+		events   []ical.Event
+		forecast []weather.DailyForecast
+		unit     string
+		location bool
 	}{
 		{
 			// Every event gets a line: today's row and Thursday's grow,
 			// the rest share the spare room, Friday says it is empty.
-			label: "a busy week that fits",
-			cal:   &stubCalSource{events: sampleEvents()},
-			ws:    &stubWeatherSource{forecast: sampleForecast()},
+			label:    "a busy week that fits",
+			events:   sampleEvents(),
+			forecast: sampleForecast(),
 		},
 		{
-			label: "a quiet week",
-			cal:   &stubCalSource{events: quietEvents()},
-			ws:    &stubWeatherSource{forecast: sampleForecast()},
+			label:    "a quiet week",
+			events:   quietEvents(),
+			forecast: sampleForecast(),
 		},
 		{
 			// The packed rows trim toward each other and end in
 			// "+N MORE"; the quiet rows keep everything.
-			label: "a week that overflows",
-			cal:   &stubCalSource{events: overflowingEvents()},
-			ws:    &stubWeatherSource{forecast: sampleForecast()},
+			label:    "a week that overflows",
+			events:   overflowingEvents(),
+			forecast: sampleForecast(),
 		},
 		{
 			// Today's own row is the empty one.
-			label: "an empty day",
-			cal:   &stubCalSource{events: withoutToday(sampleEvents())},
-			ws:    &stubWeatherSource{forecast: sampleForecast()},
+			label:    "an empty day",
+			events:   withoutToday(sampleEvents()),
+			forecast: sampleForecast(),
 		},
 		{
-			label: "no events at all",
-			cal:   &stubCalSource{},
-			ws:    &stubWeatherSource{forecast: sampleForecast()},
+			label:    "no events at all",
+			forecast: sampleForecast(),
 		},
 		{
-			label: "a dry week",
-			cal:   &stubCalSource{events: sampleEvents()},
-			ws:    &stubWeatherSource{forecast: dryForecast()},
+			label:    "a dry week",
+			events:   sampleEvents(),
+			forecast: dryForecast(),
 		},
 		{
-			label: "no weather at all",
-			cal:   &stubCalSource{events: sampleEvents()},
-			ws:    &stubWeatherSource{},
+			label:  "no weather at all",
+			events: sampleEvents(),
 		},
 		{
-			label: "fahrenheit with locations",
-			cal:   &stubCalSource{events: sampleEvents()},
-			ws:    &stubWeatherSource{forecast: sampleForecast()},
-			cfg: func(c *Config) {
-				c.Weather.TempUnit = "F"
-				c.ShowLocation = true
-			},
+			label:    "fahrenheit with locations",
+			events:   sampleEvents(),
+			forecast: sampleForecast(),
+			unit:     "F",
+			location: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			cfg := Config{Weather: daygrid.WeatherConfig{TempUnit: "C"}}
-			if tt.cfg != nil {
-				tt.cfg(&cfg)
+			unit := tt.unit
+			if unit == "" {
+				unit = "C"
 			}
-			w := New(image.Rect(0, 0, 800, 480), tt.cal, tt.ws, fixedClock(testTime), cfg)
+			w := New(image.Rect(0, 0, 800, 480), daygrid.InMemory(tt.events, tt.forecast), fixedClock(testTime), drawConfig(unit, tt.location))
 			testutil.AssertGoldenPNG(t, renderToFrame(t, w))
+		})
+	}
+}
+
+// Factory is the shared day-widget factory, tested in daygrid: parsing
+// the shared settings, building the day data and taking the clock. What is
+// row-agenda's own is that it takes the example config and the reasons it gives for settings it has no use for.
+func TestFactory(t *testing.T) {
+	deps := widget.Deps{
+		Now:      fixedClock(testTime),
+		Calendar: calendar.NewProvider(fakehttp.New(), fixedClock(testTime)),
+		Weather:  weather.NewProvider(fakehttp.New(), time.Hour, fixedClock(testTime), weather.Settings{}),
+	}
+
+	tests := []struct {
+		label   string
+		config  map[string]any
+		wantErr string
+	}{
+		{
+			// The row-agenda screen in inkwell.example.yaml.
+			label: "the example config",
+			config: map[string]any{
+				"feeds":         []any{"https://example.com/my-calendar.ics"},
+				"show_location": false,
+				"refresh":       "15m",
+			},
+		},
+		{
+			// Rows grow to fit their events, so a cap could only
+			// contradict that, and the error says so.
+			label:   "explains max_events",
+			config:  map[string]any{"feeds": []any{"https://example.com/a.ics"}, "max_events": 3},
+			wantErr: "row-agenda: max_events is not supported: each row grows to fit its events, and when the week is too full the busiest rows give up lines first",
+		},
+		{
+			label:   "explains a weekly-calendar key",
+			config:  map[string]any{"feeds": []any{"https://example.com/a.ics"}, "show_weather": false},
+			wantErr: "row-agenda: show_weather is not supported: the weather badge is part of the layout; a day with no forecast already draws nothing",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			w, err := Factory(image.Rect(0, 0, 800, 480), tt.config, deps)
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Fatalf("err = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Factory: %v", err)
+			}
+			if _, ok := w.(*Widget); !ok {
+				t.Errorf("Factory built a %T", w)
+			}
 		})
 	}
 }

@@ -1,5 +1,8 @@
-// Package calendar provides calendar event types, data sources, and iCal
-// parsing for the Inkwell calendar widget.
+// Package calendar is the calendar module every calendar widget reads
+// through: given a widget's feeds, a window and a refresh setting, its
+// Provider returns the occurrences that overlap the window, with
+// recurrences expanded, overrides honoured, rules applied and duplicates
+// collapsed, from one cache per feed shared across widgets and screens.
 package calendar
 
 import (
@@ -11,21 +14,6 @@ import (
 
 // Event is an alias for ical.Event, re-exported for convenience.
 type Event = ical.Event
-
-// Recurrence and Frequency are re-exported so consumers can construct
-// recurring events (chiefly tests and synthetic feeds) without
-// importing the ical package directly.
-type (
-	Recurrence = ical.Recurrence
-	Frequency  = ical.Frequency
-)
-
-// Frequency constants re-exported for the same reason.
-const (
-	FreqDaily   = ical.FreqDaily
-	FreqWeekly  = ical.FreqWeekly
-	FreqMonthly = ical.FreqMonthly
-)
 
 // Source provides calendar events for a time range.
 // Implementations must be safe for concurrent use.

@@ -43,15 +43,16 @@ type rowLayout struct {
 	Gutter image.Rectangle
 	Badge  image.Rectangle
 	Agenda image.Rectangle
-	// Lines is how many agenda lines the row draws: one per event, or
-	// fewer when the week would not otherwise fit, in which case the
-	// last of them carries "+N MORE".
+	// Lines is how many agenda lines the row draws: as many as its list
+	// needs, or fewer when the week would not otherwise fit, in which
+	// case the event list makes the last of them "+N MORE".
 	Lines  int
 	IsLast bool
 }
 
 // planRows divides bounds into five day rows, one per entry in counts,
-// each as tall as its events need and never shorter than minRowH.
+// each as tall as the lines its list needs (the event list's count) and
+// never shorter than minRowH.
 //
 // Room the rows do not need is shared between them evenly, so a quiet
 // week still fills the panel. Any remainder from the division goes to
@@ -93,7 +94,7 @@ func planRows(bounds image.Rectangle, counts []int) []rowLayout {
 	return out
 }
 
-// fitLines gives each row a line per event, then, while the rows would
+// fitLines gives each row the lines its list needs, then, while the rows would
 // be taller than height, takes one line at a time from the busiest row.
 //
 // Taking from the busiest row is what keeps quiet days whole: a day with
@@ -109,7 +110,9 @@ func fitLines(counts []int, height int) []int {
 	lines := make([]int, rows)
 	total := 0
 	for i := range rows {
-		// An empty day still takes a line: it says so.
+		// Every row takes at least a line. The list already counts an
+		// empty day's "NOTHING SCHEDULED"; this keeps a row that drew
+		// nothing at all from planning zero lines.
 		lines[i] = max(counts[i], 1)
 		total += rowHeight(lines[i])
 	}

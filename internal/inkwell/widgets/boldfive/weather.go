@@ -19,12 +19,12 @@ const (
 	// scaled; the low is body size, because the pair only needs one
 	// element large enough to read at distance and two would crowd the
 	// chart out.
-	tempPadX    = 6
-	hiScale     = 2
-	hiBaseline  = 30
-	loBaseline  = 56
-	chartTop    = 64
-	chartPadX   = 8
+	tempPadX   = 6
+	hiScale    = 2
+	hiBaseline = 30
+	loBaseline = 56
+	chartTop   = 64
+	chartPadX  = 8
 )
 
 // weatherOptions carries the per-column weather knobs that come from

@@ -23,16 +23,6 @@ type Feed struct {
 	Rules []Rule
 }
 
-// FeedsFromURLs adapts a plain list of URLs to rule-less Feeds, for
-// callers (and tests) that have nothing to rewrite.
-func FeedsFromURLs(urls []string) []Feed {
-	feeds := make([]Feed, 0, len(urls))
-	for _, u := range urls {
-		feeds = append(feeds, Feed{URL: u})
-	}
-	return feeds
-}
-
 // Rule is one transformation applied to an event summary. A Rule either
 // rewrites the summary (Replace) or drops the event outright (Exclude).
 type Rule struct {

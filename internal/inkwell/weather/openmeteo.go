@@ -35,7 +35,7 @@ var modelBaseURLs = map[Model]string{
 }
 
 // ParseModel validates a model identifier string against the known models
-// and returns the corresponding Model. Unlike NewOpenMeteoSource, which
+// and returns the corresponding Model. Unlike newOpenMeteoSource, which
 // silently falls back to GFS for an unknown model, ParseModel surfaces an
 // error so config parsing can reject a mistyped weather_model instead of
 // quietly fetching the wrong forecast.
@@ -54,19 +54,19 @@ func ParseModel(s string) (Model, error) {
 // newOpenTypeFace hook.
 var newRequestWithContext = http.NewRequestWithContext
 
-// OpenMeteoSource fetches weather forecasts from a single Open-Meteo model.
-type OpenMeteoSource struct {
+// openMeteoSource fetches weather forecasts from a single Open-Meteo model.
+type openMeteoSource struct {
 	model   Model
 	baseURL string
 	client  HTTPClient
 	zone    *time.Location
 }
 
-// NewOpenMeteoSource creates a source for the given model whose forecasts
+// newOpenMeteoSource creates a source for the given model whose forecasts
 // are dated and hourly-labelled in zone. A nil client falls through to
 // http.DefaultClient so a caller-forgotten dependency doesn't surface as a
 // nil-pointer panic from the first request.
-func NewOpenMeteoSource(model Model, client HTTPClient, zone *time.Location) *OpenMeteoSource {
+func newOpenMeteoSource(model Model, client HTTPClient, zone *time.Location) *openMeteoSource {
 	base, ok := modelBaseURLs[model]
 	if !ok {
 		base = modelBaseURLs[ModelGFS]
@@ -74,12 +74,12 @@ func NewOpenMeteoSource(model Model, client HTTPClient, zone *time.Location) *Op
 	if client == nil {
 		client = http.DefaultClient
 	}
-	return &OpenMeteoSource{model: model, baseURL: base, client: client, zone: zone}
+	return &openMeteoSource{model: model, baseURL: base, client: client, zone: zone}
 }
 
 // Forecast fetches a weather forecast for the given location. The request
 // carries ctx so callers can bound the fetch with a deadline or cancel it.
-func (s *OpenMeteoSource) Forecast(ctx context.Context, loc Location, days int) (*Forecast, error) {
+func (s *openMeteoSource) Forecast(ctx context.Context, loc Location, days int) (*Forecast, error) {
 	u, err := s.buildURL(loc, days)
 	if err != nil {
 		return nil, fmt.Errorf("openmeteo %s: build URL: %w", s.model, err)
@@ -114,7 +114,7 @@ func (s *OpenMeteoSource) Forecast(ctx context.Context, loc Location, days int) 
 	return s.parseResponse(body, loc)
 }
 
-func (s *OpenMeteoSource) buildURL(loc Location, days int) (string, error) {
+func (s *openMeteoSource) buildURL(loc Location, days int) (string, error) {
 	u, err := url.Parse(s.baseURL)
 	if err != nil {
 		return "", err
@@ -144,7 +144,7 @@ type openMeteoResponse struct {
 	} `json:"daily"`
 }
 
-func (s *OpenMeteoSource) parseResponse(body []byte, loc Location) (*Forecast, error) {
+func (s *openMeteoSource) parseResponse(body []byte, loc Location) (*Forecast, error) {
 	var resp openMeteoResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("openmeteo %s: parse JSON: %w", s.model, err)
