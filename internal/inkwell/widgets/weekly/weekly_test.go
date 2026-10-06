@@ -1,9 +1,7 @@
 package weekly
 
 import (
-	"context"
 	"image"
-	nethttp "net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -12,52 +10,15 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar/ical"
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil"
+	"github.com/grantlucas/inkwell/internal/inkwell/testutil/fakehttp"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
 func fixedClock(t time.Time) func() time.Time {
 	return func() time.Time { return t }
-}
-
-// stubCalSource implements calendar.Source for testing.
-type stubCalSource struct {
-	events []ical.Event
-	err    error
-
-	// gotStart/gotEnd record the window Render asked for, so tests can pin
-	// which zone the span was anchored in and how many days long it is.
-	gotStart, gotEnd time.Time
-}
-
-func (s *stubCalSource) Events(_ context.Context, start, end time.Time) ([]ical.Event, error) {
-	s.gotStart, s.gotEnd = start, end
-	if s.err != nil {
-		return s.events, s.err
-	}
-	var filtered []ical.Event
-	for _, e := range s.events {
-		if e.Start.Before(end) && e.End.After(start) {
-			filtered = append(filtered, e)
-		}
-	}
-	return filtered, nil
-}
-
-// stubWeatherSource implements weather.Source for testing.
-type stubWeatherSource struct {
-	forecast *weather.Forecast
-	err      error
-
-	// gotDays records the forecast length Render asked for, which the shared
-	// provider also uses as part of its cache key.
-	gotDays int
-}
-
-func (s *stubWeatherSource) Forecast(_ context.Context, _ weather.Location, days int) (*weather.Forecast, error) {
-	s.gotDays = days
-	return s.forecast, s.err
 }
 
 var testTime = time.Date(2026, 4, 27, 14, 30, 0, 0, time.UTC) // Monday
@@ -86,7 +47,7 @@ func sampleEvents() []ical.Event {
 	}
 }
 
-func sampleForecast() *weather.Forecast {
+func sampleForecast() []weather.DailyForecast {
 	var days []weather.DailyForecast
 	for i := range 7 {
 		day := time.Date(2026, 4, 27+i, 0, 0, 0, 0, time.UTC)
@@ -106,422 +67,268 @@ func sampleForecast() *weather.Forecast {
 			Hourly:    hourly,
 		})
 	}
-	return &weather.Forecast{
-		Location: weather.Location{Latitude: 45.4, Longitude: -75.7},
-		Days:     days,
+	return days
+}
+
+// drawConfig is the config the goldens draw with: the full week, weather
+// shown with its label, Celsius.
+func drawConfig() Config {
+	return Config{
+		Config: daygrid.Config{
+			MaxEvents: 5,
+			Weather:   daygrid.WeatherConfig{TempUnit: "C", Latitude: 45.4, Longitude: -75.7},
+		},
+		WeekStart:        time.Monday,
+		Days:             defaultDays,
+		ShowWeather:      true,
+		ShowWeatherLabel: true,
+		HighlightHour:    15,
 	}
+}
+
+func render(t *testing.T, w *Widget) *image.Paletted {
+	t.Helper()
+	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
+	if err := w.Render(frame); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	return frame
 }
 
 func TestWidget_Bounds(t *testing.T) {
 	bounds := image.Rect(0, 52, 800, 480)
-	w := New(bounds, &stubCalSource{}, nil, fixedClock(testTime), Config{
-		MaxEvents: 5,
-		WeekStart: time.Monday,
-		Weather:   daygrid.WeatherConfig{TempUnit: "C"},
-	})
+	w := New(bounds, daygrid.InMemory(nil, nil), fixedClock(testTime), drawConfig())
 	if got := w.Bounds(); got != bounds {
 		t.Errorf("Bounds() = %v, want %v", got, bounds)
 	}
 }
 
-func TestWidget_RenderNoWeather(t *testing.T) {
+// The weather band is there when there is a forecast to put in it. With
+// show_weather on but no forecast at all, the band gives its height back
+// to the events, exactly as with show_weather off.
+func TestWidget_BandNeedsAForecast(t *testing.T) {
 	bounds := image.Rect(0, 52, 800, 480)
-	cal := &stubCalSource{events: sampleEvents()}
-	w := New(bounds, cal, nil, fixedClock(testTime), Config{
-		MaxEvents: 5,
-		WeekStart: time.Monday,
-		Weather:   daygrid.WeatherConfig{TempUnit: "C"},
-	})
+	hidden := drawConfig()
+	hidden.ShowWeather = false
 
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
-	if err := w.Render(frame); err != nil {
-		t.Fatalf("Render: %v", err)
-	}
+	noForecast := render(t, New(bounds, daygrid.InMemory(sampleEvents(), nil), fixedClock(testTime), drawConfig()))
+	weatherOff := render(t, New(bounds, daygrid.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), hidden))
+	withForecast := render(t, New(bounds, daygrid.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), drawConfig()))
 
-	hasBlack := false
-	for _, px := range frame.Pix {
-		if px != 0 {
-			hasBlack = true
-			break
-		}
+	if !slices.Equal(noForecast.Pix, weatherOff.Pix) {
+		t.Error("show_weather with no forecast drew differently from show_weather off")
 	}
-	if !hasBlack {
-		t.Error("render produced blank frame")
+	if slices.Equal(withForecast.Pix, weatherOff.Pix) {
+		t.Error("a forecast drew no weather band")
 	}
 }
 
-func TestWidget_RenderWithWeather(t *testing.T) {
-	bounds := image.Rect(0, 52, 800, 480)
-	cal := &stubCalSource{events: sampleEvents()}
-	ws := &stubWeatherSource{forecast: sampleForecast()}
-	w := New(bounds, cal, ws, fixedClock(testTime), Config{
-		MaxEvents:        5,
-		WeekStart:        time.Monday,
-		Weather:          daygrid.WeatherConfig{TempUnit: "C"},
-		ShowWeather:      true,
-		ShowWeatherLabel: true,
-		HighlightHour:    15,
-	})
-
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
-	if err := w.Render(frame); err != nil {
-		t.Fatalf("Render: %v", err)
+// Settings no golden covers still render.
+func TestWidget_RendersOtherSettings(t *testing.T) {
+	tests := []struct {
+		label string
+		cfg   func(*Config)
+	}{
+		{"sunday week start", func(c *Config) { c.WeekStart = time.Sunday }},
+		{"fahrenheit", func(c *Config) { c.Weather.TempUnit = "F" }},
 	}
-
-	hasBlack := false
-	for _, px := range frame.Pix {
-		if px != 0 {
-			hasBlack = true
-			break
-		}
-	}
-	if !hasBlack {
-		t.Error("render with weather produced blank frame")
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			cfg := drawConfig()
+			tt.cfg(&cfg)
+			frame := render(t, New(image.Rect(0, 0, 800, 480),
+				daygrid.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), cfg))
+			if !slices.ContainsFunc(frame.Pix, func(px uint8) bool { return px != 0 }) {
+				t.Error("render produced a blank frame")
+			}
+		})
 	}
 }
 
-func TestWidget_RenderWeatherError(t *testing.T) {
-	bounds := image.Rect(0, 52, 800, 480)
-	cal := &stubCalSource{events: sampleEvents()}
-	ws := &stubWeatherSource{err: context.DeadlineExceeded}
-	w := New(bounds, cal, ws, fixedClock(testTime), Config{
-		MaxEvents: 5,
-		WeekStart: time.Monday,
-		Weather:   daygrid.WeatherConfig{TempUnit: "C", Latitude: 45.4, Longitude: -75.7},
-
-		ShowWeather: true,
-	})
-
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
-	if err := w.Render(frame); err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-}
-
-// Stale-on-error: when the weather source returns (forecast, err) — e.g.
-// a CachedSource serving cached data because the live fetch failed — the
-// widget should render the chart with the stale data anyway. Otherwise
-// the dashboard would blank the chart any time the upstream blips, even
-// though we have perfectly usable data on hand.
-func TestWidget_RenderWeatherStaleOnError(t *testing.T) {
-	bounds := image.Rect(0, 52, 800, 480)
-	cal := &stubCalSource{events: sampleEvents()}
-	ws := &stubWeatherSource{forecast: sampleForecast(), err: context.DeadlineExceeded}
-	w := New(bounds, cal, ws, fixedClock(testTime), Config{
-		MaxEvents: 5,
-		WeekStart: time.Monday,
-		Weather:   daygrid.WeatherConfig{TempUnit: "C", Latitude: 45.4, Longitude: -75.7},
-
-		ShowWeather: true,
-	})
-
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
-	if err := w.Render(frame); err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-	// A rendered chart should have the temperature polyline drawn in
-	// PaperBlack — if the stale forecast had been discarded the weather
-	// row would be all white.
-	chartRow := bounds.Min.Y + 56 + 80 // header + roughly mid-chart
-	hasBlack := false
-	for x := bounds.Min.X; x < bounds.Max.X; x++ {
-		if frame.ColorIndexAt(x, chartRow) == widget.PaperBlack {
-			hasBlack = true
-			break
-		}
-	}
-	if !hasBlack {
-		t.Error("stale forecast was discarded — chart row has no ink")
-	}
-}
-
-func TestWidget_RenderCalendarError(t *testing.T) {
-	bounds := image.Rect(0, 52, 800, 480)
-	cal := &stubCalSource{err: context.DeadlineExceeded}
-	w := New(bounds, cal, nil, fixedClock(testTime), Config{
-		MaxEvents: 5,
-		WeekStart: time.Monday,
-		Weather:   daygrid.WeatherConfig{TempUnit: "C"},
-	})
-
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
-	if err := w.Render(frame); err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-}
-
-func TestWidget_SundayWeekStart(t *testing.T) {
-	bounds := image.Rect(0, 0, 800, 480)
-	cal := &stubCalSource{}
-	w := New(bounds, cal, nil, fixedClock(testTime), Config{
-		MaxEvents: 5,
-		WeekStart: time.Sunday,
-		Weather:   daygrid.WeatherConfig{TempUnit: "C"},
-	})
-
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
-	if err := w.Render(frame); err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-}
-
-func TestWidget_ShowLocation(t *testing.T) {
-	bounds := image.Rect(0, 0, 800, 480)
-	cal := &stubCalSource{events: sampleEvents()}
-	w := New(bounds, cal, nil, fixedClock(testTime), Config{
-		MaxEvents:    5,
-		WeekStart:    time.Monday,
-		Weather:      daygrid.WeatherConfig{TempUnit: "C"},
-		ShowLocation: true,
-	})
-
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
-	if err := w.Render(frame); err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-}
-
-func TestWidget_FahrenheitUnit(t *testing.T) {
-	bounds := image.Rect(0, 0, 800, 480)
-	ws := &stubWeatherSource{forecast: sampleForecast()}
-	w := New(bounds, &stubCalSource{}, ws, fixedClock(testTime), Config{
-		MaxEvents:   5,
-		WeekStart:   time.Monday,
-		Weather:     daygrid.WeatherConfig{TempUnit: "F"},
-		ShowWeather: true,
-	})
-
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
-	if err := w.Render(frame); err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-}
-
-// --- Factory / parseConfig tests ---
-
+// minimalConfig is the minimum valid config: feeds is the only required key.
 func minimalConfig() map[string]any {
 	return map[string]any{
 		"feeds": []any{"https://example.com/cal.ics"},
 	}
 }
 
-// typedDeps is what the app hands every widget: one transport behind both
-// the calendar fetch and the shared weather provider.
-func typedDeps(client calendar.HTTPClient) widget.Deps {
-	return widget.Deps{
-		Now:      fixedClock(testTime),
-		Calendar: calendar.NewProvider(client, fixedClock(testTime)),
-		Weather:  weather.NewProvider(client, time.Hour, fixedClock(testTime), weather.Settings{TempUnit: "C"}),
-	}
+func withKey(k string, v any) map[string]any {
+	c := minimalConfig()
+	c[k] = v
+	return c
 }
 
-// The factory builds from typed deps with or without an injected clock.
-func TestFactory_Builds(t *testing.T) {
+func TestFactory(t *testing.T) {
+	deps := widget.Deps{
+		Now:      fixedClock(testTime),
+		Calendar: calendar.NewProvider(fakehttp.New(), fixedClock(testTime)),
+		Weather:  weather.NewProvider(fakehttp.New(), time.Hour, fixedClock(testTime), weather.Settings{TempUnit: "F"}),
+	}
+	noClock := deps
+	noClock.Now = nil
+
 	tests := []struct {
-		label string
-		now   func() time.Time
+		label   string
+		config  map[string]any
+		deps    widget.Deps
+		wantErr string
 	}{
-		{label: "injected clock", now: fixedClock(testTime)},
-		{label: "no clock", now: nil},
+		{label: "builds from typed deps", config: minimalConfig(), deps: deps},
+		{label: "defaults the clock", config: minimalConfig(), deps: noClock},
+		{
+			// The weekly-calendar screen in inkwell.example.yaml.
+			label: "the example config", deps: deps,
+			config: map[string]any{
+				"feeds":              []any{"https://example.com/my-calendar.ics"},
+				"days":               7,
+				"show_weather":       true,
+				"show_weather_label": true,
+				"max_events":         5,
+			},
+		},
+		{
+			// A config using every key weekly-calendar has ever taken,
+			// the unused week_start and highlight_hour included.
+			label: "every key it takes", deps: deps,
+			config: map[string]any{
+				"feeds": []any{map[string]any{
+					"url":   "https://example.com/team.ics",
+					"name":  "Hockey",
+					"rules": []any{map[string]any{"match": "^Jane Doe\n"}},
+				}},
+				"refresh":            "30m",
+				"days":               5,
+				"max_events":         4,
+				"show_location":      true,
+				"show_weather":       true,
+				"show_weather_label": false,
+				"week_start":         "sunday",
+				"highlight_hour":     12,
+				"latitude":           40.7128,
+				"longitude":          -74.006,
+				"temp_unit":          "F",
+				"weather_model":      "ecmwf",
+			},
+		},
+		{label: "rejects its config", config: map[string]any{}, deps: deps, wantErr: "weekly-calendar: feeds is required"},
+		{
+			label: "rejects a misspelt key", config: withKey("max_event", 3), deps: deps,
+			wantErr: `weekly-calendar: unsupported setting "max_event" (accepted: days, feeds, highlight_hour, latitude, longitude, max_events, refresh, show_location, show_weather, show_weather_label, temp_unit, weather_model, week_start)`,
+		},
+		{label: "rejects its own key", config: withKey("days", 8), deps: deps, wantErr: "weekly-calendar: days must be in [1, 7], got 8"},
+		{label: "needs the calendar module", config: minimalConfig(), deps: widget.Deps{Weather: deps.Weather}, wantErr: "weekly-calendar: no calendar module"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			deps := typedDeps(&stubHTTPClient{})
-			deps.Now = tt.now
-			w, err := Factory(image.Rect(0, 0, 800, 480), minimalConfig(), deps)
+			w, err := Factory(image.Rect(0, 0, 800, 480), tt.config, tt.deps)
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Fatalf("err = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("Factory: %v", err)
 			}
-			if w == nil {
-				t.Fatal("Factory returned nil widget")
+			wc := w.(*Widget)
+			if wc.Bounds() != image.Rect(0, 0, 800, 480) {
+				t.Errorf("Bounds = %v", wc.Bounds())
+			}
+			if wc.now().Year() < 2024 {
+				t.Errorf("clock year = %d", wc.now().Year())
 			}
 		})
 	}
 }
 
-// A widget built without its dependencies fails instead of falling back
-// to a calendar cache of its own.
-func TestFactory_MissingDeps(t *testing.T) {
-	_, err := Factory(image.Rect(0, 0, 800, 480), minimalConfig(), widget.Deps{Now: fixedClock(testTime)})
-	if err == nil || !strings.Contains(err.Error(), "weekly-calendar: no calendar module") {
-		t.Errorf("error = %v, want a missing calendar module error", err)
+// With show_weather off the screen fetches no forecast at all, rather
+// than one it would throw away; with it on, the forecast comes through
+// the shared provider.
+func TestFactory_FetchesWeatherOnlyWhenShown(t *testing.T) {
+	const feed = "https://example.com/cal.ics"
+	const gem = "https://api.open-meteo.com/v1/gem"
+	for _, show := range []bool{true, false} {
+		tr := fakehttp.New()
+		tr.Serve(feed, "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n")
+		tr.Handle(gem, fakehttp.OpenMeteo{Now: testTime, Site: time.UTC}.Reply)
+		deps := widget.Deps{
+			Now:      fixedClock(testTime),
+			Calendar: calendar.NewProvider(tr, fixedClock(testTime)),
+			Weather:  weather.NewProvider(tr, time.Hour, fixedClock(testTime), weather.Settings{Model: weather.ModelGEM, TempUnit: "C"}),
+		}
+		w, err := Factory(image.Rect(0, 52, 800, 480), withKey("show_weather", show), deps)
+		if err != nil {
+			t.Fatalf("Factory: %v", err)
+		}
+		render(t, w.(*Widget))
+
+		want := 0
+		if show {
+			want = 1
+		}
+		if got := tr.Requests(gem); got != want {
+			t.Errorf("show_weather %v: forecast requests = %d, want %d", show, got, want)
+		}
+		if got := tr.Requests(feed); got != 1 {
+			t.Errorf("show_weather %v: feed requests = %d, want 1", show, got)
+		}
 	}
 }
 
-func TestFactory_WeatherDisabled(t *testing.T) {
-	cfg := minimalConfig()
-	cfg["show_weather"] = false
-	w, err := Factory(image.Rect(0, 0, 800, 480), cfg, typedDeps(&stubHTTPClient{}))
-	if err != nil {
-		t.Fatalf("Factory: %v", err)
-	}
-	if w.(*Widget).weather != nil {
-		t.Error("show_weather off still wired a weather source")
-	}
-}
-
-func TestParseConfig_MissingFeeds(t *testing.T) {
-	_, err := parseConfig(map[string]any{})
-	if err == nil {
-		t.Fatal("expected error for missing feeds")
-	}
-}
-
-func TestParseConfig_FeedsNotList(t *testing.T) {
-	_, err := parseConfig(map[string]any{"feeds": "not-a-list"})
-	if err == nil {
-		t.Fatal("expected error for non-list feeds")
-	}
-}
-
-func TestParseConfig_FeedsEmpty(t *testing.T) {
-	_, err := parseConfig(map[string]any{"feeds": []any{}})
-	if err == nil {
-		t.Fatal("expected error for empty feeds")
-	}
-}
-
-func TestParseConfig_FeedsNonString(t *testing.T) {
-	_, err := parseConfig(map[string]any{"feeds": []any{123}})
-	if err == nil {
-		t.Fatal("expected error for non-string feed")
-	}
-}
-
-func TestParseConfig_RefreshInvalid(t *testing.T) {
-	cfg := minimalConfig()
-
-	cfg["refresh"] = 42
-	if _, err := parseConfig(cfg); err == nil {
-		t.Error("expected error for non-string refresh")
-	}
-
-	cfg["refresh"] = "not-a-duration"
-	if _, err := parseConfig(cfg); err == nil {
-		t.Error("expected error for unparseable refresh")
-	}
-
-	cfg["refresh"] = "30s"
-	if _, err := parseConfig(cfg); err == nil {
-		t.Error("expected error for refresh < 1m")
-	}
-}
-
-func TestParseConfig_RefreshValid(t *testing.T) {
-	cfg := minimalConfig()
-	cfg["refresh"] = "30m"
-	c, err := parseConfig(cfg)
-	if err != nil {
-		t.Fatalf("parseConfig: %v", err)
-	}
-	if c.Refresh != 30*time.Minute {
-		t.Errorf("Refresh = %v, want 30m", c.Refresh)
-	}
-}
-
-func TestParseConfig_WeekStart(t *testing.T) {
-	cfg := minimalConfig()
-
-	cfg["week_start"] = "sunday"
-	c, err := parseConfig(cfg)
-	if err != nil {
-		t.Fatalf("parseConfig: %v", err)
-	}
-	if c.WeekStart != time.Sunday {
-		t.Errorf("WeekStart = %v, want Sunday", c.WeekStart)
-	}
-
-	cfg["week_start"] = "monday"
-	c, err = parseConfig(cfg)
-	if err != nil {
-		t.Fatalf("parseConfig: %v", err)
-	}
-	if c.WeekStart != time.Monday {
-		t.Errorf("WeekStart = %v, want Monday", c.WeekStart)
-	}
-
-	cfg["week_start"] = "friday"
-	if _, err := parseConfig(cfg); err == nil {
-		t.Error("expected error for invalid week_start")
-	}
-
-	cfg["week_start"] = 42
-	if _, err := parseConfig(cfg); err == nil {
-		t.Error("expected error for non-string week_start")
-	}
-}
-
-func TestParseConfig_MaxEvents(t *testing.T) {
-	cfg := minimalConfig()
-
-	cfg["max_events"] = 3
-	c, err := parseConfig(cfg)
-	if err != nil {
-		t.Fatalf("parseConfig: %v", err)
-	}
-	if c.MaxEvents != 3 {
-		t.Errorf("MaxEvents = %d, want 3", c.MaxEvents)
-	}
-
-	cfg["max_events"] = 0
-	if _, err := parseConfig(cfg); err == nil {
-		t.Error("expected error for max_events = 0")
-	}
-
-	cfg["max_events"] = -1
-	if _, err := parseConfig(cfg); err == nil {
-		t.Error("expected error for negative max_events")
-	}
-
-	cfg["max_events"] = "five"
-	if _, err := parseConfig(cfg); err == nil {
-		t.Error("expected error for non-int max_events")
-	}
-}
-
-func TestParseConfig_Days(t *testing.T) {
-	c, err := parseConfig(minimalConfig())
-	if err != nil {
-		t.Fatalf("parseConfig: %v", err)
-	}
-	if c.Days != 7 {
-		t.Errorf("default Days = %d, want 7", c.Days)
-	}
-
-	cfg := minimalConfig()
-	cfg["days"] = 5
-	c, err = parseConfig(cfg)
-	if err != nil {
-		t.Fatalf("parseConfig: %v", err)
-	}
-	if c.Days != 5 {
-		t.Errorf("Days = %d, want 5", c.Days)
-	}
-}
-
-func TestParseConfig_DaysRange(t *testing.T) {
-	cases := []struct {
+// weekly-calendar's own keys, each accepted and each rejected with the
+// widget's name. The keys every calendar widget shares are the shared
+// parser's to test.
+func TestParseConfig_OwnKeys(t *testing.T) {
+	tests := []struct {
 		label   string
-		days    any
-		wantErr bool
+		key     string
+		value   any
+		check   func(Config) bool
+		wantErr string
 	}{
-		{"lower boundary", 1, false},
-		{"upper boundary", 7, false},
-		{"zero", 0, true},
-		{"negative", -1, true},
-		{"above range", 8, true},
-		{"non-integer", "five", true},
+		{label: "default days", check: func(c Config) bool { return c.Days == 7 }},
+		{label: "default max_events", check: func(c Config) bool { return c.MaxEvents == 5 }},
+		{label: "weather shown by default", check: func(c Config) bool { return c.ShowWeather && c.ShowWeatherLabel && !c.NoWeather }},
+		{label: "days", key: "days", value: 5, check: func(c Config) bool { return c.Days == 5 }},
+		{label: "days lower boundary", key: "days", value: 1, check: func(c Config) bool { return c.Days == 1 }},
+		{label: "days upper boundary", key: "days", value: 7, check: func(c Config) bool { return c.Days == 7 }},
+		{label: "days zero", key: "days", value: 0, wantErr: "days must be in [1, 7]"},
+		{label: "days negative", key: "days", value: -1, wantErr: "days must be in [1, 7]"},
+		{label: "days above range", key: "days", value: 8, wantErr: "days must be in [1, 7]"},
+		{label: "days not an integer", key: "days", value: "five", wantErr: "days must be an integer"},
+		{label: "show_weather off", key: "show_weather", value: false, check: func(c Config) bool { return !c.ShowWeather && c.NoWeather }},
+		{label: "show_weather not a bool", key: "show_weather", value: "yes", wantErr: "show_weather must be a bool"},
+		{label: "show_weather_label off", key: "show_weather_label", value: false, check: func(c Config) bool { return !c.ShowWeatherLabel }},
+		{label: "show_weather_label not a bool", key: "show_weather_label", value: 1, wantErr: "show_weather_label must be a bool"},
+		{label: "week_start sunday", key: "week_start", value: "sunday", check: func(c Config) bool { return c.WeekStart == time.Sunday }},
+		{label: "week_start monday", key: "week_start", value: "monday", check: func(c Config) bool { return c.WeekStart == time.Monday }},
+		{label: "week_start unknown", key: "week_start", value: "friday", wantErr: "invalid week_start"},
+		{label: "week_start not a string", key: "week_start", value: 42, wantErr: "week_start must be a string"},
+		{label: "highlight_hour", key: "highlight_hour", value: 12, check: func(c Config) bool { return c.HighlightHour == 12 }},
+		{label: "highlight_hour lower boundary", key: "highlight_hour", value: 0, check: func(c Config) bool { return c.HighlightHour == 0 }},
+		{label: "highlight_hour upper boundary", key: "highlight_hour", value: 23, check: func(c Config) bool { return c.HighlightHour == 23 }},
+		{label: "highlight_hour below range", key: "highlight_hour", value: -1, wantErr: "highlight_hour must be in [0, 23]"},
+		{label: "highlight_hour above range", key: "highlight_hour", value: 24, wantErr: "highlight_hour must be in [0, 23]"},
+		{label: "highlight_hour not an integer", key: "highlight_hour", value: "noon", wantErr: "highlight_hour must be an integer"},
 	}
-	for _, tc := range cases {
-		t.Run(tc.label, func(t *testing.T) {
-			cfg := minimalConfig()
-			cfg["days"] = tc.days
-			_, err := parseConfig(cfg)
-			if tc.wantErr && err == nil {
-				t.Errorf("days=%v: want error, got nil", tc.days)
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			raw := minimalConfig()
+			if tt.key != "" {
+				raw[tt.key] = tt.value
 			}
-			if !tc.wantErr && err != nil {
-				t.Errorf("days=%v: unexpected error: %v", tc.days, err)
+			got, err := parseConfig(raw, nil)
+			if tt.wantErr != "" {
+				if err == nil || !strings.HasPrefix(err.Error(), "weekly-calendar: ") || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want weekly-calendar: ...%s", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseConfig: %v", err)
+			}
+			if !tt.check(got) {
+				t.Errorf("config = %+v", got)
 			}
 		})
 	}
@@ -535,380 +342,6 @@ func TestMaxDaysFitTheForecastHorizon(t *testing.T) {
 	if defaultDays > weather.ForecastHorizon-1 {
 		t.Errorf("weekly-calendar accepts %d days, but a forecast of %d days covers only %d after midnight",
 			defaultDays, weather.ForecastHorizon, weather.ForecastHorizon-1)
-	}
-}
-
-func TestParseConfig_ShowLocation(t *testing.T) {
-	cfg := minimalConfig()
-
-	cfg["show_location"] = true
-	c, err := parseConfig(cfg)
-	if err != nil {
-		t.Fatalf("parseConfig: %v", err)
-	}
-	if !c.ShowLocation {
-		t.Error("expected ShowLocation = true")
-	}
-
-	cfg["show_location"] = "yes"
-	if _, err := parseConfig(cfg); err == nil {
-		t.Error("expected error for non-bool show_location")
-	}
-}
-
-func TestParseConfig_LatLon(t *testing.T) {
-	cfg := minimalConfig()
-	cfg["latitude"] = 45.4
-	cfg["longitude"] = -75.7
-	c, err := parseConfig(cfg)
-	if err != nil {
-		t.Fatalf("parseConfig: %v", err)
-	}
-	if c.Weather.Latitude != 45.4 || c.Weather.Longitude != -75.7 {
-		t.Errorf("got lat=%f lon=%f", c.Weather.Latitude, c.Weather.Longitude)
-	}
-
-	cfg["latitude"] = "north"
-	if _, err := parseConfig(cfg); err == nil {
-		t.Error("expected error for non-number latitude")
-	}
-
-	cfg["latitude"] = 45.4
-	cfg["longitude"] = "west"
-	if _, err := parseConfig(cfg); err == nil {
-		t.Error("expected error for non-number longitude")
-	}
-}
-
-func TestParseConfig_LatLonRange(t *testing.T) {
-	cases := []struct {
-		label   string
-		lat     float64
-		lon     float64
-		wantErr bool
-	}{
-		{"lat lower boundary", -90, 0, false},
-		{"lat upper boundary", 90, 0, false},
-		{"lat below range", -90.001, 0, true},
-		{"lat above range", 90.001, 0, true},
-		{"lat far out of range", 500, 0, true},
-		{"lon lower boundary", 0, -180, false},
-		{"lon upper boundary", 0, 180, false},
-		{"lon below range", 0, -180.001, true},
-		{"lon above range", 0, 180.001, true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.label, func(t *testing.T) {
-			cfg := minimalConfig()
-			cfg["latitude"] = tc.lat
-			cfg["longitude"] = tc.lon
-			_, err := parseConfig(cfg)
-			if tc.wantErr && err == nil {
-				t.Errorf("lat=%f lon=%f: want error, got nil", tc.lat, tc.lon)
-			}
-			if !tc.wantErr && err != nil {
-				t.Errorf("lat=%f lon=%f: unexpected error: %v", tc.lat, tc.lon, err)
-			}
-		})
-	}
-}
-
-func TestParseConfig_ShowWeather(t *testing.T) {
-	cfg := minimalConfig()
-	cfg["show_weather"] = false
-	c, err := parseConfig(cfg)
-	if err != nil {
-		t.Fatalf("parseConfig: %v", err)
-	}
-	if c.ShowWeather {
-		t.Error("expected ShowWeather = false")
-	}
-
-	cfg["show_weather"] = "yes"
-	if _, err := parseConfig(cfg); err == nil {
-		t.Error("expected error for non-bool show_weather")
-	}
-}
-
-func TestParseConfig_ShowWeatherLabel(t *testing.T) {
-	cfg := minimalConfig()
-	cfg["show_weather_label"] = false
-	c, err := parseConfig(cfg)
-	if err != nil {
-		t.Fatalf("parseConfig: %v", err)
-	}
-	if c.ShowWeatherLabel {
-		t.Error("expected ShowWeatherLabel = false")
-	}
-
-	cfg["show_weather_label"] = 1
-	if _, err := parseConfig(cfg); err == nil {
-		t.Error("expected error for non-bool show_weather_label")
-	}
-}
-
-func TestParseConfig_TempUnit(t *testing.T) {
-	cfg := minimalConfig()
-	cfg["temp_unit"] = "F"
-	c, err := parseConfig(cfg)
-	if err != nil {
-		t.Fatalf("parseConfig: %v", err)
-	}
-	if c.Weather.TempUnit != "F" {
-		t.Errorf("TempUnit = %q, want F", c.Weather.TempUnit)
-	}
-
-	cfg["temp_unit"] = "K"
-	if _, err := parseConfig(cfg); err == nil {
-		t.Error("expected error for invalid temp_unit")
-	}
-
-	cfg["temp_unit"] = 42
-	if _, err := parseConfig(cfg); err == nil {
-		t.Error("expected error for non-string temp_unit")
-	}
-}
-
-func TestParseConfig_HighlightHour(t *testing.T) {
-	cfg := minimalConfig()
-	cfg["highlight_hour"] = 12
-	c, err := parseConfig(cfg)
-	if err != nil {
-		t.Fatalf("parseConfig: %v", err)
-	}
-	if c.HighlightHour != 12 {
-		t.Errorf("HighlightHour = %d, want 12", c.HighlightHour)
-	}
-
-	cfg["highlight_hour"] = "noon"
-	if _, err := parseConfig(cfg); err == nil {
-		t.Error("expected error for non-int highlight_hour")
-	}
-}
-
-func TestParseConfig_HighlightHourRange(t *testing.T) {
-	cases := []struct {
-		label   string
-		hour    int
-		wantErr bool
-	}{
-		{"lower boundary", 0, false},
-		{"upper boundary", 23, false},
-		{"below range", -1, true},
-		{"above range", 24, true},
-		{"far above range", 99, true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.label, func(t *testing.T) {
-			cfg := minimalConfig()
-			cfg["highlight_hour"] = tc.hour
-			_, err := parseConfig(cfg)
-			if tc.wantErr && err == nil {
-				t.Errorf("hour=%d: want error, got nil", tc.hour)
-			}
-			if !tc.wantErr && err != nil {
-				t.Errorf("hour=%d: unexpected error: %v", tc.hour, err)
-			}
-		})
-	}
-}
-
-func TestFactory_InvalidConfig(t *testing.T) {
-	deps := widget.Deps{}
-	_, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{}, deps)
-	if err == nil {
-		t.Fatal("expected error for missing feeds")
-	}
-}
-
-// stubHTTPClient satisfies calendar.HTTPClient.
-type stubHTTPClient struct{}
-
-func (s *stubHTTPClient) Do(_ *nethttp.Request) (*nethttp.Response, error) {
-	return nil, context.DeadlineExceeded
-}
-
-func TestParseConfig_WeatherModel(t *testing.T) {
-	tests := []struct {
-		label   string
-		value   any
-		set     bool
-		want    weather.Model
-		wantSet bool
-		wantErr bool
-	}{
-		// Unset is intentionally not defaulted here — Factory resolves it from
-		// the shared Provider's default. parseConfig only records overrides.
-		{label: "unset leaves override absent", set: false, want: "", wantSet: false},
-		{label: "gfs", value: "gfs", set: true, want: weather.ModelGFS, wantSet: true},
-		{label: "ecmwf", value: "ecmwf", set: true, want: weather.ModelECMWF, wantSet: true},
-		{label: "gem", value: "gem", set: true, want: weather.ModelGEM, wantSet: true},
-		{label: "invalid string", value: "bogus", set: true, wantErr: true},
-		{label: "wrong type", value: 123, set: true, wantErr: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.label, func(t *testing.T) {
-			cfg := minimalConfig()
-			if tt.set {
-				cfg["weather_model"] = tt.value
-			}
-			got, err := parseConfig(cfg)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("parseConfig weather_model=%v: want error", tt.value)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("parseConfig: unexpected error: %v", err)
-			}
-			if got.Weather.Model != tt.want {
-				t.Errorf("WeatherModel = %q, want %q", got.Weather.Model, tt.want)
-			}
-			if got.Weather.ModelSet != tt.wantSet {
-				t.Errorf("modelSet = %v, want %v", got.Weather.ModelSet, tt.wantSet)
-			}
-		})
-	}
-}
-
-// recordingHTTPClient captures the requested URL so a test can assert which
-// Open-Meteo model endpoint the widget-built weather source queries. It
-// returns an error after recording; the URL is set regardless.
-type recordingHTTPClient struct{ lastURL string }
-
-func (c *recordingHTTPClient) Do(req *nethttp.Request) (*nethttp.Response, error) {
-	c.lastURL = req.URL.String()
-	return nil, context.DeadlineExceeded
-}
-
-func TestFactory_WeatherSourceQueriesResolvedModel(t *testing.T) {
-	tests := []struct {
-		label    string
-		model    any // nil → inherit the provider default (gem)
-		wantPath string
-	}{
-		{label: "inherits provider default gem", model: nil, wantPath: "/v1/gem"},
-		{label: "override ecmwf", model: "ecmwf", wantPath: "/v1/ecmwf"},
-		{label: "override gfs", model: "gfs", wantPath: "/v1/forecast"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.label, func(t *testing.T) {
-			rec := &recordingHTTPClient{}
-			prov := weather.NewProvider(rec, time.Hour, fixedClock(testTime),
-				weather.Settings{Model: weather.ModelGEM, TempUnit: "C"})
-			deps := widget.Deps{
-				Now:      fixedClock(testTime),
-				Calendar: calendar.NewProvider(rec, fixedClock(testTime)),
-				Weather:  prov,
-			}
-			cfg := minimalConfig()
-			cfg["show_weather"] = true
-			if tt.model != nil {
-				cfg["weather_model"] = tt.model
-			}
-			w, err := Factory(image.Rect(0, 0, 800, 480), cfg, deps)
-			if err != nil {
-				t.Fatalf("Factory: %v", err)
-			}
-			ww := w.(*Widget)
-			if ww.weather == nil {
-				t.Fatal("Factory did not wire a weather source")
-			}
-			_, _ = ww.weather.Forecast(context.Background(), weather.Location{}, 7)
-			if !strings.Contains(rec.lastURL, tt.wantPath) {
-				t.Errorf("requested URL = %q, want path %q", rec.lastURL, tt.wantPath)
-			}
-		})
-	}
-}
-
-func TestFactory_ResolvesWeatherFromProvider(t *testing.T) {
-	rec := &recordingHTTPClient{}
-	prov := weather.NewProvider(rec, time.Hour, fixedClock(testTime),
-		weather.Settings{
-			Location: weather.Location{Latitude: 43.244, Longitude: -79.837},
-			Model:    weather.ModelGEM,
-			TempUnit: "C",
-		})
-	deps := widget.Deps{
-		Now:      fixedClock(testTime),
-		Calendar: calendar.NewProvider(rec, fixedClock(testTime)),
-		Weather:  prov,
-	}
-
-	t.Run("inherits provider defaults when unset", func(t *testing.T) {
-		cfg := minimalConfig()
-		cfg["show_weather"] = true
-		w, err := Factory(image.Rect(0, 0, 800, 480), cfg, deps)
-		if err != nil {
-			t.Fatalf("Factory: %v", err)
-		}
-		c := w.(*Widget).config
-		if c.Weather.Latitude != 43.244 || c.Weather.Longitude != -79.837 {
-			t.Errorf("location = %v,%v want provider default 43.244,-79.837", c.Weather.Latitude, c.Weather.Longitude)
-		}
-		if c.Weather.TempUnit != "C" {
-			t.Errorf("TempUnit = %q, want inherited C", c.Weather.TempUnit)
-		}
-		if c.Weather.Model != weather.ModelGEM {
-			t.Errorf("WeatherModel = %q, want inherited gem", c.Weather.Model)
-		}
-	})
-
-	t.Run("per-widget overrides win", func(t *testing.T) {
-		cfg := minimalConfig()
-		cfg["show_weather"] = true
-		cfg["longitude"] = -123.1
-		cfg["temp_unit"] = "F"
-		cfg["weather_model"] = "ecmwf"
-		w, err := Factory(image.Rect(0, 0, 800, 480), cfg, deps)
-		if err != nil {
-			t.Fatalf("Factory: %v", err)
-		}
-		c := w.(*Widget).config
-		if c.Weather.Latitude != 43.244 {
-			t.Errorf("Latitude = %v, want inherited 43.244", c.Weather.Latitude)
-		}
-		if c.Weather.Longitude != -123.1 {
-			t.Errorf("Longitude = %v, want override -123.1", c.Weather.Longitude)
-		}
-		if c.Weather.TempUnit != "F" {
-			t.Errorf("TempUnit = %q, want override F", c.Weather.TempUnit)
-		}
-		if c.Weather.Model != weather.ModelECMWF {
-			t.Errorf("WeatherModel = %q, want override ecmwf", c.Weather.Model)
-		}
-	})
-}
-
-// TestWidget_RenderAnchorsWeekToDisplayZone pins that the 7-day window is
-// built in the configured zone rather than the clock's own. The instant used
-// here is late evening in Toronto but already the next calendar day in UTC, so
-// the two zones disagree about which day "today" is.
-func TestWidget_RenderAnchorsWeekToDisplayZone(t *testing.T) {
-	toronto, err := time.LoadLocation("America/Toronto")
-	if err != nil {
-		t.Fatalf("load America/Toronto: %v", err)
-	}
-
-	// 2026-09-20T02:00Z is 2026-09-19 22:00 EDT — still Saturday locally.
-	now := time.Date(2026, 9, 20, 2, 0, 0, 0, time.UTC).In(toronto)
-	cal := &stubCalSource{}
-	w := New(image.Rect(0, 0, 800, 480), cal, nil, fixedClock(now), Config{
-		MaxEvents:   5,
-		ShowWeather: false,
-	})
-	if err := w.Render(image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)); err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-
-	wantStart := time.Date(2026, 9, 19, 0, 0, 0, 0, toronto)
-	if !cal.gotStart.Equal(wantStart) {
-		t.Errorf("week start = %v, want %v", cal.gotStart, wantStart)
-	}
-	if !cal.gotEnd.Equal(wantStart.AddDate(0, 0, 7)) {
-		t.Errorf("week end = %v, want %v", cal.gotEnd, wantStart.AddDate(0, 0, 7))
 	}
 }
 
@@ -927,50 +360,23 @@ func TestWidget_HighlightHourUsesDisplayZone(t *testing.T) {
 	// only the hour differs and the frames stay otherwise comparable.
 	now := time.Date(2026, 4, 27, 18, 0, 0, 0, time.UTC)
 
-	render := func(loc *time.Location) *image.Paletted {
+	renderIn := func(loc *time.Location) *image.Paletted {
 		t.Helper()
-		bounds := image.Rect(0, 0, 800, 480)
-		w := New(bounds, &stubCalSource{}, &stubWeatherSource{forecast: sampleForecast()},
-			fixedClock(now.In(loc)), Config{
-				MaxEvents:   5,
-				ShowWeather: true,
-				Weather:     daygrid.WeatherConfig{TempUnit: "C"},
-			})
-		frame := image.NewPaletted(bounds, widget.PaperPalette)
-		if err := w.Render(frame); err != nil {
-			t.Fatalf("Render: %v", err)
-		}
-		return frame
+		w := New(image.Rect(0, 0, 800, 480), daygrid.InMemory(nil, sampleForecast()),
+			fixedClock(now.In(loc)), drawConfig())
+		return render(t, w)
 	}
 
-	if slices.Equal(render(time.UTC).Pix, render(toronto).Pix) {
+	if slices.Equal(renderIn(time.UTC).Pix, renderIn(toronto).Pix) {
 		t.Error("UTC and America/Toronto rendered identically; highlight hour ignores the display zone")
 	}
 }
 
-func TestWidget_DaysNarrowsTheWindow(t *testing.T) {
-	bounds := image.Rect(0, 52, 800, 480)
-	cal := &stubCalSource{events: sampleEvents()}
-	ws := &stubWeatherSource{forecast: sampleForecast()}
-	w := New(bounds, cal, ws, fixedClock(testTime), Config{
-		Days:        5,
-		MaxEvents:   5,
-		ShowWeather: true,
-		Weather:     daygrid.WeatherConfig{TempUnit: "C"},
-	})
-
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
-	if err := w.Render(frame); err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-
-	wantEnd := cal.gotStart.AddDate(0, 0, 5)
-	if !cal.gotEnd.Equal(wantEnd) {
-		t.Errorf("calendar window end = %v, want %v", cal.gotEnd, wantEnd)
-	}
-	if ws.gotDays != 5 {
-		t.Errorf("forecast days = %d, want 5", ws.gotDays)
-	}
+func TestWidget_DaysNarrowsTheGrid(t *testing.T) {
+	cfg := drawConfig()
+	cfg.Days = 5
+	frame := render(t, New(image.Rect(0, 52, 800, 480),
+		daygrid.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), cfg))
 
 	// Five columns tile 800 px, so the four dividers land at the 160 px
 	// boundaries and nothing is drawn at the 7-day boundary of x=113.
@@ -987,25 +393,26 @@ func TestWidget_DaysNarrowsTheWindow(t *testing.T) {
 func TestWidget_UnsetDaysRendersFullWeek(t *testing.T) {
 	// New is exported and callers build Config literals by hand, so a zero
 	// Days must fall back to the full week rather than drawing no columns.
-	bounds := image.Rect(0, 52, 800, 480)
-	cal := &stubCalSource{events: sampleEvents()}
-	w := New(bounds, cal, nil, fixedClock(testTime), Config{
-		MaxEvents: 5,
-		Weather:   daygrid.WeatherConfig{TempUnit: "C"},
-	})
+	cfg := drawConfig()
+	cfg.Days = 0
+	frame := render(t, New(image.Rect(0, 52, 800, 480),
+		daygrid.InMemory(sampleEvents(), nil), fixedClock(testTime), cfg))
 
-	frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
-	if err := w.Render(frame); err != nil {
-		t.Fatalf("Render: %v", err)
-	}
-
-	wantEnd := cal.gotStart.AddDate(0, 0, 7)
-	if !cal.gotEnd.Equal(wantEnd) {
-		t.Errorf("calendar window end = %v, want %v", cal.gotEnd, wantEnd)
-	}
 	if frame.ColorIndexAt(113, 300) != widget.PaperBlack {
 		t.Error("no divider at x=113 — not laying out 7 columns")
 	}
+}
+
+// rangeOver serves src's days on a fixed temperature range.
+type rangeOver struct {
+	daygrid.Source
+	rng weatherview.TempRange
+}
+
+func (r rangeOver) Days(now time.Time, n int) daygrid.Data {
+	d := r.Source.Days(now, n)
+	d.TempRange = r.rng
+	return d
 }
 
 // TestWidget_Golden is the regression net for refactors of the shared
@@ -1016,37 +423,47 @@ func TestWidget_Golden(t *testing.T) {
 	bounds := image.Rect(0, 52, 800, 480)
 
 	tests := []struct {
-		label string
-		cal   *stubCalSource
-		ws    *stubWeatherSource
-		cfg   func(*Config)
-		clock time.Time // zero means testTime in UTC
+		label    string
+		events   []ical.Event
+		forecast []weather.DailyForecast
+		cfg      func(*Config)
+		clock    time.Time // zero means testTime in UTC
+		// weekRange draws on the range of all seven forecast days
+		// rather than of the days shown.
+		weekRange bool
 	}{
 		{
-			label: "full week with weather",
-			cal:   &stubCalSource{events: sampleEvents()},
-			ws:    &stubWeatherSource{forecast: sampleForecast()},
+			label:    "full week with weather",
+			events:   sampleEvents(),
+			forecast: sampleForecast(),
 		},
 		{
-			label: "no weather source",
-			cal:   &stubCalSource{events: sampleEvents()},
+			label:  "no weather source",
+			events: sampleEvents(),
+			cfg:    func(c *Config) { c.ShowWeather = false },
 		},
 		{
-			label: "no events",
-			cal:   &stubCalSource{},
-			ws:    &stubWeatherSource{forecast: sampleForecast()},
+			label:    "no events",
+			forecast: sampleForecast(),
 		},
 		{
-			label: "five day columns",
-			cal:   &stubCalSource{events: sampleEvents()},
-			ws:    &stubWeatherSource{forecast: sampleForecast()},
-			cfg:   func(c *Config) { c.Days = 5 },
+			// This golden was drawn when the test's forecast stub
+			// served all seven days to a five-day screen, and the range
+			// was taken across every day served. The provider answers
+			// with only the days asked for, so in production the range
+			// spans the days shown either way; weekRange keeps the
+			// golden on the scale it was drawn with.
+			label:     "five day columns",
+			events:    sampleEvents(),
+			forecast:  sampleForecast(),
+			cfg:       func(c *Config) { c.Days = 5 },
+			weekRange: true,
 		},
 		{
-			label: "locations shown",
-			cal:   &stubCalSource{events: sampleEvents()},
-			ws:    &stubWeatherSource{forecast: sampleForecast()},
-			cfg:   func(c *Config) { c.ShowLocation = true },
+			label:    "locations shown",
+			events:   sampleEvents(),
+			forecast: sampleForecast(),
+			cfg:      func(c *Config) { c.ShowLocation = true },
 		},
 		{
 			// The all-day bucketing case the extraction must not lose:
@@ -1062,45 +479,30 @@ func TestWidget_Golden(t *testing.T) {
 			// event into Tuesday and the pixels move.
 			label: "all-day event in a negative-UTC zone",
 			clock: testTime.In(mustLoad(t, "America/Toronto")),
-			cal: &stubCalSource{events: []ical.Event{{
+			events: []ical.Event{{
 				UID: "trip", Summary: "Conference", AllDay: true,
 				Start: time.Date(2026, 4, 29, 0, 0, 0, 0, time.UTC),
 				End:   time.Date(2026, 4, 30, 0, 0, 0, 0, time.UTC),
-			}}},
-			ws: &stubWeatherSource{forecast: sampleForecast()},
+			}},
+			forecast: sampleForecast(),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			cfg := Config{
-				MaxEvents: 5,
-				WeekStart: time.Monday,
-				Days:      defaultDays,
-				Weather:   daygrid.WeatherConfig{TempUnit: "C", Latitude: 45.4, Longitude: -75.7},
-
-				ShowWeather:      tt.ws != nil,
-				ShowWeatherLabel: true,
-				HighlightHour:    15,
-			}
+			cfg := drawConfig()
 			if tt.cfg != nil {
 				tt.cfg(&cfg)
-			}
-			var ws weather.Source
-			if tt.ws != nil {
-				ws = tt.ws
 			}
 			clock := tt.clock
 			if clock.IsZero() {
 				clock = testTime
 			}
-			w := New(bounds, tt.cal, ws, fixedClock(clock), cfg)
-
-			frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
-			if err := w.Render(frame); err != nil {
-				t.Fatalf("Render: %v", err)
+			days := daygrid.InMemory(tt.events, tt.forecast)
+			if tt.weekRange {
+				days = rangeOver{Source: days, rng: weatherview.GlobalTempRange(tt.forecast)}
 			}
-			testutil.AssertGoldenPNG(t, frame)
+			testutil.AssertGoldenPNG(t, render(t, New(bounds, days, fixedClock(clock), cfg)))
 		})
 	}
 }
