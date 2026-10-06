@@ -43,6 +43,9 @@ from `inkwell.yaml`:
 | `day-timeline` | Today on an hourly grid: events at their real start and end, an hourly weather lane beside them, and a now marker. |
 | `today-weather` | Today's forecast as one block: condition icon, high, low and condition name. |
 | `weather-ahead` | The next days (default four) as rows of weather: weekday, icon, high, low and a combined chart. |
+| `day-badge` | One day's date and weather in brief, in the shape bold-five, row-agenda or today-hero draws it. |
+| `combined-chart` | One day's precipitation bars with the temperature line over them, on a range it shares with every chart asking for the same span of days. |
+| `event-list` | One day's events in the shape bold-five, today-hero or row-agenda lists them, ending in "+N MORE" when some don't fit. |
 | `weekly-calendar` | **Deprecated, pending removal.** The original rolling calendar + weather view of up to 7 days. Use `day-timeline`, `bold-five`, `today-hero` or `row-agenda` instead. |
 <!-- markdownlint-enable MD013 -->
 
@@ -52,7 +55,8 @@ one cached Open-Meteo forecast (GFS, ECMWF or GEM). The
 [configuration reference](docs/guides/configuration.md#widget-reference)
 documents every widget's settings, and its
 [worked examples](docs/guides/configuration.md#worked-examples) include the
-day-timeline screen composed from the widgets above.
+day-timeline screen composed from the widgets above, and a screen composed
+from the day widgets.
 
 ## Architecture
 

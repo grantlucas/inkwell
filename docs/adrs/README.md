@@ -34,6 +34,7 @@ their only copy now.
 | [0012](0012-sleep-the-panel-between-refreshes.md) | Re-init before every push; power the panel off a few seconds after it (supersedes 0010) |
 | [0013](0013-restore-the-vendor-init-sequence.md) | Keep the reset-default drive rails for the full refresh (corrects 0009's rationale) |
 | [0014](0014-shield-the-tft-backplane-from-light.md) | Shield the panel's TFT backplane from light |
+| [0015](0015-placed-charts-share-a-range-through-the-day-data-span.md) | Placed charts share a temperature range by asking the day data module for the same span |
 
 ## Writing a new one
 
