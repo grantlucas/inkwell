@@ -18,9 +18,13 @@ type forecastReply struct {
 	Hourly struct {
 		Time        []string  `json:"time"`
 		Temperature []float64 `json:"temperature_2m"`
+		Precip      []float64 `json:"precipitation_probability"`
 	} `json:"hourly"`
 	Daily struct {
-		Time []string `json:"time"`
+		Time []string  `json:"time"`
+		Max  []float64 `json:"temperature_2m_max"`
+		Min  []float64 `json:"temperature_2m_min"`
+		Code []int     `json:"weather_code"`
 	} `json:"daily"`
 }
 
@@ -124,6 +128,41 @@ func TestOpenMeteo_RejectsBadQueries(t *testing.T) {
 	} {
 		if status, _ := askForecast(t, om, query); status != http.StatusBadRequest {
 			t.Errorf("%s: status = %d, want 400", query, status)
+		}
+	}
+}
+
+// A fake given a Sky answers with that weather instead of epoch hours, so
+// a golden can show a day a person would recognise: each hour's
+// temperature and chance of rain from Sky, each day's high and low the
+// warmest and coldest of its hours, and its weather code from Codes.
+func TestOpenMeteo_Sky(t *testing.T) {
+	om := fakehttp.OpenMeteo{
+		Now:  time.Date(2026, 10, 6, 10, 0, 0, 0, time.UTC),
+		Site: time.UTC,
+		Sky: func(day, hour int) (temp, precip float64) {
+			return float64(10*day + hour%5), float64(hour)
+		},
+		Codes: []int{61},
+	}
+	status, got := askForecast(t, om, "forecast_days=2&timezone=auto")
+	if status != http.StatusOK {
+		t.Fatalf("status = %d", status)
+	}
+	if got.Hourly.Temperature[7] != 2 || got.Hourly.Temperature[24+3] != 13 {
+		t.Errorf("hourly temperatures = %v, want Sky's", got.Hourly.Temperature)
+	}
+	if got.Hourly.Precip[23] != 23 {
+		t.Errorf("hour 23's chance = %v, want 23", got.Hourly.Precip[23])
+	}
+	wantDaily := []struct {
+		max, min float64
+		code     int
+	}{{4, 0, 61}, {14, 10, 0}}
+	for d, want := range wantDaily {
+		if got.Daily.Max[d] != want.max || got.Daily.Min[d] != want.min || got.Daily.Code[d] != want.code {
+			t.Errorf("day %d = %v/%v code %d, want %v/%v code %d",
+				d, got.Daily.Max[d], got.Daily.Min[d], got.Daily.Code[d], want.max, want.min, want.code)
 		}
 	}
 }

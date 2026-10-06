@@ -1,7 +1,9 @@
 # Separator Widget
 
-Draws a solid horizontal divider across the full width of its bounds,
-anchored to the **bottom** of the region. Registered under the dashboard
+Draws a solid divider across its bounds. A horizontal one (the default)
+runs the full width, anchored to the **bottom** of the region; a vertical
+one runs the full height, anchored to the **right** edge, for dividing
+widgets that sit side by side. Registered under the dashboard
 `type: separator`.
 
 Every row of the bar renders in solid `PaperBlack`. The `bw` packer
@@ -23,18 +25,21 @@ Top-level keys (`type`, `bounds`, `refresh`) are required by every widget. A
 separator never changes, so it should use `refresh: "static"` — that keeps it
 from ever opening the per-screen refresh gate.
 
-The bar is drawn at the bottom of `bounds`, so size the region's height to at
-least `thickness` and place the rule with `bounds`, not with extra padding.
+The bar is drawn at the bottom of `bounds` (the right edge, when vertical), so
+size the region's height (width) to at least `thickness` and place the rule
+with `bounds`, not with extra padding.
 
 The widget-specific keys live under `config:`.
 
 <!-- markdownlint-disable MD013 -->
 | Key         | Type    | Default | Description                                                                 |
 |-------------|---------|---------|-----------------------------------------------------------------------------|
-| `thickness` | integer | `2`     | Height of the bar in pixels. Must be positive. A float (e.g. `2.0`) is accepted and truncated to an integer. |
+| `thickness` | integer | `2`     | Height of the bar in pixels (width, when vertical). Must be positive. A float (e.g. `2.0`) is accepted and truncated to an integer. |
+| `orientation` | string | `horizontal` | `horizontal` or `vertical`: which way the rule runs. |
 <!-- markdownlint-enable MD013 -->
 
-A non-numeric `thickness`, or a value `<= 0`, is a configuration error.
+A non-numeric `thickness`, a value `<= 0`, or any other `orientation` is a
+configuration error.
 
 ## Example
 
@@ -44,4 +49,11 @@ A non-numeric `thickness`, or a value `<= 0`, is a configuration error.
   refresh: "static"
   config:
     thickness: 2
+
+# Between a left and a right column, under a 48 px header band.
+- type: separator
+  bounds: [532, 48, 534, 480]
+  refresh: "static"
+  config:
+    orientation: vertical
 ```
