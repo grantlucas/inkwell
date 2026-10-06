@@ -69,6 +69,8 @@ func TestProvider_DistinctKeysCacheIndependently(t *testing.T) {
 	// Repeats of each key are cached — no further fetches, no thrash.
 	_, _ = p.Forecast(ctx, loc1, ModelGEM, 1)
 	_, _ = p.Forecast(ctx, loc2, ModelGEM, 1)
+	// A location a few streets away rounds to the same tenth of a degree.
+	_, _ = p.Forecast(ctx, Location{Latitude: 43.236, Longitude: -79.841}, ModelGEM, 1)
 
 	if got := client.Total(); got != 3 {
 		t.Errorf("client called %d times, want 3 (one per distinct key)", got)
