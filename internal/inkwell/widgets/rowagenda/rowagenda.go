@@ -50,13 +50,14 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	now := w.now()
 	data := w.days.Days(now, rows)
 
-	eventOpts := eventOptions{ShowLocation: w.config.ShowLocation, Location: now.Location()}
+	agenda := agendaStyle(w.config.ShowLocation, now.Location())
 
-	// The row heights depend on every day's count, not just the row's
-	// own, so the counts are taken before anything is drawn.
+	// The row heights depend on every day's line count, not just the
+	// row's own, so the counts are taken before anything is drawn.
+	width := agendaWidth(w.bounds)
 	counts := make([]int, len(data.Days))
 	for i, day := range data.Days {
-		counts[i] = len(day.Events)
+		counts[i] = agenda.Lines(day.Events, width)
 	}
 
 	for i, row := range planRows(w.bounds, counts) {
@@ -72,7 +73,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 		// as separate columns rather than as one run of text.
 		daygrid.DrawVLine(frame, row.Agenda.Min.X-ruleInset, row.Bounds.Min.Y, row.Bounds.Max.Y, widget.PaperBlack)
 
-		renderAgenda(frame, row.Agenda, day.Events, row.Lines, eventOpts)
+		agenda.Draw(frame, agendaList(row), day.Events)
 
 		if !row.IsLast {
 			daygrid.DrawHLine(frame, row.Bounds.Min.X, row.Bounds.Max.X, row.Bounds.Max.Y-1, widget.PaperBlack)

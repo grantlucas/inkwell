@@ -1,6 +1,7 @@
 package rowagenda
 
 import (
+	"fmt"
 	"image"
 	"testing"
 	"time"
@@ -234,6 +235,50 @@ func TestWidget_NoFilledDateGutter(t *testing.T) {
 	}
 	if countIndexIn(frame, image.Rect(0, 0, gutterW, 480), widget.PaperWhite) == 0 {
 		t.Error("the gutter has no paper at all")
+	}
+}
+
+// A row that lost lines to a crowded week gives the last line it kept to
+// "+N MORE", counting every event it could not show, rather than
+// overprinting an event or dropping them silently.
+func TestWidget_ARowThatLostEventsSaysHowMany(t *testing.T) {
+	frame := renderToFrame(t, newWidget(overflowingEvents(), sampleForecast(), testTime))
+
+	// Monday carries nine events and is the busiest row, so it loses
+	// lines first.
+	row := planRows(panel, []int{9, 2, 7, 1, 6})[0]
+	if row.Lines >= 9 {
+		t.Fatalf("Monday kept %d lines for 9 events; the week should have trimmed it", row.Lines)
+	}
+	x := row.Agenda.Min.X + agendaPadX
+	baseline := row.Agenda.Min.Y + agendaPadY + (row.Lines-1)*daygrid.BodyLineH() + daygrid.BodyAscent()
+	box := image.Rect(x, baseline-daygrid.BodyAscent(), row.Agenda.Max.X, baseline-daygrid.BodyAscent()+daygrid.BodyLineH())
+
+	want := newTestFrame(800, 480)
+	daygrid.DrawText(want, x, baseline, fmt.Sprintf("+%d MORE", 9-(row.Lines-1)), daygrid.BodyBoldFace, widget.PaperBlack)
+	for y := box.Min.Y; y < box.Max.Y; y++ {
+		for xx := box.Min.X; xx < box.Max.X; xx++ {
+			if frame.ColorIndexAt(xx, y) != want.ColorIndexAt(xx, y) {
+				t.Fatalf("Monday's last line differs from %q at (%d,%d)", fmt.Sprintf("+%d MORE", 9-(row.Lines-1)), xx, y)
+			}
+		}
+	}
+}
+
+// At the narrowest bounds the widget accepts, "NOTHING SCHEDULED" is
+// wider than the agenda. It is cut like every other line, so it never
+// paints past the widget's edge over whatever shares the frame.
+func TestWidget_EmptyDayStaysInBounds(t *testing.T) {
+	frame := newTestFrame(800, 480)
+	w := New(image.Rect(0, 0, minWidth, 480), daygrid.InMemory(nil, nil), fixedClock(testTime), drawConfig("C", false))
+	if err := w.Render(frame); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if got := countIndexIn(frame, image.Rect(minWidth, 0, 800, 480), widget.PaperBlack); got != 0 {
+		t.Errorf("drew %d px past the widget's %d px edge", got, minWidth)
+	}
+	if countIndexIn(frame, image.Rect(agendaX, 0, minWidth, 480), widget.PaperBlack) == 0 {
+		t.Error("the empty days said nothing")
 	}
 }
 
