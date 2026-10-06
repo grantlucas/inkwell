@@ -12,6 +12,9 @@ import (
 // listing is a calendar widget that lists events, three by default.
 var listing = daygrid.Spec{Widget: "test-widget", MaxEvents: 3}
 
+// weatherOnly is a widget that draws the forecast and no events.
+var weatherOnly = daygrid.Spec{Widget: "test-widget", WeatherOnly: true}
+
 // topLevel is the dashboard's top-level weather settings.
 var topLevel = weather.NewProvider(nil, time.Hour, nil, weather.Settings{
 	Location: weather.Location{Latitude: 43.25, Longitude: -79.87},
@@ -154,6 +157,36 @@ func TestParseConfig_Accepts(t *testing.T) {
 			},
 		},
 		{
+			// A weather widget reads no calendar, so it has nothing to
+			// put in feeds; the weather settings work as they do anywhere.
+			label: "a weather-only widget needs no feeds", spec: weatherOnly, inherit: topLevel,
+			raw: map[string]any{"latitude": 51.5, "temp_unit": "C"},
+			check: func(t *testing.T, c daygrid.Config) {
+				if len(c.Feeds) != 0 {
+					t.Errorf("Feeds = %+v, want none", c.Feeds)
+				}
+				w := c.Weather
+				if w.Latitude != 51.5 || w.Longitude != -79.87 || w.TempUnit != "C" || w.Model != weather.ModelGEM {
+					t.Errorf("Weather = %+v, want its own latitude and unit over the top level", w)
+				}
+			},
+		},
+		{
+			label: "a weather-only widget with no settings at all", spec: weatherOnly, raw: nil, inherit: topLevel,
+			check: func(t *testing.T, c daygrid.Config) {
+				if c.Weather.TempUnit != "F" {
+					t.Errorf("TempUnit = %q, want the top level's F", c.Weather.TempUnit)
+				}
+			},
+		},
+		{
+			label: "a weather-only widget's own key", inherit: topLevel,
+			spec: daygrid.Spec{Widget: "test-widget", WeatherOnly: true, Extra: []string{"days"}},
+			raw:  map[string]any{"days": 4},
+			check: func(*testing.T, daygrid.Config) {
+			},
+		},
+		{
 			// The example config's bold-five screen.
 			label: "an existing bold-five config", spec: daygrid.Spec{Widget: "bold-five", MaxEvents: 4}, inherit: topLevel,
 			raw: map[string]any{
@@ -238,6 +271,18 @@ func TestParseConfig_Rejects(t *testing.T) {
 		// the accepted list.
 		{"another widget's key, explained", explains, feedsAnd("days", 7), "days is not supported: always five columns"},
 		{"a typo beside an explained key", explains, feedsAnd("max_event", 3), `unsupported setting "max_event" ` + accepted},
+		// A weather-only widget reads no calendar, so a calendar key
+		// pasted from a calendar widget's config says why it is wrong,
+		// and a typo lists only the weather settings.
+		{"feeds on a weather-only widget", weatherOnly, feedsAnd("", nil), "feeds is not supported: test-widget shows only the weather, so it reads no calendar"},
+		{"refresh on a weather-only widget", weatherOnly, map[string]any{"refresh": "15m"}, "refresh is not supported: test-widget shows only the weather"},
+		{"show_location on a weather-only widget", weatherOnly, map[string]any{"show_location": true}, "show_location is not supported: test-widget shows only the weather"},
+		{"max_events on a weather-only widget", weatherOnly, map[string]any{"max_events": 3}, "max_events is not supported: test-widget shows only the weather"},
+		{
+			"a typo on a weather-only widget", weatherOnly, map[string]any{"latitde": 43.0},
+			`unsupported setting "latitde" (accepted: latitude, longitude, temp_unit, weather_model)`,
+		},
+		{"a weather setting on a weather-only widget is still checked", weatherOnly, map[string]any{"temp_unit": "K"}, "invalid temp_unit"},
 		{
 			"max_events on a widget that doesn't list a fixed number", noMaxEvents, feedsAnd("max_events", 3),
 			`unsupported setting "max_events" (accepted: feeds, latitude, longitude, refresh, show_location, temp_unit, weather_model)`,

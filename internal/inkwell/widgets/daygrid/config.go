@@ -49,13 +49,22 @@ type Spec struct {
 	// pasted config, and the reason says what to do about it. Any other
 	// unknown key gets the list of accepted ones.
 	Rejected map[string]string
+	// WeatherOnly is a widget that draws the forecast and no events, so
+	// it reads no calendar. feeds is then not required but rejected,
+	// along with every other calendar setting (refresh, show_location,
+	// max_events), with that as the reason; MaxEvents is ignored. Its
+	// weather settings parse and inherit exactly as a calendar widget's
+	// do.
+	WeatherOnly bool
 }
 
-// sharedKeys are the settings every calendar widget accepts.
-var sharedKeys = []string{
-	"feeds", "refresh", "show_location",
-	"latitude", "longitude", "temp_unit", "weather_model",
-}
+// calendarKeys are the shared settings that configure a widget's
+// calendar, which a weather-only widget doesn't have.
+var calendarKeys = []string{"feeds", "refresh", "show_location"}
+
+// weatherKeys are the shared settings that say where and how a widget's
+// forecast is fetched and shown. Every day widget accepts them.
+var weatherKeys = []string{"latitude", "longitude", "temp_unit", "weather_model"}
 
 // ParseConfig parses the settings every calendar widget shares, the same
 // way for each, and rejects any key neither shared nor the widget's own,
@@ -70,16 +79,21 @@ func ParseConfig(spec Spec, raw map[string]any, inherit *weather.Provider) (Conf
 		return cfg, err
 	}
 
-	f, ok := raw["feeds"]
-	if !ok {
-		return cfg, fmt.Errorf("%s: feeds is required", name) //nolint:goerr113 // config validation message
+	// A weather-only widget has had every calendar key rejected above,
+	// so only the weather settings are left to parse.
+	if !spec.WeatherOnly {
+		f, ok := raw["feeds"]
+		if !ok {
+			return cfg, fmt.Errorf("%s: feeds is required", name) //nolint:goerr113 // config validation message
+		}
+		feeds, err := parseFeeds(name, f)
+		if err != nil {
+			return cfg, err
+		}
+		cfg.Feeds = feeds
 	}
-	feeds, err := parseFeeds(name, f)
-	if err != nil {
-		return cfg, err
-	}
-	cfg.Feeds = feeds
 
+	var err error
 	if v, ok := raw["refresh"]; ok {
 		if cfg.Refresh, err = parseRefresh(name, v); err != nil {
 			return cfg, err
@@ -134,9 +148,12 @@ func parseRefresh(name string, v any) (time.Duration, error) {
 // per run, so fixing them one at a time would look like the error was
 // wandering rather than counting down.
 func rejectUnknown(spec Spec, raw map[string]any) error {
-	accepted := slices.Concat(sharedKeys, spec.Extra)
-	if spec.MaxEvents > 0 {
-		accepted = append(accepted, "max_events")
+	accepted := slices.Concat(weatherKeys, spec.Extra)
+	if !spec.WeatherOnly {
+		accepted = append(accepted, calendarKeys...)
+		if spec.MaxEvents > 0 {
+			accepted = append(accepted, "max_events")
+		}
 	}
 	slices.Sort(accepted)
 	for _, key := range slices.Sorted(maps.Keys(raw)) {
@@ -145,6 +162,9 @@ func rejectUnknown(spec Spec, raw map[string]any) error {
 		}
 		if why, ok := spec.Rejected[key]; ok {
 			return fmt.Errorf("%s: %s is not supported: %s", spec.Widget, key, why)
+		}
+		if spec.WeatherOnly && (slices.Contains(calendarKeys, key) || key == "max_events") {
+			return fmt.Errorf("%s: %s is not supported: %s shows only the weather, so it reads no calendar", spec.Widget, key, spec.Widget)
 		}
 		return fmt.Errorf("%s: unsupported setting %q (accepted: %s)", spec.Widget, key, strings.Join(accepted, ", "))
 	}
