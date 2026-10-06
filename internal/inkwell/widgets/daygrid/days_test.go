@@ -20,7 +20,7 @@ func TestDays(t *testing.T) {
 	loc := time.FixedZone("UTC-5", -5*60*60)
 	now := time.Date(2026, 4, 28, 14, 30, 0, 0, loc)
 
-	days := Days(now, 5)
+	days := daysFrom(now, 5)
 	if len(days) != 5 {
 		t.Fatalf("got %d days, want 5", len(days))
 	}
@@ -56,8 +56,8 @@ func TestDays(t *testing.T) {
 
 func TestDays_NonePlanned(t *testing.T) {
 	for _, n := range []int{0, -1} {
-		if got := Days(time.Now(), n); len(got) != 0 {
-			t.Errorf("Days(n=%d) returned %d days, want none", n, len(got))
+		if got := daysFrom(time.Now(), n); len(got) != 0 {
+			t.Errorf("daysFrom(n=%d) returned %d days, want none", n, len(got))
 		}
 	}
 }
@@ -66,7 +66,7 @@ func TestDays_NonePlanned(t *testing.T) {
 // span the whole grid rather than the first day.
 func TestWindow(t *testing.T) {
 	now := time.Date(2026, 4, 28, 14, 30, 0, 0, time.UTC)
-	start, end := Window(Days(now, 7))
+	start, end := window(daysFrom(now, 7))
 
 	if want := time.Date(2026, 4, 28, 0, 0, 0, 0, time.UTC); !start.Equal(want) {
 		t.Errorf("start = %v, want %v", start, want)
@@ -77,9 +77,9 @@ func TestWindow(t *testing.T) {
 }
 
 func TestWindow_NoDays(t *testing.T) {
-	start, end := Window(nil)
+	start, end := window(nil)
 	if !start.IsZero() || !end.IsZero() {
-		t.Errorf("Window(nil) = %v, %v; want zero times", start, end)
+		t.Errorf("window(nil) = %v, %v; want zero times", start, end)
 	}
 }
 
@@ -107,7 +107,7 @@ func TestFilterEventsForDay(t *testing.T) {
 		},
 	}
 
-	filtered := FilterEventsForDay(events, day(2026, 4, 28, time.UTC))
+	filtered := filterEventsForDay(events, day(2026, 4, 28, time.UTC))
 	if len(filtered) != 2 {
 		t.Fatalf("got %d events, want 2", len(filtered))
 	}
@@ -152,7 +152,7 @@ func TestFilterEventsForDay_AllDayMultiDayNegativeTimezone(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
-			got := len(FilterEventsForDay([]ical.Event{trip}, day(2026, 6, tc.date, loc))) == 1
+			got := len(filterEventsForDay([]ical.Event{trip}, day(2026, 6, tc.date, loc))) == 1
 			if got != tc.want {
 				t.Errorf("trip present on %s = %v, want %v", tc.label, got, tc.want)
 			}
@@ -173,7 +173,7 @@ func TestFilterEventsForDay_SortByStart(t *testing.T) {
 			End:   time.Date(2026, 4, 28, 10, 0, 0, 0, time.UTC),
 		},
 	}
-	filtered := FilterEventsForDay(events, day(2026, 4, 28, time.UTC))
+	filtered := filterEventsForDay(events, day(2026, 4, 28, time.UTC))
 	if len(filtered) != 2 {
 		t.Fatalf("got %d events, want 2", len(filtered))
 	}
@@ -183,12 +183,12 @@ func TestFilterEventsForDay_SortByStart(t *testing.T) {
 }
 
 func TestFilterEventsForDay_Empty(t *testing.T) {
-	if got := FilterEventsForDay(nil, day(2026, 4, 28, time.UTC)); len(got) != 0 {
+	if got := filterEventsForDay(nil, day(2026, 4, 28, time.UTC)); len(got) != 0 {
 		t.Errorf("got %d events, want 0", len(got))
 	}
 }
 
-func TestFindForecast(t *testing.T) {
+func TestForecastFor(t *testing.T) {
 	days := []weather.DailyForecast{
 		{Date: time.Date(2026, 4, 27, 0, 0, 0, 0, time.UTC), High: 12},
 		{Date: time.Date(2026, 4, 28, 0, 0, 0, 0, time.UTC), High: 14},
@@ -198,7 +198,7 @@ func TestFindForecast(t *testing.T) {
 		label    string
 		days     []weather.DailyForecast
 		day      Day
-		wantHigh float64
+		wantHigh float64 // 0 means no forecast
 	}{
 		{"found", days, day(2026, 4, 28, time.UTC), 14},
 		{"not found", days, day(2026, 5, 10, time.UTC), 0},
@@ -210,9 +210,15 @@ func TestFindForecast(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			got := FindForecast(tt.days, tt.day)
-			if got.High != tt.wantHigh {
-				t.Errorf("High = %v, want %v", got.High, tt.wantHigh)
+			got := forecastFor(tt.days, tt.day)
+			if tt.wantHigh == 0 {
+				if got != nil {
+					t.Errorf("got %+v, want no forecast", got)
+				}
+				return
+			}
+			if got == nil || got.High != tt.wantHigh {
+				t.Errorf("got %+v, want high %v", got, tt.wantHigh)
 			}
 		})
 	}

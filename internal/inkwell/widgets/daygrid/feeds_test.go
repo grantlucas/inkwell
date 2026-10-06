@@ -10,7 +10,7 @@ import (
 const testWidget = "test-widget"
 
 func TestParseFeeds_ObjectForm(t *testing.T) {
-	feeds, err := ParseFeeds(testWidget, []any{
+	feeds, err := parseFeeds(testWidget, []any{
 		"https://example.com/personal.ics",
 		map[string]any{
 			"url":  "https://team.example/cal.ics",
@@ -23,7 +23,7 @@ func TestParseFeeds_ObjectForm(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("ParseFeeds: %v", err)
+		t.Fatalf("parseFeeds: %v", err)
 	}
 
 	if len(feeds) != 2 {
@@ -126,7 +126,7 @@ func TestParseFeeds_Errors(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
-			_, err := ParseFeeds(testWidget, tc.feeds)
+			_, err := parseFeeds(testWidget, tc.feeds)
 			if err == nil {
 				t.Fatal("expected an error")
 			}
@@ -140,7 +140,7 @@ func TestParseFeeds_Errors(t *testing.T) {
 // A feed's name should identify the feed in rule errors, since a bare
 // index into a list of long URLs tells an operator nothing.
 func TestParseFeeds_RuleErrorNamesTheFeed(t *testing.T) {
-	_, err := ParseFeeds(testWidget, []any{map[string]any{
+	_, err := parseFeeds(testWidget, []any{map[string]any{
 		"url":   "https://team.example/cal.ics",
 		"name":  "Team calendar",
 		"rules": []any{map[string]any{"match": "(unclosed"}},
@@ -155,12 +155,12 @@ func TestParseFeeds_RuleErrorNamesTheFeed(t *testing.T) {
 
 // The object form is usable purely to label a feed, with no rules at all.
 func TestParseFeeds_ObjectWithoutRules(t *testing.T) {
-	feeds, err := ParseFeeds(testWidget, []any{map[string]any{
+	feeds, err := parseFeeds(testWidget, []any{map[string]any{
 		"url":  "https://team.example/cal.ics",
 		"name": "Team calendar",
 	}})
 	if err != nil {
-		t.Fatalf("ParseFeeds: %v", err)
+		t.Fatalf("parseFeeds: %v", err)
 	}
 	if len(feeds) != 1 {
 		t.Fatalf("got %d feeds, want 1", len(feeds))

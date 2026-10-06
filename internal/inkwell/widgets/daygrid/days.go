@@ -13,17 +13,17 @@ import (
 //
 // The end is a method rather than a field so it cannot be left out. A
 // Day literal missing its end would make the timed-event branch of
-// FilterEventsForDay compare against the zero time, which is never
+// filterEventsForDay compare against the zero time, which is never
 // after anything — the column would come back with its all-day events
 // and none of its timed ones, which looks like a quiet day rather than
-// a bug. Days is the intended producer, but the type is exported and
+// a bug. daysFrom is the intended producer, but the type is exported and
 // tests build literals, so the trap is worth closing in the type.
 type Day struct {
 	Start   time.Time
 	IsToday bool
 
 	// Events are the day's events, all-day first and then by start, as
-	// FilterEventsForDay buckets them.
+	// filterEventsForDay buckets them.
 	Events []calendar.Event
 	// Forecast is the day's forecast, or nil when the forecast does not
 	// reach it. Nil is the absence: a zero DailyForecast would read as a
@@ -34,7 +34,7 @@ type Day struct {
 // End is the local midnight the day runs to, exclusive.
 func (d Day) End() time.Time { return d.Start.AddDate(0, 0, 1) }
 
-// Days builds n consecutive days starting from the local midnight of
+// daysFrom builds n consecutive days starting from the local midnight of
 // now, in now's own location.
 //
 // The clock is injected rather than read here, and the zone comes from
@@ -42,7 +42,7 @@ func (d Day) End() time.Time { return d.Start.AddDate(0, 0, 1) }
 // widget a time already in the display zone, so a widget that called
 // time.Now().In(somewhere) would quietly disagree with the rest of the
 // panel about which day it is.
-func Days(now time.Time, n int) []Day {
+func daysFrom(now time.Time, n int) []Day {
 	loc := now.Location()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 
@@ -56,16 +56,16 @@ func Days(now time.Time, n int) []Day {
 	return days
 }
 
-// Window returns the span the day list covers, which is what a calendar
+// window returns the span the day list covers, which is what a calendar
 // or forecast fetch should ask for.
-func Window(days []Day) (start, end time.Time) {
+func window(days []Day) (start, end time.Time) {
 	if len(days) == 0 {
 		return time.Time{}, time.Time{}
 	}
 	return days[0].Start, days[len(days)-1].End()
 }
 
-// FilterEventsForDay returns the events overlapping the day, all-day
+// filterEventsForDay returns the events overlapping the day, all-day
 // first and then by start time.
 //
 // All-day events are calendar date labels, not instants. An iCal
@@ -79,7 +79,7 @@ func Window(days []Day) (start, end time.Time) {
 //
 // This is the function issue #92 exists for: three independent copies
 // would drift, and the failure is silent and off by one day.
-func FilterEventsForDay(events []calendar.Event, day Day) []calendar.Event {
+func filterEventsForDay(events []calendar.Event, day Day) []calendar.Event {
 	col := dateOnly(day.Start)
 	var out []calendar.Event
 	for _, e := range events {
@@ -114,19 +114,10 @@ func dateOnly(t time.Time) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
 
-// FindForecast returns the DailyForecast for a day, or a zero value
-// when the forecast does not reach that far. Matching is by calendar
-// date rather than by instant, for the same zone reason as the all-day
-// bucketing above.
-func FindForecast(days []weather.DailyForecast, day Day) weather.DailyForecast {
-	if f := forecastFor(days, day); f != nil {
-		return *f
-	}
-	return weather.DailyForecast{}
-}
-
 // forecastFor returns a copy of the day's forecast, or nil when the
-// forecast does not reach that far.
+// forecast does not reach that far. Matching is by calendar date rather
+// than by instant, for the same zone reason as the all-day bucketing
+// above.
 func forecastFor(days []weather.DailyForecast, day Day) *weather.DailyForecast {
 	for _, d := range days {
 		if d.Date.Year() == day.Start.Year() && d.Date.YearDay() == day.Start.YearDay() {

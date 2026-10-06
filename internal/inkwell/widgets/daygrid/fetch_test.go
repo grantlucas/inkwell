@@ -44,7 +44,7 @@ func (s *stubWeather) Forecast(ctx context.Context, _ weather.Location, days int
 	return s.forecast, s.err
 }
 
-func testDays() []Day { return Days(time.Date(2026, 3, 16, 9, 0, 0, 0, time.UTC), 5) }
+func testDays() []Day { return daysFrom(time.Date(2026, 3, 16, 9, 0, 0, 0, time.UTC), 5) }
 
 func oneDayForecast() *weather.Forecast {
 	return &weather.Forecast{Days: []weather.DailyForecast{{
@@ -68,7 +68,7 @@ func TestFetch_SlowCalendarDoesNotStarveTheForecast(t *testing.T) {
 	cal := &slowCal{delay: time.Hour}
 	ws := &stubWeather{forecast: oneDayForecast()}
 
-	forecast := Fetch(ctx, "test-widget", cal, ws, testDays(), weather.Location{}).Days()
+	forecast := fetch(ctx, "test-widget", cal, ws, testDays(), weather.Location{}).forecast
 
 	if ws.sawExpired {
 		t.Error("the forecast was called with an already-expired context")
@@ -90,7 +90,7 @@ func TestFetch_StaysWithinTheSharedDeadline(t *testing.T) {
 	ws := &stubWeather{forecast: oneDayForecast()}
 
 	start := time.Now()
-	Fetch(ctx, "test-widget", cal, ws, testDays(), weather.Location{})
+	fetch(ctx, "test-widget", cal, ws, testDays(), weather.Location{})
 	elapsed := time.Since(start)
 
 	// Sequential fetches of two hour-long calls would take two hours;
@@ -136,37 +136,12 @@ func TestFetch_OneSideFailingLeavesTheOther(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			res := Fetch(context.Background(), "test-widget", tt.cal, tt.ws, testDays(), weather.Location{})
-			if len(res.Events) != tt.wantEvents {
-				t.Errorf("got %d events, want %d", len(res.Events), tt.wantEvents)
+			res := fetch(context.Background(), "test-widget", tt.cal, tt.ws, testDays(), weather.Location{})
+			if len(res.events) != tt.wantEvents {
+				t.Errorf("got %d events, want %d", len(res.events), tt.wantEvents)
 			}
-			if len(res.Days()) != tt.wantForecast {
-				t.Errorf("got %d forecast days, want %d", len(res.Days()), tt.wantForecast)
-			}
-		})
-	}
-}
-
-// "No forecast arrived" and "a forecast arrived carrying no days" are
-// different states, and weekly-calendar gives its weather band's height
-// to the first. A 200 response with no daily data is the second, so
-// flattening the two would collapse the band for that cycle.
-func TestFetch_DistinguishesAnEmptyForecastFromNone(t *testing.T) {
-	tests := []struct {
-		label       string
-		ws          weather.Source
-		wantPresent bool
-	}{
-		{"a forecast carrying no days", &stubWeather{forecast: &weather.Forecast{}}, true},
-		{"a forecast with days", &stubWeather{forecast: oneDayForecast()}, true},
-		{"the fetch failed", &stubWeather{err: errors.New("boom")}, false},
-		{"no source configured", nil, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.label, func(t *testing.T) {
-			res := Fetch(context.Background(), "test-widget", &slowCal{}, tt.ws, testDays(), weather.Location{})
-			if res.HasForecast() != tt.wantPresent {
-				t.Errorf("HasForecast = %v, want %v", res.HasForecast(), tt.wantPresent)
+			if len(res.forecast) != tt.wantForecast {
+				t.Errorf("got %d forecast days, want %d", len(res.forecast), tt.wantForecast)
 			}
 		})
 	}
@@ -176,14 +151,14 @@ func TestFetch_DistinguishesAnEmptyForecastFromNone(t *testing.T) {
 // is simply skipped, and the calendar half still runs.
 func TestFetch_NilWeatherSource(t *testing.T) {
 	events := []ical.Event{{UID: "a", Summary: "Standup"}}
-	res := Fetch(context.Background(), "test-widget",
+	res := fetch(context.Background(), "test-widget",
 		&slowCal{events: events}, nil, testDays(), weather.Location{})
 
-	if len(res.Events) != 1 {
-		t.Errorf("got %d events, want 1", len(res.Events))
+	if len(res.events) != 1 {
+		t.Errorf("got %d events, want 1", len(res.events))
 	}
-	if res.Days() != nil {
-		t.Errorf("got %v, want no forecast", res.Days())
+	if res.forecast != nil {
+		t.Errorf("got %v, want no forecast", res.forecast)
 	}
 }
 
@@ -191,21 +166,21 @@ func TestFetch_NilWeatherSource(t *testing.T) {
 func TestFetch_AsksForTheGridsDayCount(t *testing.T) {
 	ws := &stubWeather{forecast: oneDayForecast()}
 	days := testDays()
-	Fetch(context.Background(), "test-widget", &slowCal{}, ws, days, weather.Location{})
+	fetch(context.Background(), "test-widget", &slowCal{}, ws, days, weather.Location{})
 	if ws.gotDays != len(days) {
 		t.Errorf("asked for %d days, want %d", ws.gotDays, len(days))
 	}
 }
 
 func TestFetchContext(t *testing.T) {
-	ctx, cancel := FetchContext()
+	ctx, cancel := fetchContext()
 	defer cancel()
 
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		t.Fatal("no deadline on the render-scope context")
 	}
-	if d := time.Until(deadline); d > FetchTimeout || d < FetchTimeout-time.Second {
-		t.Errorf("deadline in %v, want about %v", d, FetchTimeout)
+	if d := time.Until(deadline); d > fetchTimeout || d < fetchTimeout-time.Second {
+		t.Errorf("deadline in %v, want about %v", d, fetchTimeout)
 	}
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
-// MustLoadFace runs at package init with valid embedded fonts. Pin its
+// mustLoadFace runs at package init with valid embedded fonts. Pin its
 // failure branch by swapping in data that will not parse.
 func TestMustLoadFace_PanicsOnFontError(t *testing.T) {
 	restore := fonts.SwapDataForTest([]byte("bad"), []byte("bad"))
@@ -25,7 +25,7 @@ func TestMustLoadFace_PanicsOnFontError(t *testing.T) {
 			t.Errorf("panic = %v, want a string naming the failed face", r)
 		}
 	}()
-	_ = MustLoadFace(fonts.Regular, 16, "smoke")
+	_ = mustLoadFace(fonts.Regular, 16, "smoke")
 }
 
 // The body tier is the floor for text on this panel at distance, and
@@ -83,8 +83,8 @@ func TestDrawLinesAndPixels(t *testing.T) {
 	// Out-of-frame coordinates are clipped rather than panicking: the
 	// screens position content from a band's top and the frame is
 	// shared with every other widget.
-	SetPixel(frame, -1, -1, widget.PaperBlack)
-	SetPixel(frame, 100, 100, widget.PaperBlack)
+	setPixel(frame, -1, -1, widget.PaperBlack)
+	setPixel(frame, 100, 100, widget.PaperBlack)
 	if got := countIdx(frame, widget.PaperBlack); got != 11 {
 		t.Errorf("an off-frame pixel was drawn: %d inked", got)
 	}

@@ -7,7 +7,7 @@
 // inside it, so a widget is only layout and drawing.
 //
 // The part that really must not be copied is the all-day bucketing in
-// FilterEventsForDay: an iCal VALUE=DATE is anchored to UTC midnight by
+// filterEventsForDay: an iCal VALUE=DATE is anchored to UTC midnight by
 // the parser while days are built in the viewer's local zone, so comparing
 // them as instants leaks an all-day event into the previous local day in
 // any negative-UTC zone. Independent copies of that would drift, and the
@@ -50,13 +50,13 @@ type Data struct {
 // dependencies the app hands every widget. A missing dependency is a
 // wiring fault, reported with widgetName.
 func New(widgetName string, cfg Config, deps widget.Deps) (Source, error) {
-	if err := RequireDeps(widgetName, deps); err != nil {
+	if err := requireDeps(widgetName, deps); err != nil {
 		return nil, err
 	}
 	m := &module{
 		widget:   widgetName,
 		cal:      deps.Calendar.Source(cfg.Feeds, cfg.Refresh),
-		location: cfg.Weather.Location(),
+		location: cfg.Weather.location(),
 	}
 	if !cfg.NoWeather {
 		m.weather = deps.Weather.SourceForModel(cfg.Weather.Model)
@@ -73,11 +73,11 @@ type module struct {
 }
 
 func (m *module) Days(now time.Time, n int) Data {
-	days := Days(now, n)
-	ctx, cancel := FetchContext()
+	days := daysFrom(now, n)
+	ctx, cancel := fetchContext()
 	defer cancel()
-	fetched := Fetch(ctx, m.widget, m.cal, m.weather, days, m.location)
-	return assemble(days, fetched.Events, fetched.Days())
+	got := fetch(ctx, m.widget, m.cal, m.weather, days, m.location)
+	return assemble(days, got.events, got.forecast)
 }
 
 // assemble gives each day its events and its forecast, and takes the
@@ -85,7 +85,7 @@ func (m *module) Days(now time.Time, n int) Data {
 func assemble(days []Day, events []calendar.Event, forecast []weather.DailyForecast) Data {
 	var known []weather.DailyForecast
 	for i := range days {
-		days[i].Events = FilterEventsForDay(events, days[i])
+		days[i].Events = filterEventsForDay(events, days[i])
 		if f := forecastFor(forecast, days[i]); f != nil {
 			days[i].Forecast = f
 			known = append(known, *f)

@@ -6,10 +6,10 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
-// RequireDeps checks that a calendar widget was handed everything it fetches
+// requireDeps checks that a calendar widget was handed everything it fetches
 // through. The app always supplies both, so a missing one is a wiring fault
 // to report, not a gap to fill with a default.
-func RequireDeps(widgetName string, deps widget.Deps) error {
+func requireDeps(widgetName string, deps widget.Deps) error {
 	if deps.Calendar == nil {
 		return fmt.Errorf("%s: no calendar module", widgetName)
 	}
