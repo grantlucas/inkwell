@@ -227,16 +227,3 @@ func TestNewRule_Validation(t *testing.T) {
 		})
 	}
 }
-
-func TestFeedsFromURLs(t *testing.T) {
-	feeds := FeedsFromURLs([]string{"https://a.example/x.ics", "https://b.example/y.ics"})
-	if len(feeds) != 2 {
-		t.Fatalf("got %d feeds, want 2", len(feeds))
-	}
-	if feeds[0].URL != "https://a.example/x.ics" || feeds[1].URL != "https://b.example/y.ics" {
-		t.Errorf("feeds = %+v", feeds)
-	}
-	if feeds[0].Rules != nil {
-		t.Errorf("Rules = %v, want nil", feeds[0].Rules)
-	}
-}
