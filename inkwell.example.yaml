@@ -267,14 +267,15 @@ dashboard:
     # screen is shown; set one to rotate onto this screen, or move it to
     # the top of the list.
     #
-    #   +--------------------------------------------------+
-    #   |                fuzzy_clock (scale 2)              |
-    #   +------------------------------+-------------------+
-    #   |                              |   today-weather   |
-    #   |         day-timeline         +-------------------+
-    #   |  hours | weather lane | events|   weather-ahead   |
-    #   |                              |  (next four days) |
-    #   +------------------------------+-------------------+
+    #   +----------------------------------------------------+  0
+    #   |               fuzzy_clock, scale 2                 |
+    #   +================================+===================+  46
+    #   |                                #   today-weather   |
+    #   |          day-timeline          #-------------------+  168
+    #   |  hours | weather lane | events #   weather-ahead   |
+    #   |                                #  (next four days) |
+    #   +--------------------------------+-------------------+  480
+    #   0                               532                 800
     - name: day-timeline
       widgets:
         # The header band: the fuzzy clock at twice the body size, the

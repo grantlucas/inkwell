@@ -365,12 +365,16 @@ nothing and saves four flashes an hour.
 
 ### `separator`
 
-A horizontal rule. Purely structural.
+A solid rule between widgets. Purely structural. A horizontal rule runs
+along the bottom of its bounds, under the widget above it; a vertical
+one runs down the right edge of its bounds, between widgets side by
+side.
 
 <!-- markdownlint-disable MD013 -->
 | Key | Type | Default | Accepted values | Impact |
 |-----|------|---------|-----------------|--------|
 | `thickness` | integer | `2` | Any positive integer | Line thickness in pixels. Drawn solid black — a gray hairline would vanish under the BW threshold. |
+| `orientation` | string | `"horizontal"` | `horizontal`, `vertical` | Which way the rule runs. A horizontal rule fills the bottom `thickness` rows of the bounds, a vertical one the right-most `thickness` columns. |
 <!-- markdownlint-enable MD013 -->
 
 Always `refresh: "static"`. It never changes, so it should never be the
@@ -681,7 +685,9 @@ rather than striking it through, or behind a "+N" tag. Outside the
 window it is not drawn.
 
 The widget is meant for the left of a screen, and needs at least
-240 × 160 px.
+238 × 160 px. The [day-timeline screen](#the-day-timeline-screen) in
+the example config gives it 532 × 432 px under a clock band, beside
+`today-weather` and `weather-ahead`.
 
 <!-- markdownlint-disable MD013 -->
 | Key | Type | Default | Accepted values | Impact |
@@ -741,9 +747,12 @@ since the widget reads no calendar, and so is `days`, which belongs to
 
 ```yaml
 - type: today-weather
-  bounds: [534, 48, 800, 208]
+  bounds: [534, 48, 800, 168]
   refresh: "1h"    # the forecast changes slowly
 ```
+
+On the [day-timeline screen](#the-day-timeline-screen) it sits at the
+top of the right-hand column, above `weather-ahead`.
 
 ### `weather-ahead`
 
@@ -759,8 +768,9 @@ on its own.
 The rows split the widget's height evenly, with a rule between them.
 Each row needs at least 222 × 62 px, so four days need 222 × 248 px and
 a week needs 222 × 434 px. Below that it logs and draws nothing rather
-than spilling onto its neighbours. The right-hand third of the panel
-under `today-weather`, 266 × 272 px, holds four days.
+than spilling onto its neighbours. The right-hand column of the
+[day-timeline screen](#the-day-timeline-screen) under `today-weather`,
+266 × 311 px, holds four days.
 
 A day the forecast doesn't reach says `NO FORECAST` under its date
 instead of drawing numbers nobody forecast. A failed fetch doesn't stop
@@ -782,13 +792,59 @@ widget reads no calendar.
 
 ```yaml
 - type: weather-ahead
-  bounds: [534, 208, 800, 480]
+  bounds: [534, 169, 800, 480]
   refresh: "1h"    # the forecast changes slowly
   config:
     days: 4
 ```
 
 ## Worked examples
+
+### The day-timeline screen
+
+Today hour by hour, composed from widgets rather than drawn as one. It
+is an active screen in [`inkwell.example.yaml`](../../inkwell.example.yaml),
+listed after `weekly`; with no `rotate_interval` only the first screen
+shows, so set one or move this screen to the top of the list to see it.
+
+```text
++----------------------------------------------------+  0
+|               fuzzy_clock, scale 2                 |
++================================+===================+  46
+|                                #   today-weather   |
+|          day-timeline          #-------------------+  168
+|  hours | weather lane | events #   weather-ahead   |
+|                                #  (next four days) |
++--------------------------------+-------------------+  480
+0                               532                 800
+```
+
+<!-- markdownlint-disable MD013 -->
+| Widget | Bounds | `refresh` | Notes |
+|--------|--------|-----------|-------|
+| [`fuzzy_clock`](#fuzzy_clock) | `[0, 0, 800, 46]` | `"5m"` | `scale: 2`, the largest whose longest phrase fits 800 px. |
+| [`separator`](#separator) | `[0, 46, 800, 48]` | `"static"` | 2 px under the clock band. |
+| [`day-timeline`](#day-timeline) | `[0, 48, 532, 480]` | `"15m"` | The agenda and the weather lane, 07:00–22:00 by default. |
+| [`separator`](#separator) | `[532, 48, 534, 480]` | `"static"` | `orientation: vertical`, as heavy as the rule under the clock. |
+| [`today-weather`](#today-weather) | `[534, 48, 800, 168]` | `"1h"` | Hourly also turns the day over at midnight. |
+| [`separator`](#separator) | `[534, 168, 800, 169]` | `"static"` | 1 px, matching the rules between weather-ahead's rows; weather-ahead draws none above its first. |
+| [`weather-ahead`](#weather-ahead) | `[534, 169, 800, 480]` | `"1h"` | `days: 4`, about 77 px a row. |
+<!-- markdownlint-enable MD013 -->
+
+The bounds tile the panel exactly: every pixel belongs to exactly one
+widget. Each widget keeps its own cadence, so the clock
+refreshes the panel every five minutes without the calendar or the
+forecast asking for more. Cadences are wall-clock aligned, so the 15m
+agenda and the 1h weather land on minutes the 5m clock is already
+refreshing.
+
+A widget whose data does not arrive draws what it can and leaves the
+others alone. With the calendar feed down, the grid is drawn with no
+events while the clock and the weather draw as usual. With the forecast
+down, the weather lane is blank and both weather widgets say
+`NO FORECAST`, while the agenda and the clock draw as usual. The screen
+is tested in both cases, along with a golden of the whole screen, by
+loading this entry from the example config.
 
 ### A quiet dashboard
 

@@ -64,7 +64,9 @@ _Avoid_: Cursor, current-time line
 
 **Day-timeline**:
 A screen that centres on today: the agenda placed by time of day, with the
-hourly weather lane beside it.
+hourly weather lane beside it. It is composed from widgets: the fuzzy clock
+across the top, the day-timeline widget (agenda and weather lane) on the left,
+and today-weather above weather-ahead on the right.
 _Avoid_: Daily planner, schedule view
 
 **Weather lane**:
