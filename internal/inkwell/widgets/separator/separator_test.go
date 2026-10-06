@@ -2,6 +2,7 @@ package separator
 
 import (
 	"image"
+	"slices"
 	"testing"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
@@ -136,5 +137,93 @@ func TestFactory_NegativeThickness(t *testing.T) {
 	_, err := Factory(image.Rect(0, 0, 100, 10), map[string]any{"thickness": -1}, widget.Deps{})
 	if err == nil {
 		t.Fatal("expected error for negative thickness")
+	}
+}
+
+// A vertical separator is a rule down the right edge of its bounds,
+// thickness columns wide, so a screen can divide side-by-side widgets the
+// way a horizontal one divides stacked ones.
+func TestWidget_RenderVertical(t *testing.T) {
+	tests := []struct {
+		label     string
+		bounds    image.Rectangle
+		thickness int
+		// wantBlack are the columns inked down the bounds' whole height;
+		// every other pixel in the frame is paper.
+		wantBlack []int
+	}{
+		{label: "a 2 px rule filling its bounds", bounds: image.Rect(10, 5, 12, 40), thickness: 2, wantBlack: []int{10, 11}},
+		{label: "a 1 px rule at the right edge", bounds: image.Rect(10, 5, 14, 40), thickness: 1, wantBlack: []int{13}},
+		{label: "thicker than its bounds fills them", bounds: image.Rect(10, 5, 12, 40), thickness: 5, wantBlack: []int{10, 11}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			w := NewVertical(tt.bounds, tt.thickness)
+			frame := image.NewPaletted(image.Rect(0, 0, 20, 50), palette)
+			if err := w.Render(frame); err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			for y := range 50 {
+				for x := range 20 {
+					want := uint8(widget.PaperWhite)
+					if y >= tt.bounds.Min.Y && y < tt.bounds.Max.Y && slices.Contains(tt.wantBlack, x) {
+						want = widget.PaperBlack
+					}
+					if got := frame.ColorIndexAt(x, y); got != want {
+						t.Fatalf("(%d, %d) = %d, want %d", x, y, got, want)
+					}
+				}
+			}
+		})
+	}
+}
+
+// orientation picks which way the rule runs; anything else is a
+// configuration error naming what it accepts.
+func TestFactory_Orientation(t *testing.T) {
+	tests := []struct {
+		label   string
+		config  map[string]any
+		inked   image.Point // a pixel the rule covers
+		paper   image.Point // a pixel it leaves
+		wantErr string
+	}{
+		{label: "horizontal by default", config: nil, inked: image.Pt(0, 9), paper: image.Pt(9, 0)},
+		{label: "horizontal", config: map[string]any{"orientation": "horizontal"}, inked: image.Pt(0, 9), paper: image.Pt(9, 0)},
+		{label: "vertical", config: map[string]any{"orientation": "vertical"}, inked: image.Pt(9, 0), paper: image.Pt(0, 9)},
+		{
+			label:   "unknown",
+			config:  map[string]any{"orientation": "diagonal"},
+			wantErr: `separator: orientation must be "horizontal" or "vertical", got "diagonal"`,
+		},
+		{
+			label:   "not a string",
+			config:  map[string]any{"orientation": 1},
+			wantErr: `separator: orientation must be "horizontal" or "vertical", got 1`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			w, err := Factory(image.Rect(0, 0, 10, 10), tt.config, widget.Deps{})
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Fatalf("err = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Factory: %v", err)
+			}
+			frame := image.NewPaletted(image.Rect(0, 0, 10, 10), palette)
+			if err := w.Render(frame); err != nil {
+				t.Fatalf("Render: %v", err)
+			}
+			if frame.ColorIndexAt(tt.inked.X, tt.inked.Y) != widget.PaperBlack {
+				t.Errorf("%v is paper, want the rule", tt.inked)
+			}
+			if frame.ColorIndexAt(tt.paper.X, tt.paper.Y) != widget.PaperWhite {
+				t.Errorf("%v is inked, want paper", tt.paper)
+			}
+		})
 	}
 }
