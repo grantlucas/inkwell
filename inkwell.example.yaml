@@ -253,6 +253,47 @@ dashboard:
     #         # Location, model and temp_unit are inherited from the
     #         # top-level weather: block; override per widget if needed.
 
+    # A fifth screen, in progress: the day-timeline. Today only, laid out
+    # by time of day on an hourly grid, so a long meeting looks long and
+    # a short one looks short. Events that have finished are outlines and
+    # events still to come are solid blocks; the solid blocks move with
+    # the schedule, so they don't burn in the way a fixed fill would.
+    #
+    # The grid shows a window of whole hours, 07:00 to 22:00 unless you
+    # set start_hour and end_hour. An event crossing an edge of the window
+    # is cut off there with an arrowhead pointing the way it carries on,
+    # and events wholly outside it are counted in a "+N EARLIER" or
+    # "+N LATER" note. The widget fills the left of the screen; the right
+    # is where the weather for today and the days ahead will go.
+    #
+    # - name: day-timeline
+    #   widgets:
+    #     - type: fuzzy_clock
+    #       bounds: [0, 0, 800, 46]
+    #       refresh: "5m"
+    #       config:
+    #         scale: 2
+    #     - type: separator
+    #       bounds: [0, 46, 800, 48]
+    #       refresh: "static"
+    #     - type: day-timeline
+    #       bounds: [0, 48, 500, 480]
+    #       refresh: "15m"   # how often it may refresh the panel
+    #       config:
+    #         # The shared calendar keys, plus the window. max_events is
+    #         # rejected: every event in the window is placed at its
+    #         # time, and the rest are counted.
+    #         feeds:
+    #           - "https://example.com/my-calendar.ics"
+    #         start_hour: 7        # first hour shown, 0-18
+    #         end_hour: 22         # where the grid ends, 6-24; at
+    #                              # least six hours after start_hour
+    #         show_location: false
+    #         refresh: "15m"       # calendar cache TTL, NOT the panel
+    #                              # refresh cadence above
+    #         # Location, model and temp_unit are inherited from the
+    #         # top-level weather: block; override per widget if needed.
+
     # today-weather is a widget rather than a screen: today's forecast as
     # one block — the condition icon, the high at 3x, the low beside it
     # and the condition name — to place on any screen beside other

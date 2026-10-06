@@ -625,6 +625,52 @@ than each line — summaries often contain real newlines, so use `(?m)`
 for per-line anchoring. An invalid regex fails at startup, naming the
 feed and rule index.
 
+### `day-timeline`
+
+Today only, on an hourly grid. Each event is a block from its real
+start to its real end, so a long meeting looks long and a short one
+looks short. Events that have finished are drawn as outlines and events
+still to come as solid blocks, so the past and the rest of the day read
+apart without reading a time. A solid block is a large black fill, but
+it moves with the schedule, so it does not burn in the way a fixed fill
+would.
+
+Each block is labelled with its start time and title, and a block with
+room for a second line adds "UNTIL" and its end time.
+
+The grid shows a window of whole hours, labelled down its left edge.
+An event crossing an edge of the window is cut off at the edge, with an
+arrowhead pointing the way it carries on. Events wholly outside the
+window are not drawn; a "+N EARLIER" note above the grid or a
+"+N LATER" note below it counts them, and each note takes height only
+when there is something to count. A block too short to hold a line of
+text is drawn without its label.
+
+The widget is meant for the left of a screen. It draws no weather and
+no all-day events yet: the weather lane beside the grid and the strip
+of all-day events above it are still to come.
+
+<!-- markdownlint-disable MD013 -->
+| Key | Type | Default | Accepted values | Impact |
+|-----|------|---------|-----------------|--------|
+| `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Same form as `weekly-calendar`, including [feed rules](#feed-rules). |
+| `start_hour` | int | `7` | `0`–`24`, whole hours | First hour the grid shows. |
+| `end_hour` | int | `22` | `0`–`24`, whole hours | Hour the grid ends at; `24` is midnight. Must be after `start_hour`, and the window at least six hours. |
+| `refresh` | duration | `"15m"` | `>= 1m` | **Calendar data cache TTL** — how often feeds are re-fetched. Not the render cadence. |
+| `show_location` | bool | `false` | `true`, `false` | Appends the event's location to its label, when it has one and the block has room. |
+| `latitude` | number | inherits `weather.latitude` | `[-90, 90]` | Per-widget forecast location override. |
+| `longitude` | number | inherits `weather.longitude` | `[-180, 180]` | Per-widget forecast location override. |
+| `temp_unit` | string | inherits `weather.temp_unit` | `C`, `F` | Per-widget unit override. |
+| `weather_model` | string | inherits `weather.model` | `gfs`, `ecmwf`, `gem` | Per-widget model override. |
+<!-- markdownlint-enable MD013 -->
+
+There is no `max_events`: every event in the window is placed at its
+time, and the rest are counted. It is rejected with that explanation. A
+window of `start_hour: 7.5`, an `end_hour` before `start_hour`, or a
+window under six hours stops the dashboard loading with a message
+saying which rule it broke. Suggested panel refresh: `"15m"`, like the
+other calendar screens.
+
 ### `today-weather`
 
 Today's forecast as a block you can place anywhere on a screen: the
