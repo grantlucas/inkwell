@@ -5,42 +5,25 @@ import (
 	"log"
 	"time"
 
-	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
-	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 )
 
 var _ widget.Widget = (*Widget)(nil)
 
-// Config holds parsed bold-five configuration. The keys match
-// weekly-calendar's, so a screen can be swapped between the two in the
-// rotation without rewriting its config.
-type Config struct {
-	Feeds        []calendar.Feed
-	Refresh      time.Duration
-	MaxEvents    int
-	ShowLocation bool
-
-	// Weather carries the location, unit and model, along with which of
-	// them this widget actually set — Factory fills the rest from the
-	// shared Provider's defaults, so a dashboard configures them once
-	// at the top level.
-	Weather daygrid.WeatherConfig
-}
-
 // Widget renders the bold-five screen.
 type Widget struct {
-	bounds  image.Rectangle
-	cal     calendar.Source
-	weather weather.Source
-	now     func() time.Time
-	config  Config
+	bounds image.Rectangle
+	days   daygrid.Source
+	now    func() time.Time
+	config daygrid.Config
 }
 
-// New creates a bold-five Widget from pre-built data sources.
-func New(bounds image.Rectangle, cal calendar.Source, ws weather.Source, now func() time.Time, cfg Config) *Widget {
-	return &Widget{bounds: bounds, cal: cal, weather: ws, now: now, config: cfg}
+// New creates a bold-five Widget drawing the days from days. Of cfg it
+// reads only how events are listed and the temperature unit; where the
+// days come from is the day data module's business.
+func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg daygrid.Config) *Widget {
+	return &Widget{bounds: bounds, days: days, now: now, config: cfg}
 }
 
 // Bounds returns the rectangle this widget occupies.
@@ -65,29 +48,16 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	// re-resolving a zone here. Events carry whatever zone their feed
 	// serialized them with, so they still need converting.
 	now := w.now()
-	loc := now.Location()
-	days := daygrid.Days(now, columns)
-
-	ctx, cancel := daygrid.FetchContext()
-	defer cancel()
-
-	fetched := daygrid.Fetch(ctx, widgetName, w.cal, w.weather, days, w.config.Weather.Location())
-	events, forecastDays := fetched.Events, fetched.Days()
-
-	forecasts := make([]weather.DailyForecast, len(days))
-	for i, day := range days {
-		forecasts[i] = daygrid.FindForecast(forecastDays, day)
-	}
-	tempRange := sharedTempRange(forecasts)
+	data := w.days.Days(now, columns)
 
 	for i, col := range computeColumns(w.bounds) {
-		day := days[i]
+		day := data.Days[i]
 
 		renderDayHeader(frame, col.Header, day.Start)
 
-		renderWeatherBand(frame, col.Weather, forecasts[i], weatherOptions{
+		renderWeatherBand(frame, col.Weather, day.Forecast, weatherOptions{
 			TempUnit:  w.config.Weather.TempUnit,
-			TempRange: tempRange,
+			TempRange: data.TempRange,
 			// Today is always the leftmost column, so the marker goes
 			// there and nowhere else — "now" is not a point on any
 			// other day's axis.
@@ -95,10 +65,10 @@ func (w *Widget) Render(frame *image.Paletted) error {
 			NowHour:       now.Hour(),
 		})
 
-		renderEvents(frame, col.Events, daygrid.FilterEventsForDay(events, day), eventOptions{
+		renderEvents(frame, col.Events, day.Events, eventOptions{
 			MaxEvents:    w.config.MaxEvents,
 			ShowLocation: w.config.ShowLocation,
-			Location:     loc,
+			Location:     now.Location(),
 		})
 
 		if !col.IsLast {
@@ -111,13 +81,16 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	return nil
 }
 
-// Factory creates a bold-five Widget from config and dependencies.
+// Factory creates a bold-five Widget from config and dependencies. Its
+// settings are the ones every calendar widget shares, so a screen can be
+// swapped between calendar widgets without rewriting its config.
 func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
-	cfg, err := parseConfig(config)
+	cfg, err := daygrid.ParseConfig(spec, config, deps.Weather)
 	if err != nil {
 		return nil, err
 	}
-	if err := daygrid.RequireDeps("bold-five", deps); err != nil {
+	days, err := daygrid.New(widgetName, cfg, deps)
+	if err != nil {
 		return nil, err
 	}
 
@@ -125,15 +98,5 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 	if now == nil {
 		now = time.Now
 	}
-
-	// Draw from the shared calendar module, so every widget showing a feed
-	// shares one cache of it.
-	cal := deps.Calendar.Source(cfg.Feeds, cfg.Refresh)
-
-	// Draw from the shared Provider bound to the resolved model, so every
-	// weather widget deduplicates through one cache.
-	daygrid.ResolveDefaults(&cfg.Weather, deps.Weather)
-	ws := deps.Weather.SourceForModel(cfg.Weather.Model)
-
-	return New(bounds, cal, ws, now, cfg), nil
+	return New(bounds, days, now, cfg), nil
 }

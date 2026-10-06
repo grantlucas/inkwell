@@ -1,19 +1,3 @@
-// Package daygrid holds the groundwork every calendar-plus-weather
-// screen needs: parsing the feed list and its per-feed rewrite rules,
-// resolving weather defaults against the shared provider, bucketing
-// events into days, and finding the forecast for a day.
-//
-// It exists because that groundwork is roughly 300 lines per widget and
-// the screens differ only in how they draw. The part that really must
-// not be copied is the all-day bucketing in FilterEventsForDay: an iCal
-// VALUE=DATE is anchored to UTC midnight by the parser while day
-// columns are built in the viewer's local zone, so comparing them as
-// instants leaks an all-day event into the previous local day in any
-// negative-UTC zone. Independent copies of that would drift, and the
-// failure is silent and off by one day.
-//
-// Every error message takes a widget name, so a dashboard that fails to
-// load still says which widget rejected the config.
 package daygrid
 
 import (

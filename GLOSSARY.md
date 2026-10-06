@@ -32,6 +32,12 @@ The current calendar day. It is shown by position (first column or first row),
 not by a distinct fill or outline.
 _Avoid_: Current day highlight
 
+**Day data**:
+A day's date, whether it is Today, its events and its forecast, as one widget
+sees them. A day the forecast doesn't reach has no forecast, rather than an
+empty one.
+_Avoid_: Day column, grid day
+
 ## Weather charts
 
 **Combined chart**:

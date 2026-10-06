@@ -130,7 +130,5 @@ func sharedRange(forecasts []weather.DailyForecast) weatherview.TempRange {
 			shown = append(shown, f)
 		}
 	}
-	var rng weatherview.TempRange
-	rng.Min, rng.Max = weatherview.GlobalTempRange(shown)
-	return rng
+	return weatherview.GlobalTempRange(shown)
 }

@@ -78,6 +78,15 @@ func TestClient_Replies(t *testing.T) {
 			wantClose:  closeFail,
 		},
 		{
+			label: "a handler builds its reply from the request",
+			setup: func(tr *fakehttp.Client) {
+				tr.Handle(url, func(r *http.Request) fakehttp.Reply { return fakehttp.Reply{Body: r.URL.Query().Get("q")} })
+			},
+			ask:        url + "?q=echo",
+			wantStatus: http.StatusOK,
+			wantBody:   "echo",
+		},
+		{
 			label:      "a URL registered without a query answers any query on it",
 			setup:      func(tr *fakehttp.Client) { tr.Serve("https://api.example/v1/forecast", "{}") },
 			ask:        "https://api.example/v1/forecast?latitude=43.25",

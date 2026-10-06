@@ -55,12 +55,12 @@ keeps `RenderHourlyChart` exactly as it is.
 - **The caller supplies only the rect.** The chart takes its own band for the
   hour labels at the bottom of the cell, sized from its own label face, so one
   renderer serves a 312 px hero cell and a 106 px row badge.
-- **One range per screen, and it is required.** The caller computes a shared
-  `TempRange` (°C) across every day it shows (`GlobalTempRange` is the starting
-  point) and hands the same range to each chart, so a cold day sits lower than
-  a warm one. The warmest value in the range touches the top of the plot and
-  the coldest the row above the baseline; temperatures outside it clamp to the
-  edge, and a collapsed range widens to one degree.
+- **One range per screen, and it is required.** The caller hands every chart
+  the same `TempRange` (°C), so a cold day sits lower than a warm one. The day
+  data module (`daygrid`) works it out across the days that have a forecast.
+  The warmest value in the range touches the top of the plot and the coldest
+  the row above the baseline; temperatures outside it clamp to the edge, and a
+  collapsed range widens to one degree.
 - **The line is black over paper and white over a bar.** Each pixel is chosen
   from what is already drawn underneath it — bar fill, bar cap or now marker
   give a white pixel, bare paper a black one — so the same rule reads in BW
@@ -120,4 +120,4 @@ widget are the user-facing controls for this component.
   over anything drawn.
 - `DrawIcon(frame, x, y, size, condition)` — just the condition glyph.
 - `NewHighLow(day, unit)` — the day's high and low as text.
-- `GlobalTempRange(days)` — compute the shared min/max for chart normalization.
+- `GlobalTempRange(days)` — the shared `TempRange` across days, for chart normalization.

@@ -31,7 +31,7 @@ type Reply struct {
 // packages, and is safe for concurrent use.
 type Client struct {
 	mu      sync.Mutex
-	replies map[string]Reply
+	replies map[string]func(*http.Request) Reply
 	counts  map[string]int
 	total   int
 }
@@ -39,7 +39,7 @@ type Client struct {
 // New returns a Client with no replies; every URL answers 404 until
 // one is registered.
 func New() *Client {
-	return &Client{replies: map[string]Reply{}, counts: map[string]int{}}
+	return &Client{replies: map[string]func(*http.Request) Reply{}, counts: map[string]int{}}
 }
 
 // Serve answers url with a 200 carrying body.
@@ -49,9 +49,16 @@ func (t *Client) Serve(url, body string) { t.Set(url, Reply{Body: body}) }
 // without a query string also answers that URL with any query, so a
 // forecast endpoint can be served once whatever parameters are asked.
 func (t *Client) Set(url string, r Reply) {
+	t.Handle(url, func(*http.Request) Reply { return r })
+}
+
+// Handle answers url with whatever h builds from each request, for a
+// reply that depends on what was asked, such as a forecast honouring its
+// query. It matches URLs the way Set does and replaces any earlier reply.
+func (t *Client) Handle(url string, h func(*http.Request) Reply) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.replies[url] = r
+	t.replies[url] = h
 }
 
 // Do answers req. A request whose context is already done fails with the
@@ -62,13 +69,14 @@ func (t *Client) Do(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 	t.mu.Lock()
-	key, r, ok := t.lookup(req)
+	key, h, ok := t.lookup(req)
 	t.counts[key]++
 	t.total++
 	t.mu.Unlock()
 
-	if !ok {
-		r = Reply{Status: http.StatusNotFound}
+	r := Reply{Status: http.StatusNotFound}
+	if ok {
+		r = h(req)
 	}
 	if r.Err != nil {
 		return nil, r.Err
@@ -84,19 +92,19 @@ func (t *Client) Do(req *http.Request) (*http.Response, error) {
 	}, nil
 }
 
-// lookup finds req's reply by its full URL, then by the URL without its
-// query. key is what the request is counted under.
-func (t *Client) lookup(req *http.Request) (key string, r Reply, ok bool) {
+// lookup finds req's handler by its full URL, then by the URL without
+// its query. key is what the request is counted under.
+func (t *Client) lookup(req *http.Request) (key string, h func(*http.Request) Reply, ok bool) {
 	key = req.URL.String()
-	if r, ok = t.replies[key]; ok {
-		return key, r, true
+	if h, ok = t.replies[key]; ok {
+		return key, h, true
 	}
 	bare := *req.URL
 	bare.RawQuery = ""
-	if r, ok = t.replies[bare.String()]; ok {
-		return bare.String(), r, true
+	if h, ok = t.replies[bare.String()]; ok {
+		return bare.String(), h, true
 	}
-	return key, Reply{}, false
+	return key, nil, false
 }
 
 // Requests reports how many requests were answered for url, as it was

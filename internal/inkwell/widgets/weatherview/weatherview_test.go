@@ -243,44 +243,35 @@ func TestRenderDayWeather_SmallChart(t *testing.T) {
 	RenderDayWeather(frame, image.Rect(0, 0, 114, 50), day, opts)
 }
 
+// The range spans every day's highs, lows and hourly readings, and falls
+// back to 0-25°C when there are no days to take it from.
 func TestGlobalTempRange(t *testing.T) {
-	days := []weather.DailyForecast{
-		{High: 20, Low: 8, Hourly: []weather.HourlyPoint{
-			{Temperature: 10}, {Temperature: 18},
-		}},
-		{High: 25, Low: 12, Hourly: []weather.HourlyPoint{
-			{Temperature: 13}, {Temperature: 24},
-		}},
+	tests := []struct {
+		label string
+		days  []weather.DailyForecast
+		want  TempRange
+	}{
+		{
+			label: "highs, lows and hours",
+			days: []weather.DailyForecast{
+				{High: 20, Low: 8, Hourly: []weather.HourlyPoint{{Temperature: 10}, {Temperature: 18}}},
+				{High: 25, Low: 12, Hourly: []weather.HourlyPoint{{Temperature: 13}, {Temperature: 24}}},
+			},
+			want: TempRange{Min: 8, Max: 25},
+		},
+		{
+			label: "an hour outside the high and low",
+			days:  []weather.DailyForecast{{High: 20, Low: 8, Hourly: []weather.HourlyPoint{{Temperature: 5}, {Temperature: 22}}}},
+			want:  TempRange{Min: 5, Max: 22},
+		},
+		{label: "no hourly data", days: []weather.DailyForecast{{High: 20, Low: 8}}, want: TempRange{Min: 8, Max: 20}},
+		{label: "no days", days: nil, want: TempRange{Min: 0, Max: 25}},
 	}
-
-	minT, maxT := GlobalTempRange(days)
-	if minT != 8 {
-		t.Errorf("minTemp = %v, want 8", minT)
-	}
-	if maxT != 25 {
-		t.Errorf("maxTemp = %v, want 25", maxT)
-	}
-}
-
-func TestGlobalTempRange_Empty(t *testing.T) {
-	minT, maxT := GlobalTempRange(nil)
-	if minT != 0 {
-		t.Errorf("minTemp = %v, want 0", minT)
-	}
-	if maxT != 25 {
-		t.Errorf("maxTemp = %v, want 25", maxT)
-	}
-}
-
-func TestGlobalTempRange_NoHourly(t *testing.T) {
-	days := []weather.DailyForecast{
-		{High: 20, Low: 8},
-	}
-	minT, maxT := GlobalTempRange(days)
-	if minT != 8 {
-		t.Errorf("minTemp = %v, want 8", minT)
-	}
-	if maxT != 20 {
-		t.Errorf("maxTemp = %v, want 20", maxT)
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			if got := GlobalTempRange(tt.days); got != tt.want {
+				t.Errorf("GlobalTempRange = %+v, want %+v", got, tt.want)
+			}
+		})
 	}
 }

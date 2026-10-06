@@ -94,8 +94,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	// plotted on the same scale and a cold day sits lower than a warm
 	// one. Taken from the days drawn, not from whatever else the
 	// forecast carried.
-	var rng weatherview.TempRange
-	rng.Min, rng.Max = weatherview.GlobalTempRange(shown)
+	rng := weatherview.GlobalTempRange(shown)
 
 	for i, row := range planRows(w.bounds, counts) {
 		day := days[i]

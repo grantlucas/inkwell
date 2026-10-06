@@ -453,7 +453,9 @@ that screen has and this one does not — `days`, `week_start`,
 with an explanation** rather than ignored. Silently dropping
 `show_weather: false` would draw a weather band you had turned off,
 which reads as a bug in the widget rather than a key that did not carry
-over.
+over. Any other key the widget does not take, such as a misspelt
+`max_event`, stops the dashboard loading with the list of keys it
+accepts.
 
 A day the forecast does not cover draws an empty weather band rather
 than a zero. A clear sky at 0°C is a plausible reading, so drawing one

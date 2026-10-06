@@ -108,7 +108,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	}
 
 	cols := computeColumns(w.bounds, weatherH, w.config.Days)
-	globalMin, globalMax := weatherview.GlobalTempRange(forecastDays)
+	rng := weatherview.GlobalTempRange(forecastDays)
 
 	for i, col := range cols {
 		day := days[i]
@@ -120,8 +120,8 @@ func (w *Widget) Render(frame *image.Paletted) error {
 			opts := weatherview.Options{
 				TempUnit:      w.config.Weather.TempUnit,
 				ShowLabel:     w.config.ShowWeatherLabel,
-				GlobalTempMin: globalMin,
-				GlobalTempMax: globalMax,
+				GlobalTempMin: rng.Min,
+				GlobalTempMax: rng.Max,
 				HighlightHour: now.Hour(),
 				IsToday:       day.IsToday,
 			}
