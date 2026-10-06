@@ -53,6 +53,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	unit := w.config.Weather.TempUnit
 
 	agenda := heroStyle(w.config.MaxEvents, w.config.ShowLocation, now.Location())
+	rowAgenda := dayRowStyle(w.config.ShowLocation, now.Location())
 
 	// Every chart on the screen plots against the one temperature range
 	// the module takes across the days shown.
@@ -74,7 +75,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 			IsTomorrow: i == 0,
 			TempUnit:   unit,
 			TempRange:  data.TempRange,
-			Agenda:     agenda,
+			Agenda:     rowAgenda,
 		})
 		if i < dayRows-1 {
 			daygrid.DrawHLine(frame, row.Min.X, row.Max.X, row.Max.Y-1, widget.PaperBlack)

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"image"
 	"strings"
+	"time"
 
-	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
@@ -43,8 +43,9 @@ const (
 	// Where the agenda starts. Unchanged: the events keep their room.
 	rowAgendaDX = 186
 
-	// Up to three events a row; a fourth would leave no room for the
-	// overflow marker to say how many were dropped.
+	// Up to three events a row, whatever max_events says (that is the
+	// hero agenda's). A 120 px row holds five lines; three events and
+	// the "+N MORE" line under them leave the row room to breathe.
 	rowMaxEvents = 3
 
 	// Upper case, like every other label this screen paints —
@@ -61,8 +62,7 @@ type dayRowOptions struct {
 	// TempRange is the screen's shared temperature scale, the same one
 	// today's chart plots against.
 	TempRange weatherview.TempRange
-	// Agenda writes the row's events: their times, titles and
-	// locations.
+	// Agenda lists the row's events.
 	Agenda eventlist.Style
 }
 
@@ -92,7 +92,7 @@ func renderDayRow(frame *image.Paletted, bounds image.Rectangle, day daygrid.Day
 		frame, x, top+rowDateBaseline, fmt.Sprintf("%d", day.Start.Day()))
 
 	renderRowWeather(frame, bounds, day.Forecast, opts.TempUnit, opts.TempRange)
-	renderRowAgenda(frame, bounds, day.Events, opts.Agenda)
+	opts.Agenda.Draw(frame, rowAgenda(bounds), day.Events)
 }
 
 // renderRowWeather draws the row's hi/lo pair, condition icon and
@@ -125,42 +125,28 @@ func rowChart(row image.Rectangle) image.Rectangle {
 	)
 }
 
-// renderRowAgenda draws up to three events as a time and a title on one
-// line each, then an overflow marker for the rest.
-func renderRowAgenda(frame *image.Paletted, bounds image.Rectangle, events []calendar.Event, style eventlist.Style) {
-	x := bounds.Min.X + rowAgendaDX
-	if x >= bounds.Max.X-rowPadX {
-		return
+// dayRowStyle is how a row lists its day: inline, a time and a title a
+// line, up to rowMaxEvents of them and then "+N MORE".
+//
+// loc is the zone event clock labels are rendered in. It must never be
+// nil.
+func dayRowStyle(showLocation bool, loc *time.Location) eventlist.Style {
+	return eventlist.Style{
+		Layout:       eventlist.Inline,
+		MaxEvents:    rowMaxEvents,
+		Empty:        emptyRowMsg,
+		ShowLocation: showLocation,
+		Location:     loc,
 	}
+}
 
-	lineH := daygrid.BodyLineH()
-	// Sized for the widest label, not for a clock time: "ALL DAY" is
-	// seven characters against 00:00's five, and measuring the clock
-	// alone ran the all-day label straight into the title.
-	timeW := daygrid.TextWidth(daygrid.BodyFace, "ALL DAY ")
-	titleX := x + timeW
-	maxChars := (bounds.Max.X - rowPadX - titleX) / daygrid.BodyAdvance()
-	if maxChars < 3 {
-		return
-	}
-
-	y := bounds.Min.Y + rowPadX + daygrid.BodyAscent()
-	if len(events) == 0 {
-		daygrid.DrawText(frame, x, y, emptyRowMsg, daygrid.BodyFace, widget.PaperBlack)
-		return
-	}
-
-	shown := min(len(events), rowMaxEvents)
-	for _, e := range events[:shown] {
-		daygrid.DrawText(frame, x, y, style.TimeLabel(e), daygrid.BodyFace, widget.PaperBlack)
-		daygrid.DrawText(frame, titleX, y, eventlist.Truncate(style.Title(e), maxChars), daygrid.BodyFace, widget.PaperBlack)
-		y += lineH
-	}
-
-	if remaining := len(events) - shown; remaining > 0 && y+daygrid.BodyAscent() <= bounds.Max.Y {
-		// The marker occupies a slot of its own rather than
-		// overprinting the last event — an earlier draft drew it on
-		// top of the third one.
-		daygrid.DrawText(frame, x, y, fmt.Sprintf("+%d MORE", remaining), daygrid.BodyFace, widget.PaperBlack)
+// rowAgenda is the rectangle a row's events are listed in, right of the
+// date gutter. A literal rather than image.Rect, which would swap the
+// edges of a row too narrow for the gutter into a list to the left of
+// it; the list draws nothing into a negative width.
+func rowAgenda(row image.Rectangle) image.Rectangle {
+	return image.Rectangle{
+		Min: image.Pt(row.Min.X+rowAgendaDX, row.Min.Y+rowPadX),
+		Max: image.Pt(row.Max.X-rowPadX, row.Max.Y),
 	}
 }

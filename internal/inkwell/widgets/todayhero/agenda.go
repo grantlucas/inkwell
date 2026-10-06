@@ -31,9 +31,6 @@ const (
 // labels have no descenders to clear), a hairline between events, and
 // up to maxEvents of them.
 //
-// The day rows write their events with the same style's text rules
-// until they move onto the event list's inline layout.
-//
 // loc is the zone event clock labels are rendered in: a parsed
 // Event.Start is a correct instant but carries whatever zone its feed
 // serialized it with, so formatting it directly leaks that zone onto the

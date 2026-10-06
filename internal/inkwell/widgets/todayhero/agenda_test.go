@@ -8,7 +8,6 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
@@ -53,40 +52,6 @@ func TestRenderHeroAgenda_TooNarrowForDone(t *testing.T) {
 	}
 }
 
-// A row with no room for its agenda draws nothing rather than spilling
-// into the next row. Two ways to run out: no room for the agenda's
-// left edge at all, and room for the edge but not for a readable
-// title.
-func TestRenderRowAgenda_TooNarrow(t *testing.T) {
-	tests := []struct {
-		label string
-		width int
-	}{
-		{"no room for the agenda column", rowAgendaDX + 10},
-		{"room for the column but not for a title", 300},
-	}
-	for _, tt := range tests {
-		t.Run(tt.label, func(t *testing.T) {
-			frame := newTestFrame(800, 480)
-			renderRowAgenda(frame, image.Rect(0, 0, tt.width, 120),
-				[]calendar.Event{{Summary: "One", Start: time.Date(2026, 3, 17, 9, 0, 0, 0, time.UTC)}},
-				eventlist.Style{Location: time.UTC})
-			if got := countIndexIn(frame, frame.Bounds(), widget.PaperBlack); got != 0 {
-				t.Errorf("drew %d px into a row with no agenda room", got)
-			}
-		})
-	}
-}
-
-// A day with nothing on it says so; a blank strip reads as a fault.
-func TestRenderRowAgenda_EmptyDay(t *testing.T) {
-	frame := newTestFrame(800, 480)
-	renderRowAgenda(frame, image.Rect(0, 0, 800, 120), nil, eventlist.Style{Location: time.UTC})
-	if countIndexIn(frame, frame.Bounds(), widget.PaperBlack) == 0 {
-		t.Error("an empty day drew nothing at all")
-	}
-}
-
 // A row without a forecast draws no temperatures, because drawing a zero
 // would state a 0°/0° reading nobody forecast.
 func TestRenderRowWeather_MissingForecast(t *testing.T) {
@@ -94,29 +59,6 @@ func TestRenderRowWeather_MissingForecast(t *testing.T) {
 	renderRowWeather(frame, image.Rect(0, 0, 800, 120), nil, "C", weatherview.TempRange{Max: 20})
 	if got := countIndexIn(frame, frame.Bounds(), widget.PaperBlack); got != 0 {
 		t.Errorf("drew %d px for a day with no forecast", got)
-	}
-}
-
-// A row with more events than fit, and no room left for the marker,
-// must not draw the marker off the bottom of the row.
-func TestRenderRowAgenda_OverflowMarkerNeedsRoom(t *testing.T) {
-	events := make([]calendar.Event, 6)
-	for i := range events {
-		start := time.Date(2026, 3, 17, 9+i, 0, 0, 0, time.UTC)
-		events[i] = calendar.Event{Summary: "Event", Start: start, End: start.Add(time.Hour)}
-	}
-
-	// A row just tall enough for the three events and nothing more.
-	short := image.Rect(0, 0, 800, rowPadX+3*daygrid.BodyLineH()+daygrid.BodyAscent())
-	frame := newTestFrame(800, 480)
-	renderRowAgenda(frame, short, events, eventlist.Style{Location: time.UTC})
-
-	for y := short.Max.Y; y < 480; y++ {
-		for x := range 800 {
-			if frame.ColorIndexAt(x, y) != widget.PaperWhite {
-				t.Fatalf("drew below the row at (%d,%d)", x, y)
-			}
-		}
 	}
 }
 

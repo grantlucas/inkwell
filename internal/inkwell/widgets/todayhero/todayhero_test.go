@@ -343,6 +343,44 @@ func TestWidget_HeroAgendaShowsOnlyRemainingEvents(t *testing.T) {
 	}
 }
 
+// A day row lists up to three events, a time and a title a line, and
+// the line after them says how many more there are, in bold like every
+// other "+N MORE". The three is today-hero's own: max_events sets the
+// hero agenda's cap, not the rows'.
+func TestWidget_DayRowListsThreeAndSaysHowManyMore(t *testing.T) {
+	var events []ical.Event
+	for h := range 5 {
+		events = append(events, ev("Event", 17, 9+h))
+	}
+	cfg := drawConfig("C", false)
+	cfg.MaxEvents = 6
+	panel := image.Rect(0, 0, 800, 480)
+	frame := renderToFrame(t, New(panel, daygrid.InMemory(events, nil), fixedClock(testTime), cfg))
+
+	// Tuesday is tomorrow, the first row.
+	row := computeDayRows(panel)[0]
+	x := row.Min.X + rowAgendaDX
+	titleX := x + daygrid.TextWidth(daygrid.BodyFace, "ALL DAY ")
+	baseline := func(i int) int { return row.Min.Y + rowPadX + i*daygrid.BodyLineH() + daygrid.BodyAscent() }
+
+	want := newTestFrame(800, 480)
+	for i := range 3 {
+		daygrid.DrawText(want, x, baseline(i), events[i].Start.Format("15:04"), daygrid.BodyFace, widget.PaperBlack)
+		daygrid.DrawText(want, titleX, baseline(i), "Event", daygrid.BodyFace, widget.PaperBlack)
+	}
+	daygrid.DrawText(want, x, baseline(3), "+2 MORE", daygrid.BodyBoldFace, widget.PaperBlack)
+
+	// The agenda column, above the rule under the row.
+	agenda := image.Rect(x, row.Min.Y, row.Max.X, row.Max.Y-1)
+	for y := agenda.Min.Y; y < agenda.Max.Y; y++ {
+		for xx := agenda.Min.X; xx < agenda.Max.X; xx++ {
+			if frame.ColorIndexAt(xx, y) != want.ColorIndexAt(xx, y) {
+				t.Fatalf("tomorrow's agenda differs from three events and a bold \"+2 MORE\" at (%d,%d)", xx, y)
+			}
+		}
+	}
+}
+
 // A screen missing its events, its forecast or both still draws a usable
 // panel: a fetch that failed must not blank it.
 func TestWidget_RendersWithMissingData(t *testing.T) {
