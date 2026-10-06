@@ -71,10 +71,7 @@ type dayRowOptions struct {
 // row cannot carry a legible bar chart *and* a legible title side by
 // side, and titles dropped to about 12 characters. Stacked under the
 // date it costs the agenda nothing.
-func renderDayRow(
-	frame *image.Paletted, bounds image.Rectangle, day daygrid.Day,
-	forecast weather.DailyForecast, events []calendar.Event, opts dayRowOptions,
-) {
+func renderDayRow(frame *image.Paletted, bounds image.Rectangle, day daygrid.Day, opts dayRowOptions) {
 	top := bounds.Min.Y
 	x := bounds.Min.X + rowPadX
 
@@ -91,20 +88,20 @@ func renderDayRow(
 	daygrid.Scaled(daygrid.BodyBoldFace, rowDateScale, widget.PaperBlack).Draw(
 		frame, x, top+rowDateBaseline, fmt.Sprintf("%d", day.Start.Day()))
 
-	renderRowWeather(frame, bounds, forecast, opts.TempUnit, opts.TempRange)
-	renderRowAgenda(frame, bounds, events, opts.Events)
+	renderRowWeather(frame, bounds, day.Forecast, opts.TempUnit, opts.TempRange)
+	renderRowAgenda(frame, bounds, day.Events, opts.Events)
 }
 
 // renderRowWeather draws the row's hi/lo pair, condition icon and
 // combined chart.
-func renderRowWeather(frame *image.Paletted, bounds image.Rectangle, forecast weather.DailyForecast, unit string, rng weatherview.TempRange) {
-	if forecast.Date.IsZero() {
+func renderRowWeather(frame *image.Paletted, bounds image.Rectangle, forecast *weather.DailyForecast, unit string, rng weatherview.TempRange) {
+	if forecast == nil {
 		// Nothing forecast for this day. Drawing a zero would state a
 		// temperature nobody predicted.
 		return
 	}
 	top := bounds.Min.Y
-	hiLo := weatherview.NewHighLow(forecast, unit).Pair()
+	hiLo := weatherview.NewHighLow(*forecast, unit).Pair()
 	tempX := bounds.Min.X + rowChartRight - daygrid.TextWidth(daygrid.BodyFace, hiLo)
 	daygrid.DrawText(frame, tempX, top+rowTempBaseline, hiLo, daygrid.BodyFace, widget.PaperBlack)
 

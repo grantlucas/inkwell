@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
-	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
@@ -198,11 +197,11 @@ func TestRenderRowAgenda_EmptyDay(t *testing.T) {
 	}
 }
 
-// A row without a forecast draws no temperatures, because a zero
-// DailyForecast is indistinguishable from a real 0°/0° reading.
+// A row without a forecast draws no temperatures, because drawing a zero
+// would state a 0°/0° reading nobody forecast.
 func TestRenderRowWeather_MissingForecast(t *testing.T) {
 	frame := newTestFrame(800, 480)
-	renderRowWeather(frame, image.Rect(0, 0, 800, 120), weather.DailyForecast{}, "C", weatherview.TempRange{Max: 20})
+	renderRowWeather(frame, image.Rect(0, 0, 800, 120), nil, "C", weatherview.TempRange{Max: 20})
 	if got := countIndexIn(frame, frame.Bounds(), widget.PaperBlack); got != 0 {
 		t.Errorf("drew %d px for a day with no forecast", got)
 	}
