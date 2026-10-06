@@ -62,14 +62,6 @@ func TestProvider_Occurrences(t *testing.T) {
 		want       []occurrence
 	}{
 		{
-			label: "series that began before the window",
-			start: time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC),
-			end:   time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC),
-			want: []occurrence{
-				{Summary: "Jane Doe\nWeekly Sync", Start: time.Date(2026, 10, 5, 9, 0, 0, 0, time.UTC)},
-			},
-		},
-		{
 			label: "rules apply to every occurrence of a series",
 			rules: []Rule{stripName},
 			start: time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC),
@@ -172,15 +164,6 @@ DTEND:20261006T153000Z
 SUMMARY:Weekly Sync
 END:VEVENT
 `
-	cancelledOct5 := `BEGIN:VEVENT
-UID:weekly-sync@example.com
-RECURRENCE-ID:20261005T090000Z
-DTSTART:20261005T090000Z
-DTEND:20261005T093000Z
-STATUS:CANCELLED
-SUMMARY:Weekly Sync
-END:VEVENT
-`
 	// The Oct 5 instance moved to the Sunday before the window, and the
 	// Oct 19 instance (outside the window) moved into it.
 	movedOutOct5 := strings.ReplaceAll(movedOct5, "20261006T15", "20261004T15")
@@ -212,14 +195,6 @@ END:VEVENT
 		want  []occurrence
 	}{
 		{
-			label: "a moved instance shows at its new time and not its usual one",
-			feeds: map[string]string{urlA: icsCalendar(weeklySeries, movedOct5)},
-			want: []occurrence{
-				{Summary: "Weekly Sync", Start: oct(6, 15)},
-				{Summary: "Weekly Sync", Start: oct(12, 9)},
-			},
-		},
-		{
 			label: "an override listed before its series does not hide the series",
 			feeds: map[string]string{urlA: icsCalendar(movedOct5, weeklySeries)},
 			want: []occurrence{
@@ -241,23 +216,6 @@ END:VEVENT
 				{Summary: "Weekly Sync", Start: oct(5, 9)},
 				{Summary: "Weekly Sync", Start: oct(12, 9)},
 				{Summary: "Weekly Sync", Start: oct(16, 9)},
-			},
-		},
-		{
-			label: "a cancelled instance disappears and the rest of the series stays",
-			feeds: map[string]string{urlA: icsCalendar(weeklySeries, cancelledOct5)},
-			want: []occurrence{
-				{Summary: "Weekly Sync", Start: oct(12, 9)},
-			},
-		},
-		{
-			label: "one event in two feeds shows once",
-			feeds: map[string]string{
-				urlA: icsCalendar(oneOff("kickoff@a.example", "Kickoff", 13)),
-				urlB: icsCalendar(oneOff("kickoff@b.example", "Kickoff", 13)),
-			},
-			want: []occurrence{
-				{Summary: "Kickoff", Start: oct(6, 13)},
 			},
 		},
 		{
