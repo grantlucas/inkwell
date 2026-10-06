@@ -9,19 +9,6 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
-// Config is the configuration every calendar widget shares: its feeds,
-// how fresh it wants them, where its forecast is for, and how its events
-// are listed.
-type Config struct {
-	Feeds []calendar.Feed
-	// Refresh is the calendar cache duration, the nested config.refresh,
-	// not the widget's render cadence.
-	Refresh      time.Duration
-	Weather      WeatherConfig
-	MaxEvents    int
-	ShowLocation bool
-}
-
 // Source is the day data module's interface: given the current time and a
 // number of days, it returns everything a widget needs to draw them.
 //
