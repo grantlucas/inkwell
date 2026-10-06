@@ -45,7 +45,8 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	// The clock arrives already in the dashboard's display zone, so the
 	// day and its window read from it rather than re-resolving a zone.
 	now := w.Now()
-	today := w.Days.Days(now, 1).Days[0]
+	data := w.Days.Days(now, 1)
+	today := data.Days[0]
 
 	// Which events are outside the window decides whether the note
 	// bands take any height, and so where the grid's rows fall.
@@ -54,9 +55,15 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	l := computeLayout(w.Bounds(), sections{Earlier: p.Earlier > 0, Later: p.Later > 0})
 	tl := newTimeline(today.Start, w.Window, l.Grid)
 
+	// The lane goes down before the grid, so the hour rules cross it and
+	// the temperature line, sitting between them, never meets one.
+	if today.Forecast != nil {
+		drawLane(frame, l.Lane, tl, w.Window, today.Forecast.Hourly, data.TempRange)
+	}
 	drawGrid(frame, l, tl, w.Window)
+	var labels []image.Rectangle
 	for _, e := range p.Placed {
-		drawBlock(frame, l.Events, tl, e, now, w.Config.ShowLocation)
+		labels = append(labels, drawBlock(frame, l.Events, tl, e, now, w.Config.ShowLocation)...)
 	}
 	if p.Earlier > 0 {
 		drawNote(frame, l.Earlier, l.Events.Min.X, fmt.Sprintf("+%d EARLIER", p.Earlier))
@@ -64,6 +71,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	if p.Later > 0 {
 		drawNote(frame, l.Later, l.Events.Min.X, fmt.Sprintf("+%d LATER", p.Later))
 	}
+	drawNowMarker(frame, l, tl, now, labels)
 	return nil
 }
 

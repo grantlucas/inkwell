@@ -81,8 +81,8 @@ func finished(e calendar.Event, now time.Time) bool {
 // enough to burn in.
 //
 // now is the dashboard's clock, in the display zone the label's time is
-// written in.
-func drawBlock(frame *image.Paletted, col image.Rectangle, tl timeline, e calendar.Event, now time.Time, showLocation bool) {
+// written in. It returns the boxes the label's lines take.
+func drawBlock(frame *image.Paletted, col image.Rectangle, tl timeline, e calendar.Event, now time.Time, showLocation bool) []image.Rectangle {
 	r := blockRect(col, tl, e)
 	daygrid.FillRect(frame, r, widget.PaperBlack)
 
@@ -93,13 +93,14 @@ func drawBlock(frame *image.Paletted, col image.Rectangle, tl timeline, e calend
 		inner, ink = r.Inset(outlineW), widget.PaperBlack
 		daygrid.FillWhite(frame, inner)
 	}
-	drawLabel(frame, inner, e, now.Location(), showLocation, ink)
+	labels := drawLabel(frame, inner, e, now.Location(), showLocation, ink)
 	if e.Start.Before(tl.start) {
 		drawMark(frame, inner, ink, true)
 	}
 	if e.End.After(tl.end) {
 		drawMark(frame, inner, ink, false)
 	}
+	return labels
 }
 
 const (

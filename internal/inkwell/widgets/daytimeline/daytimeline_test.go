@@ -8,6 +8,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar/ical"
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil"
+	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 )
@@ -434,12 +435,24 @@ func typicalDay() []ical.Event {
 // geometry: every constant in this package shows up in them.
 func TestWidget_Golden(t *testing.T) {
 	tests := []struct {
-		label  string
-		events []ical.Event
-		cfg    func(*Config)
-		now    time.Time
+		label    string
+		events   []ical.Event
+		forecast []weather.DailyForecast
+		cfg      func(*Config)
+		now      time.Time
 	}{
 		{label: "typical day", events: typicalDay()},
+		{label: "rainy day", events: typicalDay(), forecast: rainyToday()},
+		{label: "dry day", events: typicalDay(), forecast: dryToday()},
+		{
+			label:    "rainy day in a working hours window",
+			events:   typicalDay(),
+			forecast: rainyToday(),
+			cfg:      func(c *Config) { c.Window = Window{StartHour: 9, EndHour: 17} },
+		},
+		{label: "now at the window start", events: typicalDay(), forecast: rainyToday(), now: at(7, 0)},
+		{label: "now in the middle of a block", events: typicalDay(), forecast: rainyToday(), now: at(15, 45)},
+		{label: "now just before the window end", events: typicalDay(), forecast: rainyToday(), now: at(21, 45)},
 		{
 			label: "clipped at each edge",
 			events: []ical.Event{
@@ -489,7 +502,7 @@ func TestWidget_Golden(t *testing.T) {
 			if now.IsZero() {
 				now = testTime
 			}
-			w := New(testBounds, daygrid.InMemory(tt.events, nil), fixedClock(now), cfg)
+			w := New(testBounds, daygrid.InMemory(tt.events, tt.forecast), fixedClock(now), cfg)
 			testutil.AssertGoldenPNG(t, renderToFrame(t, w))
 		})
 	}
@@ -649,7 +662,9 @@ func TestWidget_CountsEventsOutsideTheWindow(t *testing.T) {
 // edges there is no ink but the one-pixel hour rules.
 func TestWidget_DrawsNoBlockForEventsOutsideTheWindow(t *testing.T) {
 	events := []ical.Event{span("Gym", at(5, 0), at(7, 0)), span("Late call", at(22, 0), at(23, 0))}
-	frame := renderToFrame(t, newWidget(testBounds, events, defaultConfig()))
+	// Late in the evening, so no now marker crosses the column either.
+	w := New(testBounds, daygrid.InMemory(events, nil), fixedClock(at(23, 30)), defaultConfig())
+	frame := renderToFrame(t, w)
 	l := computeLayout(testBounds, sections{Earlier: true, Later: true})
 
 	for _, x := range []int{l.Events.Min.X, l.Events.Max.X - 1} {

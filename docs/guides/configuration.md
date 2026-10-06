@@ -646,9 +646,23 @@ window are not drawn; a "+N EARLIER" note above the grid or a
 when there is something to count. A block too short to hold a line of
 text is drawn without its label.
 
-The widget is meant for the left of a screen. It draws no weather and
-no all-day events yet: the weather lane beside the grid and the strip
-of all-day events above it are still to come.
+Between the hour labels and the events runs the weather lane: today's
+forecast for the same hours, one row per hour of the window. The chance
+of precipitation each hour is a bar growing to the right, and the
+temperature line runs down through the rows, colder to the left and
+warmer to the right across today's own range. The line is black over
+paper and white where it crosses a bar, so it reads in both color
+modes. A dry day draws the line with no bars, and with no forecast the
+lane is left blank.
+
+A now marker crosses the lane and the events at the current time, so
+what is past and what is still to come read apart at a glance. It is
+paper where it crosses a solid block, and passes behind a block's label
+rather than striking it through. Outside the window it is not drawn.
+
+The widget is meant for the left of a screen, and needs at least
+240 × 160 px. It draws no all-day events yet: the strip of all-day
+events above the grid is still to come.
 
 <!-- markdownlint-disable MD013 -->
 | Key | Type | Default | Accepted values | Impact |

@@ -40,24 +40,31 @@ const markClear = 2*markPad + markW
 // where leaving it out would draw a bar nobody can identify. A block too
 // short even for the caps is left unlabelled, as is one too narrow for
 // the time; a title that doesn't fit the width is cut with ».
-func drawLabel(frame *image.Paletted, inner image.Rectangle, e calendar.Event, loc *time.Location, showLocation bool, ink uint8) {
+//
+// It returns the box each line of text takes, clipped to inner, so the
+// now marker can pass behind the words rather than strike them through.
+func drawLabel(frame *image.Paletted, inner image.Rectangle, e calendar.Event, loc *time.Location, showLocation bool, ink uint8) []image.Rectangle {
 	clip, _ := frame.SubImage(inner).(*image.Paletted)
 	adv := daygrid.BodyAdvance()
 	x := inner.Min.X + labelPadX
 	chars := (inner.Max.X - markClear - x) / adv
 	if chars < timeChars || inner.Dy() < capH {
-		return
+		return nil
 	}
 	baseline := labelBaseline(inner)
 	daygrid.DrawText(clip, x, baseline, e.Start.In(loc).Format("15:04"), daygrid.BodyBoldFace, ink)
+	used := timeChars
 
 	title := e.Summary
 	if showLocation && e.Location != "" {
 		title += " @ " + e.Location
 	}
 	if room := chars - timeChars - 1; room > 0 {
-		daygrid.DrawText(clip, x+(timeChars+1)*adv, baseline, truncate(title, room), daygrid.BodyFace, ink)
+		title = truncate(title, room)
+		daygrid.DrawText(clip, x+(timeChars+1)*adv, baseline, title, daygrid.BodyFace, ink)
+		used += 1 + utf8.RuneCountInString(title)
 	}
+	boxes := []image.Rectangle{textBox(inner, x, baseline, used)}
 
 	// A block with room for a second line says when the event ends: the
 	// block's length only shows it to the nearest few minutes, and an
@@ -65,8 +72,19 @@ func drawLabel(frame *image.Paletted, inner image.Rectangle, e calendar.Event, l
 	// whole capitals are drawn, so a block one line tall doesn't carry
 	// the tops of a second.
 	if until := baseline + daygrid.BodyLineH(); until < inner.Max.Y && e.End.After(e.Start) {
-		daygrid.DrawText(clip, x, until, "UNTIL "+e.End.In(loc).Format("15:04"), daygrid.BodyFace, ink)
+		text := "UNTIL " + e.End.In(loc).Format("15:04")
+		daygrid.DrawText(clip, x, until, text, daygrid.BodyFace, ink)
+		boxes = append(boxes, textBox(inner, x, until, len(text)))
 	}
+	return boxes
+}
+
+// textBox is the box a line of chars characters takes when written from
+// x on baseline, from the top of its caps to the foot of its descenders,
+// clipped to inner.
+func textBox(inner image.Rectangle, x, baseline, chars int) image.Rectangle {
+	descent := daygrid.BodyLineH() - daygrid.BodyAscent()
+	return image.Rect(x, baseline-capH, x+chars*daygrid.BodyAdvance(), baseline+descent).Intersect(inner)
 }
 
 // labelBaseline is the baseline of a label's first line in inner: its
