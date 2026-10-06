@@ -1,37 +1,32 @@
 package daygrid
 
 import (
-	"context"
-	"net/http"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
+	"github.com/grantlucas/inkwell/internal/inkwell/testutil/fakehttp"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
 
-type offlineTransport struct{}
-
-func (offlineTransport) Do(*http.Request) (*http.Response, error) {
-	return nil, context.DeadlineExceeded
-}
-
-// A calendar widget needs both an HTTP client and the shared weather
-// provider. A missing one is a wiring fault, reported by name, never
-// papered over with a default.
+// A calendar widget needs both the shared calendar module and the shared
+// weather provider. A missing one is a wiring fault, reported by name,
+// never papered over with a default.
 func TestRequireDeps(t *testing.T) {
-	client := offlineTransport{}
-	provider := weather.NewProvider(client, time.Hour, time.Now, weather.Settings{})
+	tr := fakehttp.New()
+	cal := calendar.NewProvider(tr, time.Now)
+	provider := weather.NewProvider(tr, time.Hour, time.Now, weather.Settings{})
 
 	tests := []struct {
 		label   string
 		deps    widget.Deps
 		wantErr string
 	}{
-		{label: "both present", deps: widget.Deps{HTTPClient: client, Weather: provider}},
-		{label: "no HTTP client", deps: widget.Deps{Weather: provider}, wantErr: "bold-five: no HTTP client to fetch calendar feeds"},
-		{label: "no weather provider", deps: widget.Deps{HTTPClient: client}, wantErr: "bold-five: no weather provider"},
+		{label: "both present", deps: widget.Deps{Calendar: cal, Weather: provider}},
+		{label: "no calendar module", deps: widget.Deps{Weather: provider}, wantErr: "bold-five: no calendar module"},
+		{label: "no weather provider", deps: widget.Deps{Calendar: cal}, wantErr: "bold-five: no weather provider"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {

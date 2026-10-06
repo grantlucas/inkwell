@@ -538,8 +538,8 @@ func TestWidget_Golden(t *testing.T) {
 // the calendar fetch and the shared weather provider.
 func typedDeps(client *recordingTransport) widget.Deps {
 	return widget.Deps{
-		Now:        fixedClock(testTime),
-		HTTPClient: client,
+		Now:      fixedClock(testTime),
+		Calendar: calendar.NewProvider(client, fixedClock(testTime)),
 		Weather: weather.NewProvider(client, time.Hour, fixedClock(testTime), weather.Settings{
 			Location: weather.Location{Latitude: 43.25, Longitude: -79.87},
 			TempUnit: "C",
@@ -570,13 +570,13 @@ func TestFactory_InvalidConfig(t *testing.T) {
 }
 
 // A widget built without its dependencies fails instead of falling back
-// to a default HTTP client the app never chose.
+// to a calendar cache of its own.
 func TestFactory_MissingDeps(t *testing.T) {
 	_, err := Factory(image.Rect(0, 0, 800, 480), map[string]any{
 		"feeds": []any{"https://example.com/a.ics"},
 	}, widget.Deps{Now: fixedClock(testTime)})
-	if err == nil || !strings.Contains(err.Error(), "today-hero: no HTTP client") {
-		t.Errorf("error = %v, want a missing HTTP client error", err)
+	if err == nil || !strings.Contains(err.Error(), "today-hero: no calendar module") {
+		t.Errorf("error = %v, want a missing calendar module error", err)
 	}
 }
 

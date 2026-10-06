@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets"
@@ -53,6 +54,7 @@ type appOptions struct {
 	interval time.Duration
 	registry *widget.Registry
 	deps     widget.Deps
+	client   calendar.HTTPClient
 }
 
 // WithHardware injects a Hardware backend, overriding config-driven selection.
@@ -73,6 +75,12 @@ func WithRegistry(r *widget.Registry) AppOption {
 // WithDeps injects widget dependencies, overriding defaults.
 func WithDeps(d widget.Deps) AppOption {
 	return func(o *appOptions) { o.deps = d }
+}
+
+// WithHTTPClient sets the client the shared calendar module and weather
+// provider fetch through, overriding http.DefaultClient.
+func WithHTTPClient(c calendar.HTTPClient) AppOption {
+	return func(o *appOptions) { o.client = c }
 }
 
 // NewApp creates an App from config. It resolves the display profile, creates
@@ -135,14 +143,18 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 	// widget, so widgets that fetch the same feed or forecast share one
 	// cache. A caller may inject either (e.g. tests); widgets never pick
 	// their own.
-	if deps.HTTPClient == nil {
-		deps.HTTPClient = http.DefaultClient
+	client := o.client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	if deps.Calendar == nil {
+		deps.Calendar = calendar.NewProvider(client, deps.Now)
 	}
 	// The weather Provider carries the top-level weather config; widgets
 	// resolve their per-widget overrides against its defaults.
 	if deps.Weather == nil {
 		deps.Weather = weather.NewProvider(
-			deps.HTTPClient, weatherCacheTTL, deps.Now,
+			client, weatherCacheTTL, deps.Now,
 			weather.Settings{
 				Location: weather.Location{Latitude: cfg.Weather.Latitude, Longitude: cfg.Weather.Longitude},
 				Model:    weather.Model(cfg.Weather.Model),

@@ -2,9 +2,11 @@ package calendar
 
 import (
 	"context"
-	"net/http"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/testutil/fakehttp"
 )
 
 const teamICS = `BEGIN:VCALENDAR
@@ -27,20 +29,14 @@ END:VEVENT
 END:VCALENDAR
 `
 
-func TestHTTPSource_ReplaceRuleRewritesSummary(t *testing.T) {
-	client := &mockHTTPClient{
-		responses: map[string]*http.Response{"https://team.example/cal.ics": newMockResponse(teamICS)},
-	}
+func TestProvider_ReplaceRuleRewritesSummary(t *testing.T) {
+	const url = "https://team.example/cal.ics"
 	rule, err := NewRule(`^Jane Doe\n(Ravens\n)?`, "", false)
 	if err != nil {
 		t.Fatalf("NewRule: %v", err)
 	}
-	src := NewHTTPSource([]Feed{{URL: "https://team.example/cal.ics", Rules: []Rule{rule}}}, client)
+	events := eventsFrom(t, []Feed{{URL: url, Rules: []Rule{rule}}}, map[string]string{url: teamICS})
 
-	events, err := src.Fetch(context.Background())
-	if err != nil {
-		t.Fatalf("Fetch: %v", err)
-	}
 	if len(events) != 1 {
 		t.Fatalf("got %d events, want 1", len(events))
 	}
@@ -49,13 +45,18 @@ func TestHTTPSource_ReplaceRuleRewritesSummary(t *testing.T) {
 	}
 }
 
-// eventsFrom fetches a one-feed source.
-func eventsFrom(t *testing.T, feeds []Feed, responses map[string]*http.Response) []Event {
+// eventsFrom returns what feeds, served bodies by URL, carry on
+// 19 September 2026, the day the rule fixtures fall on.
+func eventsFrom(t *testing.T, feeds []Feed, bodies map[string]string) []Event {
 	t.Helper()
-	src := NewHTTPSource(feeds, &mockHTTPClient{responses: responses})
-	events, err := src.Fetch(context.Background())
+	tr := fakehttp.New()
+	for url, body := range bodies {
+		tr.Serve(url, body)
+	}
+	day := time.Date(2026, 9, 19, 0, 0, 0, 0, time.UTC)
+	events, err := NewProvider(tr, func() time.Time { return day }).Occurrences(context.Background(), feeds, day, day.AddDate(0, 0, 1), time.Hour)
 	if err != nil {
-		t.Fatalf("Fetch: %v", err)
+		t.Fatalf("Occurrences: %v", err)
 	}
 	return events
 }
@@ -157,7 +158,7 @@ func TestApplyRules(t *testing.T) {
 		t.Run(tc.label, func(t *testing.T) {
 			events := eventsFrom(t,
 				[]Feed{{URL: url, Rules: tc.rules(t)}},
-				map[string]*http.Response{url: newMockResponse(teamICS)})
+				map[string]string{url: teamICS})
 
 			if tc.wantSummary == "" {
 				if len(events) != 0 {
@@ -175,7 +176,7 @@ func TestApplyRules(t *testing.T) {
 	}
 }
 
-func TestHTTPSource_RulesApplyOnlyToTheirOwnFeed(t *testing.T) {
+func TestProvider_RulesApplyOnlyToTheirOwnFeed(t *testing.T) {
 	const teamURL = "https://team.example/cal.ics"
 	const personalURL = "https://personal.example/cal.ics"
 
@@ -184,9 +185,9 @@ func TestHTTPSource_RulesApplyOnlyToTheirOwnFeed(t *testing.T) {
 			{URL: teamURL, Name: "Team calendar", Rules: []Rule{mustRule(t, `^Jane Doe\nRavens\n`, "", false)}},
 			{URL: personalURL},
 		},
-		map[string]*http.Response{
-			teamURL:     newMockResponse(teamICS),
-			personalURL: newMockResponse(personalICS),
+		map[string]string{
+			teamURL:     teamICS,
+			personalURL: personalICS,
 		})
 
 	if len(events) != 2 {

@@ -162,8 +162,9 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 		now = time.Now
 	}
 
-	calSource := calendar.NewHTTPSource(cfg.Feeds, deps.HTTPClient)
-	cachedCal := calendar.NewCachedSource(calSource, cfg.Refresh, now)
+	// Draw from the shared calendar module, so every widget showing a feed
+	// shares one cache of it.
+	cal := deps.Calendar.Source(cfg.Feeds, cfg.Refresh)
 
 	daygrid.ResolveDefaults(&cfg.Weather, deps.Weather)
 
@@ -174,7 +175,7 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 		ws = deps.Weather.SourceForModel(cfg.Weather.Model)
 	}
 
-	return New(bounds, cachedCal, ws, now, cfg), nil
+	return New(bounds, cal, ws, now, cfg), nil
 }
 
 // parseConfig validates and extracts config values.
