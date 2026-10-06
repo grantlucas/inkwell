@@ -226,7 +226,8 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 func TestWidget_NoFilledDateGutter(t *testing.T) {
 	frame := renderToFrame(t, newWidget(sampleEvents(), sampleForecast(), testTime))
 
-	const band = 48
+	// gutterW is the date block at the left of each row's day badge.
+	const band, gutterW = 48, 122
 	for y := 0; y < 480; y += band {
 		r := image.Rect(0, y, gutterW, y+band)
 		if black := countIndexIn(frame, r, widget.PaperBlack); black > r.Dx()*r.Dy()/4 {

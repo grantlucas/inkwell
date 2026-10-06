@@ -7,16 +7,33 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 )
 
-func weatherRect() image.Rectangle {
-	return image.Rect(0, headerH, 160, headerH+weatherH)
+// The day badge above the chart (the date, icon and readings) is the
+// day badge's, tested there. These cover the chart the column draws
+// under it.
+
+func newTestFrame(w, h int) *image.Paletted {
+	frame := image.NewPaletted(image.Rect(0, 0, w, h), widget.PaperPalette)
+	daygrid.FillWhite(frame, frame.Bounds())
+	return frame
 }
 
-// chartRect is the precipitation cell inside the weather band.
+// countIndex reports how many pixels carry the given palette index.
+func countIndex(frame *image.Paletted, idx uint8) int {
+	n := 0
+	for _, px := range frame.Pix {
+		if px == idx {
+			n++
+		}
+	}
+	return n
+}
+
+// chartRect is the first column's chart band on a full panel.
 func chartRect() image.Rectangle {
-	r := weatherRect()
-	return image.Rect(r.Min.X+chartPadX, r.Min.Y+chartTop, r.Max.X-chartPadX, r.Max.Y)
+	return computeColumns(image.Rect(0, 0, 800, 480))[0].Chart
 }
 
 // countIndexIn counts pixels carrying idx within r.
@@ -67,18 +84,12 @@ func dryDay(high, low float64) *weather.DailyForecast {
 // The now-marker belongs on today's column only. On any other day "now"
 // is not a point on that day's axis, so a marker there would assert
 // something meaningless.
-func TestRenderWeatherBand_NowMarkerOnlyOnToday(t *testing.T) {
-	rect := weatherRect()
-
+func TestRenderChart_NowMarkerOnlyOnToday(t *testing.T) {
 	withMarker := newTestFrame(160, 480)
-	renderWeatherBand(withMarker, rect, wetDay(12, 4), weatherOptions{
-		TempUnit: "C", ShowNowMarker: true, NowHour: 15,
-	})
+	renderChart(withMarker, chartRect(), wetDay(12, 4), chartOptions{ShowNowMarker: true, NowHour: 15})
 
 	without := newTestFrame(160, 480)
-	renderWeatherBand(without, rect, wetDay(12, 4), weatherOptions{
-		TempUnit: "C", ShowNowMarker: false, NowHour: 15,
-	})
+	renderChart(without, chartRect(), wetDay(12, 4), chartOptions{ShowNowMarker: false, NowHour: 15})
 
 	markerInk := countIndex(withMarker, widget.PaperBlack) - countIndex(without, widget.PaperBlack)
 	if markerInk <= 0 {
@@ -86,36 +97,16 @@ func TestRenderWeatherBand_NowMarkerOnlyOnToday(t *testing.T) {
 	}
 }
 
-// Fahrenheit is a display concern: the forecast is always Celsius, and
-// the conversion happens at the point of drawing.
-func TestRenderWeatherBand_TempUnit(t *testing.T) {
-	rect := weatherRect()
-	celsius := newTestFrame(160, 480)
-	renderWeatherBand(celsius, rect, wetDay(12, 4), weatherOptions{TempUnit: "C"})
-
-	fahrenheit := newTestFrame(160, 480)
-	renderWeatherBand(fahrenheit, rect, wetDay(12, 4), weatherOptions{TempUnit: "F"})
-
-	// 12°C is 54°F — different digits, so different pixels.
-	if countIndex(celsius, widget.PaperBlack) == countIndex(fahrenheit, widget.PaperBlack) {
-		t.Error("C and F rendered the same amount of ink; the conversion may not be applied")
-	}
-}
-
 // A dry day draws no bars at all: a flat row of stubs reads as a broken
 // widget from across the room. Its chart still carries the temperature
 // line, which TestWidget_DryDayStillDrawsAChart pins.
-func TestRenderWeatherBand_DryDayDrawsNoBars(t *testing.T) {
-	rect := weatherRect()
+func TestRenderChart_DryDayDrawsNoBars(t *testing.T) {
 	wet := newTestFrame(160, 480)
-	renderWeatherBand(wet, rect, wetDay(12, 4), weatherOptions{TempUnit: "C"})
+	renderChart(wet, chartRect(), wetDay(12, 4), chartOptions{})
 
 	dry := newTestFrame(160, 480)
-	renderWeatherBand(dry, rect, dryDay(12, 4), weatherOptions{TempUnit: "C"})
+	renderChart(dry, chartRect(), dryDay(12, 4), chartOptions{})
 
-	// Counted inside the chart cell only: the condition icon is an
-	// anti-aliased glyph and contributes gray pixels of its own, so a
-	// whole-frame count would measure the icon rather than the bars.
 	if got := countIndexIn(dry, chartRect(), widget.PaperGray70); got != 0 {
 		t.Errorf("dry day drew %d px of bar fill", got)
 	}
@@ -124,51 +115,34 @@ func TestRenderWeatherBand_DryDayDrawsNoBars(t *testing.T) {
 	}
 }
 
-// Everything must stay inside the band: the icon at the top, the chart
-// at the bottom, and nothing spilling into the agenda below.
-func TestRenderWeatherBand_StaysInsideTheBand(t *testing.T) {
-	frame := newTestFrame(160, 480)
-	rect := weatherRect()
-	renderWeatherBand(frame, rect, wetDay(12, 4), weatherOptions{
-		TempUnit: "C", ShowNowMarker: true, NowHour: 15,
-	})
-
-	for y := range 480 {
-		if y >= rect.Min.Y && y < rect.Max.Y {
-			continue
-		}
-		for x := range 160 {
-			if frame.ColorIndexAt(x, y) != widget.PaperWhite {
-				t.Fatalf("ink at (%d,%d), outside the weather band %v", x, y, rect)
-			}
-		}
+// The chart stays inside its band: nothing spills into the badge above
+// or the agenda below. A day the forecast never reached draws nothing at
+// all, since anything would state a temperature nobody forecast.
+func TestRenderChart_StaysInsideTheBand(t *testing.T) {
+	tests := []struct {
+		label string
+		day   *weather.DailyForecast
+		ink   bool
+	}{
+		{"a wet day", wetDay(12, 4), true},
+		{"no forecast", nil, false},
 	}
-}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			frame := newTestFrame(160, 480)
+			rect := chartRect()
+			renderChart(frame, rect, tt.day, chartOptions{ShowNowMarker: true, NowHour: 15})
 
-// A day the forecast never reached has no forecast. Drawing anything
-// would state a temperature nobody forecast and leave an operator unable
-// to tell an outage from the weather, so the whole band stays empty.
-func TestRenderWeatherBand_MissingForecastDrawsNothing(t *testing.T) {
-	frame := newTestFrame(160, 480)
-	renderWeatherBand(frame, weatherRect(), nil, weatherOptions{TempUnit: "C"})
-
-	for y := range 480 {
-		for x := range 160 {
-			if frame.ColorIndexAt(x, y) != widget.PaperWhite {
-				t.Fatalf("ink at (%d,%d) for a forecast that does not exist", x, y)
+			for y := range 480 {
+				for x := range 160 {
+					if !image.Pt(x, y).In(rect) && frame.ColorIndexAt(x, y) != widget.PaperWhite {
+						t.Fatalf("ink at (%d,%d), outside the chart band %v", x, y, rect)
+					}
+				}
 			}
-		}
-	}
-}
-
-// The guard keys off whether there is a forecast, not its values: a
-// genuine forecast of 0°C on a clear day must still be drawn.
-func TestRenderWeatherBand_RealZeroDegreesIsDrawn(t *testing.T) {
-	day := dryDay(0, 0)
-	frame := newTestFrame(160, 480)
-	renderWeatherBand(frame, weatherRect(), day, weatherOptions{TempUnit: "C"})
-
-	if countIndexIn(frame, weatherRect(), widget.PaperBlack) == 0 {
-		t.Error("a real 0°C forecast drew nothing")
+			if got := countIndex(frame, widget.PaperWhite) < 160*480; got != tt.ink {
+				t.Errorf("drew ink: %v, want %v", got, tt.ink)
+			}
+		})
 	}
 }

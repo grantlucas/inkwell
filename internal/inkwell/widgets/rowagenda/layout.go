@@ -14,6 +14,7 @@ package rowagenda
 import (
 	"image"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daybadge"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 )
 
@@ -22,26 +23,31 @@ const (
 	// days, however crowded the week is.
 	rows = 5
 
-	// gutterW is the date block: numeral plus the stacked weekday and
-	// month abbreviations.
-	gutterW = 122
+	// The combined chart sits between the day badge and the agenda
+	// rule, inset from the top and bottom of the badge's block.
+	chartW    = 106
+	chartPadY = 4
 
-	// The weather badge sits between the gutter and the agenda rule.
-	badgeW    = 222
-	agendaX   = gutterW + badgeW // 344
-	ruleInset = 4                // the rule sits just left of the agenda
+	// agendaX is where the agenda column starts: past the day badge,
+	// the chart and the rule, which sits just left of the agenda.
+	agendaX   = 344
+	ruleInset = 4
 )
+
+// badgeW is the day badge's width: the date block, then the condition
+// icon and the high over the low. The chart starts where it ends.
+var badgeW = daybadge.Row.Size().X
 
 // rowLayout is one day's zones.
 //
-// Gutter and Badge are minRowH tall and centred in the row, so the date
-// and the chart sit level with each other on every row and every chart
-// shares one height — a taller chart on a busier day would draw the
-// same rain at a different size. Agenda runs the row's full height.
+// Badge and Chart sit in a block minRowH tall centred in the row, so the
+// date and the chart sit level with each other on every row and every
+// chart shares one height — a taller chart on a busier day would draw
+// the same rain at a different size. Agenda runs the row's full height.
 type rowLayout struct {
 	Bounds image.Rectangle
-	Gutter image.Rectangle
 	Badge  image.Rectangle
+	Chart  image.Rectangle
 	Agenda image.Rectangle
 	// Lines is how many agenda lines the row draws: as many as its list
 	// needs, or fewer when the week would not otherwise fit, in which
@@ -83,8 +89,8 @@ func planRows(bounds image.Rectangle, counts []int) []rowLayout {
 		blockY := y0 + (y1-y0-minRowH)/2
 		out[i] = rowLayout{
 			Bounds: image.Rect(x, y0, bounds.Max.X, y1),
-			Gutter: image.Rect(x, blockY, x+gutterW, blockY+minRowH),
-			Badge:  image.Rect(x+gutterW, blockY, x+agendaX, blockY+minRowH),
+			Badge:  image.Rect(x, blockY, x+badgeW, blockY+minRowH),
+			Chart:  image.Rect(x+badgeW, blockY+chartPadY, x+badgeW+chartW, blockY+minRowH-chartPadY),
 			Agenda: image.Rect(x+agendaX, y0, bounds.Max.X, y1),
 			Lines:  lines[i],
 			IsLast: i == rows-1,
@@ -140,8 +146,9 @@ func rowHeight(n int) int {
 	return max(minRowH, 2*agendaPadY+n*daygrid.BodyLineH())
 }
 
-// minRowH is the shortest a row may be: the height the badge's combined
-// chart needs to stay readable, which is also three lines of agenda.
+// minRowH is the shortest a row may be: the day badge's height, which is
+// what the combined chart beside it needs to stay readable, and also
+// three lines of agenda.
 // With five rows at the minimum the panel has 100 px to spare, which is
 // five more lines spread across the busy days.
 const minRowH = 76

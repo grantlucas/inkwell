@@ -50,6 +50,29 @@ func TestPlanRows_AlwaysFiveRowsTilingTheBounds(t *testing.T) {
 	}
 }
 
+// Across a row, the day badge, the chart and the rule before the agenda
+// sit side by side with no overlap: the chart starts where the badge's
+// readings end, so bars never paint through the digits, and the rule
+// sits in the gap between the chart and the agenda. The badge and chart
+// share the row's centred block, so they sit level on every row.
+func TestPlanRows_BadgeThenChartThenAgenda(t *testing.T) {
+	for i, r := range planRows(panel, []int{6, 0, 2, 0, 1}) {
+		if r.Badge.Max.X != r.Chart.Min.X {
+			t.Errorf("row %d: badge ends at %d, chart starts at %d", i, r.Badge.Max.X, r.Chart.Min.X)
+		}
+		if r.Chart.Max.X+ruleInset != r.Agenda.Min.X {
+			t.Errorf("row %d: chart ends at %d, agenda starts at %d; want the %d px rule gap between",
+				i, r.Chart.Max.X, r.Agenda.Min.X, ruleInset)
+		}
+		if r.Badge.Dy() != minRowH || r.Chart.Min.Y != r.Badge.Min.Y+chartPadY || r.Chart.Max.Y != r.Badge.Max.Y-chartPadY {
+			t.Errorf("row %d: badge %v and chart %v are not one centred block", i, r.Badge, r.Chart)
+		}
+		if mid := (r.Badge.Min.Y + r.Badge.Max.Y) - (r.Bounds.Min.Y + r.Bounds.Max.Y); mid < -1 || mid > 1 {
+			t.Errorf("row %d: badge %v is not centred in the row %v", i, r.Badge, r.Bounds)
+		}
+	}
+}
+
 // Space follows the events: a busy day's row is tall enough for every
 // one of them, and a quiet day's row is shorter than a busy one's.
 func TestPlanRows_HeightFollowsContent(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daybadge"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 )
 
@@ -56,12 +57,11 @@ func (w *Widget) Render(frame *image.Paletted) error {
 
 	for i, row := range planRows(w.Bounds(), counts) {
 		day := data.Days[i]
-		renderGutter(frame, row.Gutter, day)
+		daybadge.Row.Draw(frame, row.Badge, day, now, w.Config.Weather.TempUnit)
 		// One temperature range across the five rows, so every chart is
 		// plotted on the same scale and a cold day sits lower than a
 		// warm one.
-		renderBadge(frame, row.Badge, day.Forecast,
-			w.Config.Weather.TempUnit, day.IsToday, true, now.Hour(), data.TempRange)
+		renderChart(frame, row.Chart, day.Forecast, day.IsToday, now.Hour(), data.TempRange)
 
 		// A hairline between the badge and the agenda, so the two read
 		// as separate columns rather than as one run of text.

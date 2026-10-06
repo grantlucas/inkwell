@@ -56,11 +56,11 @@ func TestRenderDayRow_ListEndsAboveTheRule(t *testing.T) {
 	}
 }
 
-// A row without a forecast draws no temperatures, because drawing a zero
-// would state a 0°/0° reading nobody forecast.
-func TestRenderRowWeather_MissingForecast(t *testing.T) {
+// A row without a forecast draws no chart, because a line would state a
+// temperature nobody forecast.
+func TestRenderRowChart_MissingForecast(t *testing.T) {
 	frame := newTestFrame(800, 480)
-	renderRowWeather(frame, image.Rect(0, 0, 800, 120), nil, "C", weatherview.TempRange{Max: 20})
+	renderRowChart(frame, rowChart(image.Rect(0, 0, 800, 120)), nil, weatherview.TempRange{Max: 20})
 	if got := countIndexIn(frame, frame.Bounds(), widget.PaperBlack); got != 0 {
 		t.Errorf("drew %d px for a day with no forecast", got)
 	}

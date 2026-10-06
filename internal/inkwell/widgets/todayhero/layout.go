@@ -12,7 +12,11 @@
 // so the current view stays available as a control in the rotation.
 package todayhero
 
-import "image"
+import (
+	"image"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daybadge"
+)
 
 const (
 	// split is where the hero column ends and the day rows begin.
@@ -26,12 +30,9 @@ const (
 	// instances of the same kind the way a column divider does.
 	dividerW = 3
 
-	// The hero column's bands.
-	identityH  = 116 // date, month and fuzzy clock above a rule
-	weatherTop = identityH
-	chartTop   = 202
-	// The chart sizes its own label band, so the 10 px of paper between
-	// it and the agenda rule is the layout's to set.
+	// The hero column's bands under its day badge. The chart sizes its
+	// own label band, so the 10 px of paper between it and the agenda
+	// rule is the layout's to set.
 	chartBot   = 270
 	agendaRule = 280
 
@@ -46,21 +47,22 @@ const (
 
 // heroLayout is the left column's zones.
 type heroLayout struct {
-	Identity image.Rectangle
-	Weather  image.Rectangle
-	Chart    image.Rectangle
-	Agenda   image.Rectangle
+	// Badge is today's day badge: the date, month and fuzzy clock above
+	// a rule, then today's weather. It spans the column.
+	Badge  image.Rectangle
+	Chart  image.Rectangle
+	Agenda image.Rectangle
 }
 
-// computeHero divides the left column into its four bands.
+// computeHero divides the left column into its three bands.
 func computeHero(bounds image.Rectangle) heroLayout {
 	x0, x1 := bounds.Min.X, bounds.Min.X+split
 	top := bounds.Min.Y
+	badge := image.Rectangle{Min: bounds.Min, Max: bounds.Min.Add(daybadge.Hero.Size())}
 	return heroLayout{
-		Identity: image.Rect(x0, top, x1, top+identityH),
-		Weather:  image.Rect(x0, top+weatherTop, x1, top+chartTop),
-		Chart:    image.Rect(x0+12, top+chartTop, x0+324, top+chartBot),
-		Agenda:   image.Rect(x0, top+agendaRule, x1, bounds.Max.Y),
+		Badge:  badge,
+		Chart:  image.Rect(x0+12, badge.Max.Y, x0+324, top+chartBot),
+		Agenda: image.Rect(x0, top+agendaRule, x1, bounds.Max.Y),
 	}
 }
 

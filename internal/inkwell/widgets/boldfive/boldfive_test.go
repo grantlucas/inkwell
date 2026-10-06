@@ -138,8 +138,8 @@ func TestWidget_NoColumnIsHighlighted(t *testing.T) {
 	frame := renderToFrame(t, newWidget(t, sampleEvents(), sampleForecast()))
 
 	for i, col := range computeColumns(image.Rect(0, 0, 800, 480)) {
-		black := countIndexIn(frame, col.Header, widget.PaperBlack)
-		if area := col.Header.Dx() * col.Header.Dy(); black > area/2 {
+		black := countIndexIn(frame, col.Badge, widget.PaperBlack)
+		if area := col.Badge.Dx() * col.Badge.Dy(); black > area/2 {
 			t.Errorf("column %d header is %d/%d black — it looks inverted", i, black, area)
 		}
 	}
@@ -173,7 +173,7 @@ func rainyForecast() []weather.DailyForecast {
 
 // columnChart is the chart cell of one column, in frame coordinates.
 func columnChart(col columnLayout) image.Rectangle {
-	return image.Rect(col.Weather.Min.X+chartPadX, col.Weather.Min.Y+chartTop, col.Weather.Max.X-chartPadX, col.Weather.Max.Y)
+	return col.Chart
 }
 
 // Every column carries the combined chart, so a dry day still draws the

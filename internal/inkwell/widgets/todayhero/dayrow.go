@@ -1,13 +1,11 @@
 package todayhero
 
 import (
-	"fmt"
 	"image"
-	"strings"
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
-	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daybadge"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
@@ -16,28 +14,8 @@ import (
 const (
 	rowPadX = 12
 
-	// The date gutter: the tag, then the numeral with the condition
-	// icon and the hi/lo beside it, then the day's combined chart. The
-	// numeral stays at 2x; the hi/lo is body size, on the numeral's
-	// centre line, and ends where the chart ends.
-	tagBaseline     = 20
-	rowDateScale    = 2
-	rowDateBaseline = 56
-	rowTempBaseline = 48
-
-	// The condition icon is centred in the gap between the widest
-	// numeral and the hi/lo. 30 px rather than the old 40, so the three
-	// share one line and leave the lower half of the gutter to the
-	// chart. The glyphs' rays overrun their box by a few pixels, which
-	// is why the icon sits clear of the tag above it.
-	rowIconSize   = 30
-	rowIconDY     = 30
-	rowNumeralEnd = 54
-
-	// The chart fills the gutter under that line and stops short of the
-	// agenda column.
-	rowChartTop    = 64
-	rowChartRight  = 176
+	// rowChartBottom is the paper under a row's chart, above the rule
+	// along the row's last pixel.
 	rowChartBottom = 4
 
 	// Where the agenda starts. Unchanged: the events keep their room.
@@ -51,9 +29,9 @@ const (
 
 // dayRowOptions carries what a row needs beyond its events.
 type dayRowOptions struct {
-	// IsTomorrow tags the row "TOMORROW" instead of its weekday.
-	IsTomorrow bool
-	TempUnit   string
+	// Now is the dashboard's clock, by which the badge tags tomorrow.
+	Now      time.Time
+	TempUnit string
 	// TempRange is the screen's shared temperature scale, the same one
 	// today's chart plots against.
 	TempRange weatherview.TempRange
@@ -61,8 +39,9 @@ type dayRowOptions struct {
 	Agenda eventlist.Style
 }
 
-// renderDayRow draws one following day: the date gutter with its
-// condition icon and a small combined chart, then a short agenda.
+// renderDayRow draws one following day: the day badge (tag, numeral,
+// condition icon and high and low) with a small combined chart under it
+// in the date gutter, then a short agenda.
 //
 // The chart lives in the gutter, under the date, rather than beside the
 // agenda. A chart beside the agenda was tried and reverted: a 462 px
@@ -70,54 +49,34 @@ type dayRowOptions struct {
 // side, and titles dropped to about 12 characters. Stacked under the
 // date it costs the agenda nothing.
 func renderDayRow(frame *image.Paletted, bounds image.Rectangle, day daygrid.Day, opts dayRowOptions) {
-	top := bounds.Min.Y
-	x := bounds.Min.X + rowPadX
-
-	// Tomorrow is tagged, not promoted. An earlier draft moved it into
-	// the hero column and started the rows at +2, which quietly dropped
-	// a day; the panel keeps its full five-day span and nothing appears
-	// twice.
-	tag := strings.ToUpper(day.Start.Format("Mon"))
-	if opts.IsTomorrow {
-		tag = "TOMORROW"
-	}
-	daygrid.DrawText(frame, x, top+tagBaseline, tag, daygrid.BodyFace, widget.PaperBlack)
-
-	daygrid.Scaled(daygrid.BodyBoldFace, rowDateScale, widget.PaperBlack).Draw(
-		frame, x, top+rowDateBaseline, fmt.Sprintf("%d", day.Start.Day()))
-
-	renderRowWeather(frame, bounds, day.Forecast, opts.TempUnit, opts.TempRange)
+	daybadge.Compact.Draw(frame, rowBadge(bounds), day, opts.Now, opts.TempUnit)
+	renderRowChart(frame, rowChart(bounds), day.Forecast, opts.TempRange)
 	opts.Agenda.Draw(frame, rowAgenda(bounds), day.Events)
 }
 
-// renderRowWeather draws the row's hi/lo pair, condition icon and
-// combined chart.
-func renderRowWeather(frame *image.Paletted, bounds image.Rectangle, forecast *weather.DailyForecast, unit string, rng weatherview.TempRange) {
+// renderRowChart draws a row's combined chart. No now-marker: it belongs
+// to today's chart alone. A dry day still draws its temperature line; a
+// day the forecast doesn't reach draws nothing, since a line would state
+// a temperature nobody predicted.
+func renderRowChart(frame *image.Paletted, bounds image.Rectangle, forecast *weather.DailyForecast, rng weatherview.TempRange) {
 	if forecast == nil {
-		// Nothing forecast for this day. Drawing a zero would state a
-		// temperature nobody predicted.
 		return
 	}
-	top := bounds.Min.Y
-	hiLo := weatherview.NewHighLow(*forecast, unit).Pair()
-	tempX := bounds.Min.X + rowChartRight - daygrid.TextWidth(daygrid.BodyFace, hiLo)
-	daygrid.DrawText(frame, tempX, top+rowTempBaseline, hiLo, daygrid.BodyFace, widget.PaperBlack)
+	weatherview.RenderCombinedChart(frame, bounds, forecast.Hourly, rng, weatherview.CombinedOptions{})
+}
 
-	iconX := (bounds.Min.X + rowNumeralEnd + tempX - rowIconSize) / 2
-	weatherview.DrawIcon(frame, iconX, top+rowIconDY, rowIconSize, forecast.Condition)
-
-	// No now-marker: it belongs to today's chart alone. A dry day still
-	// draws its temperature line.
-	weatherview.RenderCombinedChart(frame, rowChart(bounds), forecast.Hourly, rng, weatherview.CombinedOptions{})
+// rowBadge is the rect a row's day badge takes: the top of the date
+// gutter.
+func rowBadge(row image.Rectangle) image.Rectangle {
+	return image.Rectangle{Min: row.Min, Max: row.Min.Add(daybadge.Compact.Size())}
 }
 
 // rowChart is the rect a row's combined chart takes: the lower half of
-// the date gutter.
+// the date gutter, under the badge and ending where the badge's high
+// and low end.
 func rowChart(row image.Rectangle) image.Rectangle {
-	return image.Rect(
-		row.Min.X+rowPadX, row.Min.Y+rowChartTop,
-		row.Min.X+rowChartRight, row.Max.Y-rowChartBottom,
-	)
+	badge := rowBadge(row)
+	return image.Rect(row.Min.X+rowPadX, badge.Max.Y, badge.Max.X, row.Max.Y-rowChartBottom)
 }
 
 // dayRowStyle is how a row lists its day: the event list's inline preset,

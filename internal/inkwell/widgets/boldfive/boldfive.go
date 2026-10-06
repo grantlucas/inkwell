@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daybadge"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 )
 
@@ -48,10 +49,9 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	for i, col := range computeColumns(w.Bounds()) {
 		day := data.Days[i]
 
-		renderDayHeader(frame, col.Header, day.Start)
+		daybadge.Column.Draw(frame, col.Badge, day, now, w.Config.Weather.TempUnit)
 
-		renderWeatherBand(frame, col.Weather, day.Forecast, weatherOptions{
-			TempUnit:  w.Config.Weather.TempUnit,
+		renderChart(frame, col.Chart, day.Forecast, chartOptions{
 			TempRange: data.TempRange,
 			// Today is always the leftmost column, so the marker goes
 			// there and nowhere else — "now" is not a point on any

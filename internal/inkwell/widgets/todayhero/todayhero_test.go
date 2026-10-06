@@ -152,7 +152,8 @@ func TestWidget_Bounds(t *testing.T) {
 // today is already obvious from being the left column.
 func TestWidget_IdentityIsTextAboveARule(t *testing.T) {
 	frame := renderToFrame(t, newWidget(nil, sampleForecast(), testTime))
-	band := computeHero(image.Rect(0, 0, 800, 480)).Identity
+	// The identity band is the top 116 px of the hero column's day badge.
+	band := image.Rect(0, 0, split, 116)
 
 	black := countIndexIn(frame, band, widget.PaperBlack)
 	white := countIndexIn(frame, band, widget.PaperWhite)
@@ -166,7 +167,7 @@ func TestWidget_IdentityIsTextAboveARule(t *testing.T) {
 
 	// The rule runs across the band's padded width, under the text.
 	ruled := false
-	for y := band.Max.Y - 1; y >= band.Max.Y-identityRuleW-2 && !ruled; y-- {
+	for y := band.Max.Y - 1; y >= band.Max.Y-2-2 && !ruled; y-- {
 		row := image.Rect(band.Min.X+heroPadX, y, band.Max.X-heroPadX, y+1)
 		ruled = countIndexIn(frame, row, widget.PaperBlack) == row.Dx()
 	}

@@ -7,7 +7,11 @@
 // the rotation.
 package boldfive
 
-import "image"
+import (
+	"image"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daybadge"
+)
 
 const (
 	// columns is fixed at five, not configurable. Every type size here
@@ -16,21 +20,20 @@ const (
 	// and a fourth would leave the grid to re-derive from scratch.
 	columns = 5
 
-	// headerH covers the weekday abbreviation and the date numeral.
-	// The weekday's 2x baseline sits at 8+28 and the numeral's 3x
-	// baseline at 44+42; a numeral has no descender, so the band ends a
-	// few pixels under the digits' dilated base rather than reserving
-	// the descent. Those pixels are what let a column placed under a
-	// fuzzy_clock header band still fit three wrapped events and the
-	// "+N MORE" line beneath them.
-	headerH = 92
-
-	// weatherH covers the condition icon, the hi/lo pair and the
-	// combined chart: precipitation bars with the temperature line
-	// drawn over them rather than in a band of its own, which is what
-	// leaves the bars enough height to read at distance.
-	weatherH = 104
+	// chartH is the combined chart's band under the day badge:
+	// precipitation bars with the temperature line drawn over them
+	// rather than in a band of its own, which is what leaves the bars
+	// enough height to read at distance.
+	chartH = 40
+	// chartPadX keeps the chart off the column dividers.
+	chartPadX = 8
 )
+
+// badgeH is the day badge's height: the weekday and date numeral, then
+// the condition icon and the high and low. Its last pixels are what let
+// a column placed under a fuzzy_clock header band still fit three
+// wrapped events and the "+N MORE" line beneath them.
+var badgeH = daybadge.Column.Size().Y
 
 // minHeight is the shortest widget this screen can be drawn into. Every
 // renderer places its content at a fixed offset from its band's top —
@@ -40,19 +43,19 @@ const (
 // less room than its bands need would paint over whichever widget sits
 // below it, which is the hazard newPrecipLayout documents. Clamping the
 // rects is not enough on its own, so a widget this short draws nothing.
-const minHeight = headerH + weatherH
+var minHeight = badgeH + chartH
 
 // columnLayout describes the vertical zones of one day column.
 type columnLayout struct {
-	Bounds  image.Rectangle
-	Header  image.Rectangle
-	Weather image.Rectangle
-	Events  image.Rectangle
-	IsLast  bool
+	Bounds image.Rectangle
+	Badge  image.Rectangle
+	Chart  image.Rectangle
+	Events image.Rectangle
+	IsLast bool
 }
 
 // computeColumns divides bounds into five equal-width day columns and
-// assigns each the fixed header / weather / events bands.
+// assigns each the fixed badge / chart / events bands.
 //
 // Integer division leaves up to four pixels over; they go to the last
 // column, which runs to bounds.Max.X. Spreading them would make the
@@ -63,8 +66,8 @@ func computeColumns(bounds image.Rectangle) []columnLayout {
 	colW := bounds.Dx() / columns
 	cols := make([]columnLayout, columns)
 
-	headerBottom := min(bounds.Min.Y+headerH, bounds.Max.Y)
-	weatherBottom := min(headerBottom+weatherH, bounds.Max.Y)
+	badgeBottom := min(bounds.Min.Y+badgeH, bounds.Max.Y)
+	chartBottom := min(badgeBottom+chartH, bounds.Max.Y)
 
 	for i := range columns {
 		x0 := bounds.Min.X + i*colW
@@ -73,11 +76,11 @@ func computeColumns(bounds image.Rectangle) []columnLayout {
 			x1 = bounds.Max.X
 		}
 		cols[i] = columnLayout{
-			Bounds:  image.Rect(x0, bounds.Min.Y, x1, bounds.Max.Y),
-			Header:  image.Rect(x0, bounds.Min.Y, x1, headerBottom),
-			Weather: image.Rect(x0, headerBottom, x1, weatherBottom),
-			Events:  image.Rect(x0, weatherBottom, x1, bounds.Max.Y),
-			IsLast:  i == columns-1,
+			Bounds: image.Rect(x0, bounds.Min.Y, x1, bounds.Max.Y),
+			Badge:  image.Rect(x0, bounds.Min.Y, x1, badgeBottom),
+			Chart:  image.Rect(x0+chartPadX, badgeBottom, x1-chartPadX, chartBottom),
+			Events: image.Rect(x0, chartBottom, x1, bounds.Max.Y),
+			IsLast: i == columns-1,
 		}
 	}
 	return cols

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daybadge"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
@@ -54,8 +55,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	// the module takes across the days shown.
 	today := data.Days[0]
 	hero := computeHero(w.Bounds())
-	renderIdentity(frame, hero.Identity, now)
-	renderHeroWeather(frame, hero.Weather, today.Forecast, unit)
+	daybadge.Hero.Draw(frame, hero.Badge, today, now, unit)
 	renderHeroChart(frame, hero.Chart, today.Forecast, now.Hour(), data.TempRange)
 	renderHeroAgenda(frame, hero.Agenda, eventlist.Remaining(today.Events, now), agenda)
 
@@ -67,10 +67,10 @@ func (w *Widget) Render(frame *image.Paletted) error {
 
 	for i, row := range computeDayRows(w.Bounds()) {
 		renderDayRow(frame, row, data.Days[i+1], dayRowOptions{
-			IsTomorrow: i == 0,
-			TempUnit:   unit,
-			TempRange:  data.TempRange,
-			Agenda:     rowStyle,
+			Now:       now,
+			TempUnit:  unit,
+			TempRange: data.TempRange,
+			Agenda:    rowStyle,
 		})
 		if i < dayRows-1 {
 			daygrid.DrawHLine(frame, row.Min.X, row.Max.X, row.Max.Y-1, widget.PaperBlack)
