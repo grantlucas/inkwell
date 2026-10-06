@@ -52,8 +52,7 @@ func sharedTempRange(days []weather.DailyForecast) weatherview.TempRange {
 			known = append(known, d)
 		}
 	}
-	lo, hi := weatherview.GlobalTempRange(known)
-	return weatherview.TempRange{Min: lo, Max: hi}
+	return weatherview.GlobalTempRange(known)
 }
 
 // renderWeatherBand draws one column's weather: condition icon, the

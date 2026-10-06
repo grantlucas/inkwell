@@ -11,7 +11,7 @@ import (
 // TempRange is the temperature scale a combined chart plots against, in
 // degrees Celsius. A screen computes one across every day it shows and
 // hands the same range to each chart, so a cold day sits visibly lower
-// than a warm one. GlobalTempRange is the usual source.
+// than a warm one. The day data module computes it with GlobalTempRange.
 type TempRange struct {
 	Min, Max float64
 }

@@ -21,6 +21,14 @@ import (
 type Day struct {
 	Start   time.Time
 	IsToday bool
+
+	// Events are the day's events, all-day first and then by start, as
+	// FilterEventsForDay buckets them.
+	Events []calendar.Event
+	// Forecast is the day's forecast, or nil when the forecast does not
+	// reach it. Nil is the absence: a zero DailyForecast would read as a
+	// clear day at 0°C.
+	Forecast *weather.DailyForecast
 }
 
 // End is the local midnight the day runs to, exclusive.
@@ -111,10 +119,19 @@ func dateOnly(t time.Time) time.Time {
 // date rather than by instant, for the same zone reason as the all-day
 // bucketing above.
 func FindForecast(days []weather.DailyForecast, day Day) weather.DailyForecast {
-	for _, d := range days {
-		if d.Date.Year() == day.Start.Year() && d.Date.YearDay() == day.Start.YearDay() {
-			return d
-		}
+	if f := forecastFor(days, day); f != nil {
+		return *f
 	}
 	return weather.DailyForecast{}
+}
+
+// forecastFor returns a copy of the day's forecast, or nil when the
+// forecast does not reach that far.
+func forecastFor(days []weather.DailyForecast, day Day) *weather.DailyForecast {
+	for _, d := range days {
+		if d.Date.Year() == day.Start.Year() && d.Date.YearDay() == day.Start.YearDay() {
+			return &d
+		}
+	}
+	return nil
 }

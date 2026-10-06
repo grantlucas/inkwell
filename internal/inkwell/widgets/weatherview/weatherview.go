@@ -143,11 +143,11 @@ func RenderDayWeather(frame *image.Paletted, bounds image.Rectangle, day weather
 	}
 }
 
-// GlobalTempRange computes the min and max temperatures across all days'
-// hourly data, for use in chart normalization.
-func GlobalTempRange(days []weather.DailyForecast) (minTemp, maxTemp float64) {
-	minTemp = math.Inf(1)
-	maxTemp = math.Inf(-1)
+// GlobalTempRange computes the temperature range across all days' highs,
+// lows and hourly data, for use in chart normalization. With no days it
+// falls back to 0-25°C.
+func GlobalTempRange(days []weather.DailyForecast) TempRange {
+	minTemp, maxTemp := math.Inf(1), math.Inf(-1)
 	for _, day := range days {
 		for _, hp := range day.Hourly {
 			if hp.Temperature < minTemp {
@@ -170,5 +170,5 @@ func GlobalTempRange(days []weather.DailyForecast) (minTemp, maxTemp float64) {
 	if math.IsInf(maxTemp, -1) {
 		maxTemp = 25
 	}
-	return minTemp, maxTemp
+	return TempRange{Min: minTemp, Max: maxTemp}
 }
