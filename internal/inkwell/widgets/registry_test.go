@@ -1,24 +1,55 @@
 package widgets_test
 
 import (
-	"context"
 	"image"
-	"net/http"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
+	"github.com/grantlucas/inkwell/internal/inkwell/calendar/testcal"
+	"github.com/grantlucas/inkwell/internal/inkwell/testutil/fakehttp"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets"
 )
 
-// offlineTransport answers every request with an error, so building a
-// widget can never reach the network.
-type offlineTransport struct{}
+// typedDeps is what the app hands every widget: one calendar module and one
+// weather provider, both fetching through tr.
+func typedDeps(tr *fakehttp.Client, now func() time.Time) widget.Deps {
+	return widget.Deps{
+		Now:      now,
+		Calendar: calendar.NewProvider(tr, now),
+		Weather:  weather.NewProvider(tr, time.Hour, now, weather.Settings{TempUnit: "C"}),
+	}
+}
 
-func (offlineTransport) Do(*http.Request) (*http.Response, error) {
-	return nil, context.DeadlineExceeded
+// Every calendar widget showing one feed, on however many screens, causes
+// one upstream request for it: the calendar module is shared, and no
+// factory builds a cache of its own.
+func TestDefaultRegistry_CalendarWidgetsShareOneFetchPerFeed(t *testing.T) {
+	const url = "https://example.com/a.ics"
+	now := func() time.Time { return time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC) }
+	tr := fakehttp.New()
+	tr.Serve(url, testcal.Generate(now()))
+	deps := typedDeps(tr, now)
+	feeds := map[string]any{"feeds": []any{url}}
+
+	r := widgets.NewDefaultRegistry()
+	for _, typeName := range []string{"bold-five", "row-agenda", "today-hero", "weekly-calendar"} {
+		bounds := image.Rect(0, 0, 800, 480)
+		w, err := r.Create(typeName, bounds, feeds, deps)
+		if err != nil {
+			t.Fatalf("Create %s: %v", typeName, err)
+		}
+		if err := w.Render(image.NewPaletted(bounds, widget.PaperPalette)); err != nil {
+			t.Fatalf("Render %s: %v", typeName, err)
+		}
+	}
+
+	if got := tr.Requests(url); got != 1 {
+		t.Errorf("upstream requests for the feed = %d, want 1", got)
+	}
 }
 
 // Every registered widget builds from the typed dependencies the app hands
@@ -26,12 +57,7 @@ func (offlineTransport) Do(*http.Request) (*http.Response, error) {
 // registered without proving it builds here.
 func TestDefaultRegistry_BuildsEveryWidgetFromTypedDeps(t *testing.T) {
 	now := func() time.Time { return time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC) }
-	client := offlineTransport{}
-	deps := widget.Deps{
-		Now:        now,
-		HTTPClient: client,
-		Weather:    weather.NewProvider(client, time.Hour, now, weather.Settings{TempUnit: "C"}),
-	}
+	deps := typedDeps(fakehttp.New(), now)
 	feeds := map[string]any{"feeds": []any{"https://example.com/a.ics"}}
 
 	tests := []struct {

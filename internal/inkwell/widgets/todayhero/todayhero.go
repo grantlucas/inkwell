@@ -136,14 +136,14 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 		now = time.Now
 	}
 
-	cachedCal := calendar.NewCachedSource(
-		calendar.NewHTTPSource(cfg.Feeds, deps.HTTPClient), cfg.Refresh, now,
-	)
+	// Draw from the shared calendar module, so every widget showing a feed
+	// shares one cache of it.
+	cal := deps.Calendar.Source(cfg.Feeds, cfg.Refresh)
 
 	// Draw from the shared Provider bound to the resolved model, so every
 	// weather widget deduplicates through one cache.
 	daygrid.ResolveDefaults(&cfg.Weather, deps.Weather)
 	ws := deps.Weather.SourceForModel(cfg.Weather.Model)
 
-	return New(bounds, cachedCal, ws, now, cfg), nil
+	return New(bounds, cal, ws, now, cfg), nil
 }

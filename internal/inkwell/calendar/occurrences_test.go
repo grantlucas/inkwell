@@ -3,11 +3,12 @@ package calendar
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/testutil/fakehttp"
 )
 
 // recurringFeedICS is a feed whose weekly series began in January, months
@@ -45,11 +46,11 @@ func occurrencesOf(events []Event) []occurrence {
 	return out
 }
 
-// TestCachedSource_Occurrences drives the fetch and the cache together
-// through a fake HTTP transport, the way a widget does. A series is
+// TestProvider_Occurrences drives the fetch and the cache together
+// through a fake HTTP client, the way a widget does. A series is
 // expanded before the window is applied, so a weekly meeting that began
 // in January still turns up in October.
-func TestCachedSource_Occurrences(t *testing.T) {
+func TestProvider_Occurrences(t *testing.T) {
 	const url = "https://example.com/cal.ics"
 	stripName := mustRule(t, `^Jane Doe\n`, "", false)
 	dropSync := mustRule(t, `Weekly Sync`, "", true)
@@ -110,9 +111,10 @@ func TestCachedSource_Occurrences(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
-			client := &mockHTTPClient{responses: map[string]*http.Response{url: newMockResponse(recurringFeedICS)}}
+			tr := fakehttp.New()
+			tr.Serve(url, recurringFeedICS)
 			now := tc.start
-			src := NewCachedSource(NewHTTPSource([]Feed{{URL: url, Rules: tc.rules}}, client), 15*time.Minute, func() time.Time { return now })
+			src := NewProvider(tr, func() time.Time { return now }).Source([]Feed{{URL: url, Rules: tc.rules}}, 15*time.Minute)
 
 			fresh, err := src.Events(context.Background(), tc.start, tc.end)
 			if err != nil {
@@ -129,8 +131,8 @@ func TestCachedSource_Occurrences(t *testing.T) {
 			if got := occurrencesOf(cached); !slices.Equal(got, tc.want) {
 				t.Errorf("cache hit = %v, want %v", got, tc.want)
 			}
-			if client.getCalls != 1 {
-				t.Errorf("upstream requests = %d, want 1", client.getCalls)
+			if got := tr.Total(); got != 1 {
+				t.Errorf("upstream requests = %d, want 1", got)
 			}
 		})
 	}
@@ -152,10 +154,10 @@ func icsCalendar(events ...string) string {
 	return "BEGIN:VCALENDAR\r\n" + strings.Join(events, "") + "END:VCALENDAR\r\n"
 }
 
-// TestCachedSource_OverridesAndDuplicates drives single-instance edits
+// TestProvider_OverridesAndDuplicates drives single-instance edits
 // and events carried by more than one feed through the fake HTTP
-// transport, the way a widget sees them.
-func TestCachedSource_OverridesAndDuplicates(t *testing.T) {
+// client, the way a widget sees them.
+func TestProvider_OverridesAndDuplicates(t *testing.T) {
 	const (
 		urlA = "https://a.example/cal.ics"
 		urlB = "https://b.example/cal.ics"
@@ -306,23 +308,39 @@ END:VEVENT
 				{Summary: "Weekly Sync", Start: oct(12, 9)},
 			},
 		},
+		{
+			// Overrides apply within their own feed: feed A's rules
+			// cancelling its Oct 5 instance leave feed B's copy of the
+			// same series alone.
+			label: "one feed's cancelled override leaves another feed's series alone",
+			feeds: map[string]string{
+				urlA: icsCalendar(weeklySeries, strings.ReplaceAll(movedOct5, "SUMMARY:Weekly Sync", "SUMMARY:Weekly Sync (skipped)")),
+				urlB: icsCalendar(weeklySeries),
+			},
+			rules: map[string][]Rule{
+				urlA: {mustRule(t, `skipped`, "", true)},
+			},
+			want: []occurrence{
+				{Summary: "Weekly Sync", Start: oct(5, 9)},
+				{Summary: "Weekly Sync", Start: oct(12, 9)},
+			},
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
-			responses := map[string]*http.Response{}
+			tr := fakehttp.New()
 			var feeds []Feed
 			for _, url := range []string{urlA, urlB} {
 				body, ok := tc.feeds[url]
 				if !ok {
 					continue
 				}
-				responses[url] = newMockResponse(body)
+				tr.Serve(url, body)
 				feeds = append(feeds, Feed{URL: url, Rules: tc.rules[url]})
 			}
-			client := &mockHTTPClient{responses: responses}
 			start, end := oct(5, 0), oct(19, 0)
-			src := NewCachedSource(NewHTTPSource(feeds, client), 15*time.Minute, func() time.Time { return start })
+			src := NewProvider(tr, func() time.Time { return start }).Source(feeds, 15*time.Minute)
 
 			got, err := src.Events(context.Background(), start, end)
 			if err != nil {

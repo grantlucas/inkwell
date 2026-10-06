@@ -16,9 +16,11 @@ import (
 // dependency share its cache.
 type Deps struct {
 	Now func() time.Time
-	// HTTPClient fetches calendar feeds. A calendar widget built without
-	// one fails rather than reaching for a default client.
-	HTTPClient calendar.HTTPClient
+	// Calendar is the dashboard's shared calendar module. It keeps one
+	// cache per feed, so every widget showing a feed shares one fetch of
+	// it. A calendar widget built without one fails rather than building
+	// its own.
+	Calendar *calendar.Provider
 	// Weather is the dashboard's shared forecast provider. It carries the
 	// top-level weather settings that widget-level overrides inherit from.
 	Weather *weather.Provider

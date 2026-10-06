@@ -159,7 +159,7 @@ Key types introduced:
 
 - **`widget.Registry`** — maps type name strings (e.g. `"clock"`) to factory functions
 - **`widget.Factory`** — `func(bounds, config, deps) → Widget`
-- **`widget.Deps`** — injectable dependencies (clock, future: HTTP client)
+- **`widget.Deps`** — injectable dependencies (clock, the shared calendar module and weather provider)
 - **`Screen`** — named widget collection (one layout)
 - **`Dashboard`** — screen collection with passive rotation
 

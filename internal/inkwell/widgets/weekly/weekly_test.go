@@ -309,9 +309,9 @@ func minimalConfig() map[string]any {
 // the calendar fetch and the shared weather provider.
 func typedDeps(client calendar.HTTPClient) widget.Deps {
 	return widget.Deps{
-		Now:        fixedClock(testTime),
-		HTTPClient: client,
-		Weather:    weather.NewProvider(client, time.Hour, fixedClock(testTime), weather.Settings{TempUnit: "C"}),
+		Now:      fixedClock(testTime),
+		Calendar: calendar.NewProvider(client, fixedClock(testTime)),
+		Weather:  weather.NewProvider(client, time.Hour, fixedClock(testTime), weather.Settings{TempUnit: "C"}),
 	}
 }
 
@@ -340,11 +340,11 @@ func TestFactory_Builds(t *testing.T) {
 }
 
 // A widget built without its dependencies fails instead of falling back
-// to a default HTTP client the app never chose.
+// to a calendar cache of its own.
 func TestFactory_MissingDeps(t *testing.T) {
 	_, err := Factory(image.Rect(0, 0, 800, 480), minimalConfig(), widget.Deps{Now: fixedClock(testTime)})
-	if err == nil || !strings.Contains(err.Error(), "weekly-calendar: no HTTP client") {
-		t.Errorf("error = %v, want a missing HTTP client error", err)
+	if err == nil || !strings.Contains(err.Error(), "weekly-calendar: no calendar module") {
+		t.Errorf("error = %v, want a missing calendar module error", err)
 	}
 }
 
@@ -798,9 +798,9 @@ func TestFactory_WeatherSourceQueriesResolvedModel(t *testing.T) {
 			prov := weather.NewProvider(rec, time.Hour, fixedClock(testTime),
 				weather.Settings{Model: weather.ModelGEM, TempUnit: "C"})
 			deps := widget.Deps{
-				Now:        fixedClock(testTime),
-				HTTPClient: rec,
-				Weather:    prov,
+				Now:      fixedClock(testTime),
+				Calendar: calendar.NewProvider(rec, fixedClock(testTime)),
+				Weather:  prov,
 			}
 			cfg := minimalConfig()
 			cfg["show_weather"] = true
@@ -832,9 +832,9 @@ func TestFactory_ResolvesWeatherFromProvider(t *testing.T) {
 			TempUnit: "C",
 		})
 	deps := widget.Deps{
-		Now:        fixedClock(testTime),
-		HTTPClient: rec,
-		Weather:    prov,
+		Now:      fixedClock(testTime),
+		Calendar: calendar.NewProvider(rec, fixedClock(testTime)),
+		Weather:  prov,
 	}
 
 	t.Run("inherits provider defaults when unset", func(t *testing.T) {

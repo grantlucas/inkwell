@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
@@ -831,7 +832,7 @@ weather:
 
 	client := &recordingHTTPClient{}
 	_, err = NewApp(cfg, WithHardware(&MockHardware{}), WithInterval(time.Millisecond),
-		WithRegistry(reg), WithDeps(widget.Deps{HTTPClient: client}))
+		WithRegistry(reg), WithHTTPClient(client))
 	if err != nil {
 		t.Fatalf("NewApp: %v", err)
 	}
@@ -839,8 +840,8 @@ weather:
 	if len(got) != 2 {
 		t.Fatalf("built %d widgets, want 2", len(got))
 	}
-	if got[0].HTTPClient != client || got[1].HTTPClient != client {
-		t.Error("a widget did not receive the injected HTTP client")
+	if got[0].Calendar == nil || got[0].Calendar != got[1].Calendar {
+		t.Fatal("widgets did not share one calendar module")
 	}
 	if got[0].Weather == nil || got[0].Weather != got[1].Weather {
 		t.Fatal("widgets did not share one weather provider")
@@ -851,22 +852,39 @@ weather:
 	if !strings.Contains(client.lastURL, "latitude=43.2500") {
 		t.Errorf("forecast request %q did not go through the injected client at the top-level location", client.lastURL)
 	}
+
+	const feed = "https://cal.example/a.ics"
+	now := time.Now()
+	_, _ = got[0].Calendar.Occurrences(context.Background(), []calendar.Feed{{URL: feed}}, now, now.Add(time.Hour), time.Hour)
+	if client.lastURL != feed {
+		t.Errorf("calendar request %q did not go through the injected client", client.lastURL)
+	}
 }
 
 // Whatever the caller leaves out, the app supplies; whatever it injects,
 // the app keeps. Widgets never pick their own dependencies.
 func TestNewApp_FillsMissingDeps(t *testing.T) {
 	provider := weather.NewProvider(&recordingHTTPClient{}, time.Hour, time.Now, weather.Settings{})
+	cal := calendar.NewProvider(&recordingHTTPClient{}, time.Now)
 	tests := []struct {
 		label    string
 		injected widget.Deps
 		check    func(*testing.T, widget.Deps)
 	}{
 		{
-			label: "supplies an HTTP client and a weather provider",
+			label: "supplies a calendar module and a weather provider",
 			check: func(t *testing.T, got widget.Deps) {
-				if got.HTTPClient == nil || got.Weather == nil {
-					t.Errorf("deps = %+v, want an HTTP client and a weather provider", got)
+				if got.Calendar == nil || got.Weather == nil {
+					t.Errorf("deps = %+v, want a calendar module and a weather provider", got)
+				}
+			},
+		},
+		{
+			label:    "keeps an injected calendar module",
+			injected: widget.Deps{Calendar: cal},
+			check: func(t *testing.T, got widget.Deps) {
+				if got.Calendar != cal {
+					t.Error("the injected calendar module was replaced")
 				}
 			},
 		},
@@ -1616,9 +1634,7 @@ func TestNewApp_WeatherAsksForTheDashboardZone(t *testing.T) {
 		return &changingWidget{bounds: bounds}, nil
 	})
 	client := &urlRecorder{}
-	deps := widget.Deps{HTTPClient: client}
-
-	if _, err := NewApp(cfg, WithHardware(&MockHardware{}), WithRegistry(reg), WithDeps(deps)); err != nil {
+	if _, err := NewApp(cfg, WithHardware(&MockHardware{}), WithRegistry(reg), WithHTTPClient(client)); err != nil {
 		t.Fatalf("NewApp: %v", err)
 	}
 	if provider == nil {

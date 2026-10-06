@@ -23,10 +23,14 @@ divided by solid vertical rules.
 
 ## Data sources
 
-- **Calendar:** the `feeds` URLs are fetched as ICS and cached. The cache TTL
-  is the nested `config.refresh` value (see below). A fetch failure is logged
-  and the dashboard renders with whatever events succeeded (or none) rather
-  than blanking.
+- **Calendar:** the `feeds` URLs are fetched as ICS through the **shared
+  calendar module**, which keeps one cache per feed URL for every widget on
+  every screen. A feed is refetched once its cached copy is as old as this
+  widget's nested `config.refresh` value (see below); a feed this widget
+  shares with one that refreshes more often may be fresher than that. Each
+  widget's own `rules` are applied after the cache. A failed fetch serves the
+  feed's last good copy and is logged, and the dashboard renders with whatever
+  events it has (or none) rather than blanking.
 - **Weather:** when `show_weather` is true, the widget draws an Open-Meteo
   forecast from the **shared weather provider** — built once from the top-level
   [`weather:`](#weather-configuration) config and reused across every weather

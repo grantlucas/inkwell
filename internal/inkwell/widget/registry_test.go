@@ -1,13 +1,13 @@
 package widget_test
 
 import (
-	"context"
 	"image"
-	"net/http"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
+	"github.com/grantlucas/inkwell/internal/inkwell/testutil/fakehttp"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 )
@@ -132,30 +132,24 @@ func TestRegistry_CreatePassesTypedDeps(t *testing.T) {
 		return &stubWidget{bounds: bounds}, nil
 	})
 
-	client := &stubHTTPClient{}
-	provider := weather.NewProvider(client, time.Hour, time.Now, weather.Settings{})
+	tr := fakehttp.New()
+	cal := calendar.NewProvider(tr, time.Now)
+	provider := weather.NewProvider(tr, time.Hour, time.Now, weather.Settings{})
 	_, err := r.Create("spy", image.Rectangle{}, nil, widget.Deps{
-		Now:        time.Now,
-		HTTPClient: client,
-		Weather:    provider,
+		Now:      time.Now,
+		Calendar: cal,
+		Weather:  provider,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if gotDeps.HTTPClient != client {
-		t.Errorf("HTTPClient = %v, want the injected client", gotDeps.HTTPClient)
+	if gotDeps.Calendar != cal {
+		t.Errorf("Calendar = %v, want the injected calendar module", gotDeps.Calendar)
 	}
 	if gotDeps.Weather != provider {
 		t.Errorf("Weather = %v, want the injected provider", gotDeps.Weather)
 	}
-}
-
-// stubHTTPClient never answers; the registry only forwards it.
-type stubHTTPClient struct{}
-
-func (*stubHTTPClient) Do(*http.Request) (*http.Response, error) {
-	return nil, context.DeadlineExceeded
 }
 
 func TestRegistry_TypesListsRegisteredNamesSorted(t *testing.T) {
