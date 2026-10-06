@@ -348,51 +348,46 @@ func TestWidget_Golden(t *testing.T) {
 	}
 }
 
+// Factory is the shared day-widget factory, tested in daygrid: parsing
+// the shared settings, building the day data and taking the clock. What is
+// row-agenda's own is that it takes the example config and the reasons it gives for settings it has no use for.
 func TestFactory(t *testing.T) {
 	deps := widget.Deps{
 		Now:      fixedClock(testTime),
 		Calendar: calendar.NewProvider(fakehttp.New(), fixedClock(testTime)),
-		Weather:  weather.NewProvider(fakehttp.New(), time.Hour, fixedClock(testTime), weather.Settings{TempUnit: "F"}),
+		Weather:  weather.NewProvider(fakehttp.New(), time.Hour, fixedClock(testTime), weather.Settings{}),
 	}
-	noClock := deps
-	noClock.Now = nil
-	feeds := map[string]any{"feeds": []any{"https://example.com/a.ics"}}
 
 	tests := []struct {
 		label   string
 		config  map[string]any
-		deps    widget.Deps
 		wantErr string
 	}{
-		{label: "builds from typed deps", config: feeds, deps: deps},
-		{label: "defaults the clock", config: feeds, deps: noClock},
 		{
 			// The row-agenda screen in inkwell.example.yaml.
-			label: "the example config", deps: deps,
+			label: "the example config",
 			config: map[string]any{
 				"feeds":         []any{"https://example.com/my-calendar.ics"},
 				"show_location": false,
 				"refresh":       "15m",
 			},
 		},
-		{label: "rejects its config", config: map[string]any{}, deps: deps, wantErr: "row-agenda: feeds is required"},
 		{
 			// Rows grow to fit their events, so a cap could only
 			// contradict that, and the error says so.
-			label: "explains max_events", deps: deps,
+			label:   "explains max_events",
 			config:  map[string]any{"feeds": []any{"https://example.com/a.ics"}, "max_events": 3},
 			wantErr: "row-agenda: max_events is not supported: each row grows to fit its events, and when the week is too full the busiest rows give up lines first",
 		},
 		{
-			label: "explains a weekly-calendar key", deps: deps,
+			label:   "explains a weekly-calendar key",
 			config:  map[string]any{"feeds": []any{"https://example.com/a.ics"}, "show_weather": false},
 			wantErr: "row-agenda: show_weather is not supported: the weather badge is part of the layout; a day with no forecast already draws nothing",
 		},
-		{label: "needs the calendar module", config: feeds, deps: widget.Deps{Weather: deps.Weather}, wantErr: "row-agenda: no calendar module"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			w, err := Factory(image.Rect(0, 0, 800, 480), tt.config, tt.deps)
+			w, err := Factory(image.Rect(0, 0, 800, 480), tt.config, deps)
 			if tt.wantErr != "" {
 				if err == nil || err.Error() != tt.wantErr {
 					t.Fatalf("err = %v, want %q", err, tt.wantErr)
@@ -402,18 +397,8 @@ func TestFactory(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Factory: %v", err)
 			}
-			ra := w.(*Widget)
-			if ra.Bounds() != image.Rect(0, 0, 800, 480) {
-				t.Errorf("Bounds = %v", ra.Bounds())
-			}
-			// The unit comes from the top-level weather settings, and with
-			// no clock injected the widget reads the wall clock rather
-			// than drawing the epoch.
-			if ra.config.Weather.TempUnit != "F" {
-				t.Errorf("config = %+v", ra.config)
-			}
-			if ra.now().Year() < 2024 {
-				t.Errorf("clock year = %d", ra.now().Year())
+			if _, ok := w.(*Widget); !ok {
+				t.Errorf("Factory built a %T", w)
 			}
 		})
 	}

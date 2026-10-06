@@ -484,13 +484,15 @@ func TestDayData_NoWeather(t *testing.T) {
 	}
 }
 
-// A widget built without the calendar module or the weather provider fails
-// rather than building its own, and says which widget.
+// A widget built without the calendar module, the weather provider or the
+// dashboard's clock fails rather than building its own or reading the wall
+// clock, and says which widget.
 func TestNew_MissingDeps(t *testing.T) {
 	s := newSeam(t, time.Now())
-	noCalendar, noWeather := s.deps, s.deps
+	noCalendar, noWeather, noClock := s.deps, s.deps, s.deps
 	noCalendar.Calendar = nil
 	noWeather.Weather = nil
+	noClock.Now = nil
 
 	for _, c := range []struct {
 		label string
@@ -499,6 +501,7 @@ func TestNew_MissingDeps(t *testing.T) {
 	}{
 		{"no calendar module", noCalendar, "test-widget: no calendar module"},
 		{"no weather provider", noWeather, "test-widget: no weather provider"},
+		{"no clock", noClock, "test-widget: no clock"},
 	} {
 		t.Run(c.label, func(t *testing.T) {
 			_, err := daygrid.New("test-widget", gemConfig(), c.deps)

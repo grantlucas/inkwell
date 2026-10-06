@@ -180,9 +180,6 @@ func TestFactory(t *testing.T) {
 		Calendar: calendar.NewProvider(fakehttp.New(), fixedClock(testTime)),
 		Weather:  weather.NewProvider(fakehttp.New(), time.Hour, fixedClock(testTime), weather.Settings{TempUnit: "F"}),
 	}
-	noClock := deps
-	noClock.Now = nil
-
 	tests := []struct {
 		label   string
 		config  map[string]any
@@ -190,7 +187,6 @@ func TestFactory(t *testing.T) {
 		wantErr string
 	}{
 		{label: "builds from typed deps", config: minimalConfig(), deps: deps},
-		{label: "defaults the clock", config: minimalConfig(), deps: noClock},
 		{
 			// The weekly-calendar screen in inkwell.example.yaml.
 			label: "the example config", deps: deps,
@@ -249,9 +245,6 @@ func TestFactory(t *testing.T) {
 			wc := w.(*Widget)
 			if wc.Bounds() != image.Rect(0, 0, 800, 480) {
 				t.Errorf("Bounds = %v", wc.Bounds())
-			}
-			if wc.now().Year() < 2024 {
-				t.Errorf("clock year = %d", wc.now().Year())
 			}
 		})
 	}

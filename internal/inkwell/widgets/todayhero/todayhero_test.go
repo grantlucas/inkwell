@@ -512,27 +512,24 @@ func TestWidget_Golden(t *testing.T) {
 	}
 }
 
+// Factory is the shared day-widget factory, tested in daygrid: parsing
+// the shared settings, building the day data and taking the clock. What is
+// today-hero's own is its default event cap, that it takes the example config, and the reasons it gives for settings it has no use for.
 func TestFactory(t *testing.T) {
 	deps := widget.Deps{
 		Now:      fixedClock(testTime),
 		Calendar: calendar.NewProvider(fakehttp.New(), fixedClock(testTime)),
-		Weather:  weather.NewProvider(fakehttp.New(), time.Hour, fixedClock(testTime), weather.Settings{TempUnit: "F"}),
+		Weather:  weather.NewProvider(fakehttp.New(), time.Hour, fixedClock(testTime), weather.Settings{}),
 	}
-	noClock := deps
-	noClock.Now = nil
-	feeds := map[string]any{"feeds": []any{"https://example.com/a.ics"}}
 
 	tests := []struct {
 		label   string
 		config  map[string]any
-		deps    widget.Deps
 		wantErr string
 	}{
-		{label: "builds from typed deps", config: feeds, deps: deps},
-		{label: "defaults the clock", config: feeds, deps: noClock},
 		{
 			// The today-hero screen in inkwell.example.yaml.
-			label: "the example config", deps: deps,
+			label: "the example config",
 			config: map[string]any{
 				"feeds":         []any{"https://example.com/my-calendar.ics"},
 				"max_events":    3,
@@ -540,17 +537,16 @@ func TestFactory(t *testing.T) {
 				"refresh":       "15m",
 			},
 		},
-		{label: "rejects its config", config: map[string]any{}, deps: deps, wantErr: "today-hero: feeds is required"},
+		{label: "caps events at its default", config: map[string]any{"feeds": []any{"https://example.com/a.ics"}}},
 		{
-			label: "explains a weekly-calendar key", deps: deps,
+			label:   "explains a weekly-calendar key",
 			config:  map[string]any{"feeds": []any{"https://example.com/a.ics"}, "show_weather": false},
 			wantErr: "today-hero: show_weather is not supported: the weather band is part of the layout; a day with no forecast already draws nothing",
 		},
-		{label: "needs the calendar module", config: feeds, deps: widget.Deps{Weather: deps.Weather}, wantErr: "today-hero: no calendar module"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			w, err := Factory(image.Rect(0, 0, 800, 480), tt.config, tt.deps)
+			w, err := Factory(image.Rect(0, 0, 800, 480), tt.config, deps)
 			if tt.wantErr != "" {
 				if err == nil || err.Error() != tt.wantErr {
 					t.Fatalf("err = %v, want %q", err, tt.wantErr)
@@ -560,18 +556,8 @@ func TestFactory(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Factory: %v", err)
 			}
-			th := w.(*Widget)
-			if th.Bounds() != image.Rect(0, 0, 800, 480) {
-				t.Errorf("Bounds = %v", th.Bounds())
-			}
-			// The unit comes from the top-level weather settings, and with
-			// no clock injected the widget reads the wall clock rather
-			// than drawing the epoch.
-			if th.config.Weather.TempUnit != "F" || th.config.MaxEvents != defaultMaxEvents {
-				t.Errorf("config = %+v", th.config)
-			}
-			if th.now().Year() < 2024 {
-				t.Errorf("clock year = %d", th.now().Year())
+			if got := w.(*Widget).Config.MaxEvents; got != defaultMaxEvents {
+				t.Errorf("MaxEvents = %d, want %d", got, defaultMaxEvents)
 			}
 		})
 	}

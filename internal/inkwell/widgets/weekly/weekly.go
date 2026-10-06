@@ -111,6 +111,8 @@ func (w *Widget) Render(frame *image.Paletted) error {
 }
 
 // Factory creates a weekly-calendar Widget from config and dependencies.
+// It doesn't use daygrid.Factory: its settings extend the shared ones, and
+// whether it fetches weather at all depends on one of its own.
 func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
 	cfg, err := parseConfig(config, deps.Weather)
 	if err != nil {
@@ -125,10 +127,5 @@ func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (w
 	if err != nil {
 		return nil, err
 	}
-
-	now := deps.Now
-	if now == nil {
-		now = time.Now
-	}
-	return New(bounds, days, now, cfg), nil
+	return New(bounds, days, deps.Now, cfg), nil
 }
