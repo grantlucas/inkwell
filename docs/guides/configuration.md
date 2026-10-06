@@ -730,6 +730,49 @@ since the widget reads no calendar, and so is `days`, which belongs to
   refresh: "1h"    # the forecast changes slowly
 ```
 
+### `weather-ahead`
+
+The days after today as rows of weather only, four by default. Each row
+has the weekday and date in bold, the condition icon with the condition
+name beside it, the high and low under the name, and a combined chart
+filling the rest of the row. Every chart plots against one temperature
+range taken across the widget's own rows, so a cold day sits visibly
+lower than a warm one. Today is left to `today-weather`, which usually
+sits above it; the two are separate so each can be placed and scheduled
+on its own.
+
+The rows split the widget's height evenly, with a rule between them.
+Each row needs at least 222 × 62 px, so four days need 222 × 248 px and
+a week needs 222 × 434 px. Below that it logs and draws nothing rather
+than spilling onto its neighbours. The right-hand third of the panel
+under `today-weather`, 266 × 272 px, holds four days.
+
+A day the forecast doesn't reach says `NO FORECAST` under its date
+instead of drawing numbers nobody forecast. A failed fetch doesn't stop
+the rest of the screen drawing.
+
+<!-- markdownlint-disable MD013 -->
+| Key | Type | Default | Accepted values | Impact |
+|-----|------|---------|-----------------|--------|
+| `days` | int | `4` | `[1, 7]` | How many days after today to show, one row each. |
+| `latitude` | number | inherits `weather.latitude` | `[-90, 90]` | Per-widget forecast location override. |
+| `longitude` | number | inherits `weather.longitude` | `[-180, 180]` | Per-widget forecast location override. |
+| `temp_unit` | string | inherits `weather.temp_unit` | `C`, `F` | Per-widget unit override. |
+| `weather_model` | string | inherits `weather.model` | `gfs`, `ecmwf`, `gem` | Per-widget model override. |
+<!-- markdownlint-enable MD013 -->
+
+All of them are optional. The calendar settings — `feeds`, `refresh`,
+`show_location`, `max_events` — are rejected with the reason, since the
+widget reads no calendar.
+
+```yaml
+- type: weather-ahead
+  bounds: [534, 208, 800, 480]
+  refresh: "1h"    # the forecast changes slowly
+  config:
+    days: 4
+```
+
 ## Worked examples
 
 ### A quiet dashboard
