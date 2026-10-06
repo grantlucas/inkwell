@@ -19,7 +19,10 @@ import (
 // minChars is the narrowest list, in characters, that draws anything.
 const minChars = 3
 
-// Style chooses how a list is laid out and what it shows.
+// Style chooses how a list is laid out and what it shows. The zero value
+// lists every event that fits, stacked: each event's bold time on one
+// line and its title on the line below, at body size, edge to edge with
+// no gap. Location must be set before a timed event is listed.
 type Style struct {
 	// MaxEvents is the most events listed. Below 1 there is no cap, and
 	// the room alone decides.
@@ -72,11 +75,17 @@ type placed struct {
 	top int
 }
 
-// Draw draws events into r and returns how many it hid.
+// Draw draws events into r, from its top-left corner, and returns how
+// many it hid. Every line is cut to r's width. A line fits when its whole
+// height, ascent and descent, is inside r, and an event is drawn whole
+// or not at all. When not every event is drawn, the last visible line
+// is "+N MORE", counting every event not shown. An empty list draws
+// nothing: what an empty day says is the widget's.
 func (s Style) Draw(frame *image.Paletted, r image.Rectangle, events []calendar.Event) int {
 	blocks, hidden := s.layout(r, events)
 	for i, b := range blocks {
 		if s.Rules && i > 0 && !b.marker {
+			// Across the middle of the gap above this event.
 			daygrid.DrawHLine(frame, r.Min.X, r.Max.X, b.top-s.Gap+s.Gap/2, widget.PaperBlack)
 		}
 		for _, l := range b.lines {
@@ -131,31 +140,30 @@ func (s Style) layout(r image.Rectangle, events []calendar.Event) ([]placed, int
 		return nil, len(events)
 	}
 
+	// The one fit rule: a block fits when its last line's descent ends
+	// inside r. An event is placed whole or not at all, because a time
+	// with its title clipped off reads as an event with no name.
+	fits := func(b block, top int) bool { return top+b.height <= r.Max.Y }
+
 	var out []placed
-	top := r.Min.Y
 	for _, e := range s.listed(events) {
-		b := s.event(e, maxChars)
-		if top+b.height > r.Max.Y {
+		b, top := s.event(e, maxChars), s.next(out, r)
+		if !fits(b, top) {
 			break
 		}
 		out = append(out, placed{block: b, top: top})
-		top += b.height + s.Gap
 	}
 	if len(out) == len(events) {
 		return out, 0
 	}
 
-	// Something is hidden, so the last visible line has to say so. An
-	// event that would leave no room for that line gives its place up,
-	// and is counted with the rest: a day that silently drops events
-	// reads as a quieter day than it is.
+	// The one overflow rule: something is hidden, so the last visible
+	// line says how much. An event that would leave no room for that
+	// line gives its place up and is counted with the rest, since a day
+	// that silently drops events reads as a quieter day than it is.
 	for {
-		top := r.Min.Y
-		if n := len(out); n > 0 {
-			top = out[n-1].top + out[n-1].height + s.Gap
-		}
-		more := marker(len(events)-len(out), maxChars)
-		if top+more.height <= r.Max.Y {
+		more, top := marker(len(events)-len(out), maxChars), s.next(out, r)
+		if fits(more, top) {
 			return append(out, placed{block: more, top: top}), len(events) - len(out)
 		}
 		if len(out) == 0 {
@@ -163,6 +171,16 @@ func (s Style) layout(r image.Rectangle, events []calendar.Event) ([]placed, int
 		}
 		out = out[:len(out)-1]
 	}
+}
+
+// next is where the block after out starts: the top of r, or a gap
+// below the last block placed.
+func (s Style) next(out []placed, r image.Rectangle) int {
+	if len(out) == 0 {
+		return r.Min.Y
+	}
+	last := out[len(out)-1]
+	return last.top + last.height + s.Gap
 }
 
 // event resolves one event to its time line and the title under it.
