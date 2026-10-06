@@ -73,6 +73,7 @@ func TestDefaultRegistry_BuildsEveryWidgetFromTypedDeps(t *testing.T) {
 		{typeName: "separator", bounds: image.Rect(0, 0, 800, 2)},
 		{typeName: "today-hero", bounds: image.Rect(0, 0, 800, 480), config: feeds},
 		{typeName: "today-weather", bounds: image.Rect(534, 48, 800, 208)},
+		{typeName: "weather-ahead", bounds: image.Rect(534, 208, 800, 480)},
 		{typeName: "weekly-calendar", bounds: image.Rect(0, 52, 800, 480), config: feeds},
 	}
 

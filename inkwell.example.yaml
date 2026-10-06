@@ -273,3 +273,22 @@ dashboard:
     #         # top-level weather: block; override per widget if needed.
     #         #   temp_unit: F
     #         #   weather_model: ecmwf
+
+    # weather-ahead is a widget too: the days after today as rows of
+    # weather only — the weekday and date, the condition icon and name,
+    # the high and low, and a combined chart — with every chart on one
+    # temperature range taken across its own rows. Today is left to
+    # today-weather, which it usually sits under. Like today-weather it
+    # reads no calendar and takes only the weather keys, plus days: how
+    # many rows, 1 to 7, default 4. The rows split its height evenly and
+    # each needs at least 222 x 62 px; a day the forecast doesn't reach
+    # says NO FORECAST. Under today-weather in the right-hand column:
+    #
+    #     - type: weather-ahead
+    #       bounds: [534, 208, 800, 480]
+    #       refresh: "1h"    # the forecast is cached for hours; hourly
+    #                        # also turns the day over at midnight
+    #       config:
+    #         days: 4
+    #         # Location, model and temp_unit are inherited from the
+    #         # top-level weather: block; override per widget if needed.
