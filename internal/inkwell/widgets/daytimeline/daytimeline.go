@@ -55,8 +55,12 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	tl := newTimeline(today.Start, w.Window, l.Grid)
 
 	drawGrid(frame, l, tl, w.Window)
-	for _, e := range p.Placed {
-		drawBlock(frame, l.Events, tl, e, now, w.Config.ShowLocation)
+	a := arrange(p.Placed, l.Events, tl)
+	for _, b := range a.Blocks {
+		drawBlock(frame, b.Rect, tl, b.Event, now, w.Config.ShowLocation)
+	}
+	for _, t := range a.Tags {
+		drawTag(frame, t)
 	}
 	if p.Earlier > 0 {
 		drawNote(frame, l.Earlier, l.Events.Min.X, fmt.Sprintf("+%d EARLIER", p.Earlier))

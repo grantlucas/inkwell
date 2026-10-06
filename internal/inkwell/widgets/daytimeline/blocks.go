@@ -15,9 +15,6 @@ const (
 	// is plainly an outline; a thicker one would eat the rows a half-hour
 	// event needs for its label.
 	outlineW = 1
-	// minBlockH keeps a block visible when its event is shorter than a
-	// few pixels of the grid, or has no end at all.
-	minBlockH = 4
 )
 
 // placement is today's events sorted against the window: the ones drawn
@@ -60,9 +57,20 @@ func drawNote(frame *image.Paletted, band image.Rectangle, x int, text string) {
 // blockRect is where e's block goes: from the row its start falls on to
 // the row before its end, leaving one row of paper so back-to-back
 // events stay apart.
+//
+// A block is never shorter than a line of text. An event too short for
+// that, or with no end at all, still starts at its true time, but is
+// drawn a line tall so its label is written whole: a half-hour event on
+// the default window is otherwise about half a line, and its label
+// either loses its descenders or, shorter still, isn't written at all.
+// The one exception is an event in the window's last line of rows: its
+// block is lifted to end where a block clipped at the window's end does,
+// rather than run over the bottom rule.
 func blockRect(col image.Rectangle, tl timeline, e calendar.Event) image.Rectangle {
+	lineH, floor := daygrid.BodyLineH(), tl.bottom-1
 	top := tl.y(e.Start)
-	bottom := max(tl.y(e.End)-1, top+minBlockH)
+	bottom := min(max(tl.y(e.End)-1, top+lineH), floor)
+	top = min(top, max(bottom-lineH, tl.top))
 	return image.Rect(col.Min.X, top, col.Max.X, bottom)
 }
 
@@ -74,7 +82,7 @@ func finished(e calendar.Event, now time.Time) bool {
 	return e.End.Before(now)
 }
 
-// drawBlock draws e's block on the grid tl maps: an outline when it has
+// drawBlock draws e's block r on the grid tl maps: an outline when it has
 // finished, solid when it is still to come, labelled, with a mark on
 // each edge the window cuts it at. A solid block is a large black fill,
 // but it moves with the schedule, so it never sits in one place long
@@ -82,8 +90,7 @@ func finished(e calendar.Event, now time.Time) bool {
 //
 // now is the dashboard's clock, in the display zone the label's time is
 // written in.
-func drawBlock(frame *image.Paletted, col image.Rectangle, tl timeline, e calendar.Event, now time.Time, showLocation bool) {
-	r := blockRect(col, tl, e)
+func drawBlock(frame *image.Paletted, r image.Rectangle, tl timeline, e calendar.Event, now time.Time, showLocation bool) {
 	daygrid.FillRect(frame, r, widget.PaperBlack)
 
 	// Whatever is drawn inside the block is in its contrasting colour:
