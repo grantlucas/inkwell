@@ -165,7 +165,9 @@ The widget-specific keys live under `config:`.
 <!-- markdownlint-enable MD013 -->
 
 Any value of the wrong type, an empty or missing `feeds`, or an out-of-range
-number is a configuration error that fails `LoadConfig`.
+number is a configuration error that fails `LoadConfig`. So is any key not in
+this table, such as a misspelt `max_event`: it stops the dashboard loading,
+and the error lists the keys the widget accepts.
 
 ## Timezone
 
