@@ -104,9 +104,8 @@ func exampleUpstream() *fakehttp.Client {
 
 func exampleNow() time.Time { return exampleToday.Add(10*time.Hour + 40*time.Minute) }
 
-// renderExampleScreen loads the example config, builds the app on client,
-// and composes the screen named name.
-func renderExampleScreen(t *testing.T, name string, client HTTPClient) (*Screen, *image.Paletted) {
+// newExampleApp loads the example config and builds the app on client.
+func newExampleApp(t *testing.T, client HTTPClient) *App {
 	t.Helper()
 	f, err := os.Open(exampleConfigPath)
 	if err != nil {
@@ -122,6 +121,14 @@ func renderExampleScreen(t *testing.T, name string, client HTTPClient) (*Screen,
 	if err != nil {
 		t.Fatalf("NewApp: %v", err)
 	}
+	return app
+}
+
+// renderExampleScreen loads the example config, builds the app on client,
+// and composes the screen named name.
+func renderExampleScreen(t *testing.T, name string, client HTTPClient) (*Screen, *image.Paletted) {
+	t.Helper()
+	app := newExampleApp(t, client)
 	for _, s := range app.dashboard.screens {
 		if s.Name != name {
 			continue
@@ -144,6 +151,37 @@ func TestExampleConfig_DayTimelineScreen(t *testing.T) {
 
 	assertTiles(t, screen.Widgets(), image.Rect(0, 0, 800, 480))
 	testutil.AssertGoldenPNG(t, frame)
+}
+
+// The example rotates through the new screens, day-timeline first, and
+// each one loads with the example's bounds, tiles the panel and draws in
+// every widget. weekly-calendar is no longer part of it.
+func TestExampleConfig_Rotation(t *testing.T) {
+	want := []string{"day-timeline", "bold-five", "today-hero", "row-agenda"}
+
+	app := newExampleApp(t, exampleUpstream())
+	var got []string
+	for _, s := range app.dashboard.screens {
+		got = append(got, s.Name)
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("example screens = %q, want %q", got, want)
+	}
+	if app.dashboard.rotateInterval <= 0 {
+		t.Errorf("rotate_interval = %v, want the example to rotate", app.dashboard.rotateInterval)
+	}
+
+	for _, name := range want {
+		t.Run(name, func(t *testing.T) {
+			screen, frame := renderExampleScreen(t, name, exampleUpstream())
+			assertTiles(t, screen.Widgets(), image.Rect(0, 0, 800, 480))
+			for _, w := range screen.Widgets() {
+				if !inked(frame, w.Bounds()) {
+					t.Errorf("%T at %v drew nothing", w, w.Bounds())
+				}
+			}
+		})
+	}
 }
 
 // assertTiles checks that ws cover panel exactly: every pixel belongs to

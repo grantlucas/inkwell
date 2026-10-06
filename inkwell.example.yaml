@@ -34,7 +34,7 @@ preview:
 weather:
   latitude: 40.7128
   longitude: -74.0060
-  model: gem        # forecast model: gfs | ecmwf | gem (see weekly widget README)
+  model: gem        # forecast model: gfs | ecmwf | gem (see docs/guides/configuration.md)
   temp_unit: C      # C or F
 
 dashboard:
@@ -46,214 +46,14 @@ dashboard:
   # Cadences are wall-clock aligned, so widgets sharing a cadence coalesce onto
   # the same mark (two "5m" widgets both refresh on :00/:05/:10) instead of each
   # flashing independently. NOTE: a widget's `refresh:` (screen-refresh cadence)
-  # is distinct from weekly-calendar's `config.refresh` (data cache TTL) below.
+  # is distinct from a calendar widget's `config.refresh` (data cache TTL) below.
+  #
+  # The screens below take turns on the panel, each shown for rotate_interval
+  # before the next. A rotation reaches the panel as soon as it happens. Delete
+  # the screens you don't want, or remove rotate_interval to stay on the first.
+  rotate_interval: "15m"
   screens:
-    - name: weekly
-      widgets:
-        - type: date
-          bounds: [0, 0, 800, 50]
-          refresh: "24h"   # date only rolls at midnight
-          config:
-            format: "Monday, January 2"
-        - type: clock
-          bounds: [700, 0, 800, 50]
-          refresh: "1m"    # clock ticks every minute
-          config:
-            format: "15:04"
-            align: right
-        # LOW-FLASH PRESET: swap the precise clock above for a fuzzy clock to
-        # build a quiet dashboard. Fuzzy time ("About half past eight", "Nearly
-        # ten past five") only changes meaningfully every ~5 minutes, so a
-        # "5m" refresh keeps the panel from flashing for a clock tick that the
-        # eye wouldn't notice anyway. Pairs well with equally slow refresh on
-        # the rest of the screen (the wall-clock-aligned cadences coalesce, so
-        # a 5m clock and a 5m calendar flash together on :00/:05/:10).
-        # - type: fuzzy_clock
-        #   bounds: [500, 0, 800, 50]
-        #   refresh: "5m"    # fuzzy time only changes every ~5 minutes
-        #   config:
-        #     style: sentence   # sentence (default), title, or lower
-        #     use_words_for_noon_and_midnight: true   # "noon"/"midnight" vs "twelve"
-        #     use_24_hour: false                       # 12-hour by default
-        #     language: en                             # only "en" supported today
-        #     align: center                            # center (default), left, or right
-        #     scale: 1                                 # whole-number size; the longest phrase must fit
-        - type: separator
-          bounds: [0, 50, 800, 52]
-          refresh: "static"   # never changes; never triggers a refresh
-        - type: weekly-calendar
-          bounds: [0, 52, 800, 480]
-          refresh: "15m"   # how often the calendar/weather may refresh the panel
-          config:
-            # Each feed is an ICS URL string, or an object with optional
-            # per-feed `rules` that rewrite or drop that feed's events.
-            # Useful when a feed prepends the same boilerplate to every
-            # event (league calendars tend to lead with player and team),
-            # which crowds the part that differs out of a narrow column.
-            # Rules apply to the event summary only, run in order, and
-            # an invalid regex fails config loading. See the weekly
-            # widget README section "Feed rules".
-            feeds:
-              - "https://example.com/my-calendar.ics"
-              # - url: "https://example.com/team-calendar.ics"
-              #   name: "Hockey"          # names this feed in config errors
-              #   rules:
-              #     # No `replace` deletes the match — here, a fixed prefix.
-              #     - match: '^Jane Doe\n(Ravens\n)?'
-              #     # `$1` expands capture groups.
-              #     - match: 'vs (.*)'
-              #       replace: 'v $1'
-              #     # `exclude` drops the event entirely.
-              #     - match: 'Bottle Drive'
-              #       exclude: true
-            # Day columns to draw, counting from today. 1-7, default 7.
-            # Drop to 5 for a work-week view: the same 800 px split five
-            # ways gives 160 px columns instead of 114, so event titles
-            # get ~19 characters a line instead of ~13.
-            days: 7
-            show_weather: true
-            show_weather_label: true
-            max_events: 5
-            # Location, model, and temp_unit are inherited from the top-level
-            # weather: block above. Override any of them here per widget, e.g.:
-            #   longitude: -123.1   # show a different city in this widget
-            #   weather_model: ecmwf
-            #   temp_unit: F
-
-    # A second screen: bold-five. The same five-column shape as the
-    # weekly view above, with every element sized to be read from across
-    # the room rather than from arm's length — the day numeral goes from
-    # a 2.1 mm cap (readable to ~0.35 m) to 6.2 mm (~1.06 m). Uncomment
-    # it, and set `rotate_interval` on the dashboard, to put it into the
-    # rotation alongside the weekly view and compare them over time.
-    #
-    # Every column carries the combined chart — precipitation bars with
-    # the temperature line over them — on one temperature scale shared by
-    # the five days, so a dry day still shows its line and a cold day
-    # sits visibly lower than a warm one. The columns carry their own
-    # dates, so there is no separate `date` widget; the screen's clock is
-    # a large fuzzy_clock in a header band above them. Event titles get
-    # ~14 characters a line, the ceiling for a 160 px column; if titles
-    # are the problem, row-agenda is the screen that fixes them.
-    #
-    # - name: bold-five
-    #   widgets:
-    #     # The header band: the fuzzy clock at twice the body size. 2 is
-    #     # the largest scale whose longest phrase fits 800 px; the size
-    #     # is set here rather than guessed from the bounds, so it does
-    #     # not change as the phrase changes length.
-    #     - type: fuzzy_clock
-    #       bounds: [0, 0, 800, 46]
-    #       refresh: "5m"    # fuzzy time only changes every ~5 minutes
-    #       config:
-    #         scale: 2
-    #     - type: separator
-    #       bounds: [0, 46, 800, 48]
-    #       refresh: "static"
-    #     - type: bold-five
-    #       bounds: [0, 48, 800, 480]
-    #       refresh: "15m"   # how often it may refresh the panel
-    #       config:
-    #         # Same keys as weekly-calendar, so a screen can be swapped
-    #         # between the two without rewriting its config.
-    #         feeds:
-    #           - "https://example.com/my-calendar.ics"
-    #         max_events: 3        # three a column under the clock band;
-    #                              # a day with more says "+N MORE"
-    #         show_location: false
-    #         refresh: "15m"       # calendar cache TTL, NOT the panel
-    #                              # refresh cadence above
-    #         # Location, model and temp_unit are inherited from the
-    #         # top-level weather: block; override per widget if needed.
-    #         #   temp_unit: F
-    #         #   weather_model: ecmwf
-
-    # A third screen: today-hero. Today at reading distance down the
-    # left of the panel, the rest of the week as one-line rows down the
-    # right. The bet is that from across the room you only ever want
-    # today, and the week is a glance you take once you have walked up
-    # to it — so the panel is spent unevenly rather than evenly.
-    #
-    # Every chart is a combined chart (precipitation bars with the
-    # temperature line over them) on one temperature range shared by
-    # all five days. Today's is the widest of any screen, with a marker
-    # at the current hour; each day row has a small one under its date.
-    # Today's agenda shows only what is left of the day — "DONE FOR
-    # TODAY" once nothing is. There is no filled block marking today:
-    # the date is plain text above a rule, so nothing burns in.
-    #
-    # What it gives up: the day rows' charts are small (164 px), because
-    # a row cannot carry a legible chart and a legible title side by
-    # side. They show the shape of the day, not hour-by-hour detail; if
-    # that matters for the whole week, bold-five is the screen for it.
-    #
-    # - name: today-hero
-    #   widgets:
-    #     - type: today-hero
-    #       bounds: [0, 0, 800, 480]
-    #       refresh: "15m"   # how often it may refresh the panel
-    #       config:
-    #         # The shared calendar keys, same as weekly-calendar and
-    #         # bold-five. The weekly-calendar keys this screen has no
-    #         # equivalent for — days, week_start, show_weather,
-    #         # show_weather_label, highlight_hour — are rejected with
-    #         # an explanation rather than silently ignored.
-    #         feeds:
-    #           - "https://example.com/my-calendar.ics"
-    #         max_events: 3        # today's agenda; the scaled time and
-    #                              # wrapped title make each one tall
-    #         show_location: false
-    #         refresh: "15m"       # calendar cache TTL, NOT the panel
-    #                              # refresh cadence above
-    #         # Location, model and temp_unit are inherited from the
-    #         # top-level weather: block; override per widget if needed.
-
-    # A fourth screen: row-agenda. The axis swap — days become
-    # full-width rows with one event column each, so titles get 35-odd
-    # characters instead of 13, which makes this the only screen where
-    # nothing truncates on a realistic week. "Platform architecture
-    # review" fits, and so does "Car in for service".
-    #
-    # Rows are sized to their events: a quiet day's row is short and a
-    # busy day's row is tall, never shorter than the height that keeps
-    # its combined chart readable. There are always five rows. When the
-    # week will not fit, the busiest rows give up events first, one line
-    # at a time, and their last line becomes "+N MORE" — quiet days are
-    # never squeezed to make room. Every row carries the combined chart
-    # (precipitation bars with the temperature line) on one temperature
-    # scale shared by all five days. Today is the first row, shown by
-    # position alone: the date is plain on every row, so nothing fills
-    # the same patch of panel every refresh.
-    #
-    # What it gives up: a genuinely packed week loses detail from its
-    # busiest days, so this screen is better at reading what is there
-    # than at showing everything. Its charts are also the narrowest of
-    # the screens that carry them (110 px against bold-five's 160) —
-    # still a shape, but a cramped one.
-    #
-    # - name: row-agenda
-    #   widgets:
-    #     - type: row-agenda
-    #       bounds: [0, 0, 800, 480]
-    #       refresh: "15m"   # how often it may refresh the panel
-    #       config:
-    #         # The shared calendar keys. max_events is rejected here:
-    #         # rows grow to fit their events and the busiest give up
-    #         # lines first, so a cap could only contradict that.
-    #         # days, week_start, show_weather,
-    #         # show_weather_label and highlight_hour are rejected too,
-    #         # each with the reason — a config pasted over from
-    #         # weekly-calendar fails to load rather than quietly
-    #         # ignoring half of what you wrote.
-    #         feeds:
-    #           - "https://example.com/my-calendar.ics"
-    #         show_location: false
-    #         refresh: "15m"       # calendar cache TTL, NOT the panel
-    #                              # refresh cadence above
-    #         # Location, model and temp_unit are inherited from the
-    #         # top-level weather: block; override per widget if needed.
-
-    # A fifth screen: the day-timeline. Where the screens above are lists,
+    # The first screen: the day-timeline. Where the screens below are lists,
     # this one is today hour by hour, composed from four widgets rather
     # than drawn as one: the fuzzy clock across the top, today's agenda
     # down the left, and the weather for today and the days ahead down
@@ -262,10 +62,8 @@ dashboard:
     # calendar asking for more, and a widget whose data doesn't arrive
     # draws what it can without blanking the others.
     #
-    # It is active, so its bounds are checked against each other and the
-    # panel on every test run. With no rotate_interval only the first
-    # screen is shown; set one to rotate onto this screen, or move it to
-    # the top of the list.
+    # It is the first screen, so with no rotate_interval it is the one
+    # shown.
     #
     #   +----------------------------------------------------+  0
     #   |               fuzzy_clock, scale 2                 |
@@ -280,6 +78,8 @@ dashboard:
       widgets:
         # The header band: the fuzzy clock at twice the body size, the
         # largest scale whose longest phrase fits 800 px.
+        # For exact time, a `clock` widget (format: "15:04") fits the same
+        # band, at the cost of a refresh every minute.
         - type: fuzzy_clock
           bounds: [0, 0, 800, 46]
           refresh: "5m"    # fuzzy time only changes every ~5 minutes
@@ -363,3 +163,130 @@ dashboard:
                            # also turns the day over at midnight
           config:
             days: 4
+
+    # A second screen: bold-five. Five days as columns, today first, with
+    # every element sized to be read from across the room rather than
+    # from arm's length — the day numeral has a 6.2 mm cap, readable to
+    # about 1 m.
+    #
+    # Every column carries the combined chart — precipitation bars with
+    # the temperature line over them — on one temperature scale shared by
+    # the five days, so a dry day still shows its line and a cold day
+    # sits visibly lower than a warm one. The columns carry their own
+    # dates, so there is no separate `date` widget; the screen's clock is
+    # a large fuzzy_clock in a header band above them. Event titles get
+    # ~14 characters a line, the ceiling for a 160 px column; if titles
+    # are the problem, row-agenda is the screen that fixes them.
+    - name: bold-five
+      widgets:
+        # The header band: the fuzzy clock at twice the body size. 2 is
+        # the largest scale whose longest phrase fits 800 px; the size
+        # is set here rather than guessed from the bounds, so it does
+        # not change as the phrase changes length.
+        - type: fuzzy_clock
+          bounds: [0, 0, 800, 46]
+          refresh: "5m"    # fuzzy time only changes every ~5 minutes
+          config:
+            scale: 2
+        - type: separator
+          bounds: [0, 46, 800, 48]
+          refresh: "static"
+        - type: bold-five
+          bounds: [0, 48, 800, 480]
+          refresh: "15m"   # how often it may refresh the panel
+          config:
+            # The shared calendar keys. Calendar keys this screen has no
+            # use for — days, week_start, show_weather,
+            # show_weather_label, highlight_hour — are rejected with an
+            # explanation rather than silently ignored.
+            feeds:
+              - "https://example.com/my-calendar.ics"
+            max_events: 3        # three a column under the clock band;
+                                 # a day with more says "+N MORE"
+            show_location: false
+            refresh: "15m"       # calendar cache TTL, NOT the panel
+                                 # refresh cadence above
+            # Location, model and temp_unit are inherited from the
+            # top-level weather: block; override per widget if needed.
+            #   temp_unit: F
+            #   weather_model: ecmwf
+
+    # A third screen: today-hero. Today at reading distance down the
+    # left of the panel, the rest of the week as one-line rows down the
+    # right. The bet is that from across the room you only ever want
+    # today, and the week is a glance you take once you have walked up
+    # to it — so the panel is spent unevenly rather than evenly.
+    #
+    # Every chart is a combined chart (precipitation bars with the
+    # temperature line over them) on one temperature range shared by
+    # all five days. Today's is the widest of any screen, with a marker
+    # at the current hour; each day row has a small one under its date.
+    # Today's agenda shows only what is left of the day — "DONE FOR
+    # TODAY" once nothing is. There is no filled block marking today:
+    # the date is plain text above a rule, so nothing burns in.
+    #
+    # What it gives up: the day rows' charts are small (164 px), because
+    # a row cannot carry a legible chart and a legible title side by
+    # side. They show the shape of the day, not hour-by-hour detail; if
+    # that matters for the whole week, bold-five is the screen for it.
+    - name: today-hero
+      widgets:
+        - type: today-hero
+          bounds: [0, 0, 800, 480]
+          refresh: "15m"   # how often it may refresh the panel
+          config:
+            # The shared calendar keys, same as bold-five, and the same
+            # five keys rejected, each with the reason.
+            feeds:
+              - "https://example.com/my-calendar.ics"
+            max_events: 3        # today's agenda; the scaled time and
+                                 # wrapped title make each one tall
+            show_location: false
+            refresh: "15m"       # calendar cache TTL, NOT the panel
+                                 # refresh cadence above
+            # Location, model and temp_unit are inherited from the
+            # top-level weather: block; override per widget if needed.
+
+    # A fourth screen: row-agenda. The axis swap — days become
+    # full-width rows with one event column each, so titles get 35-odd
+    # characters instead of bold-five's 14, which makes this the only
+    # screen where nothing truncates on a realistic week. "Platform
+    # architecture review" fits, and so does "Car in for service".
+    #
+    # Rows are sized to their events: a quiet day's row is short and a
+    # busy day's row is tall, never shorter than the height that keeps
+    # its combined chart readable. There are always five rows. When the
+    # week will not fit, the busiest rows give up events first, one line
+    # at a time, and their last line becomes "+N MORE" — quiet days are
+    # never squeezed to make room. Every row carries the combined chart
+    # (precipitation bars with the temperature line) on one temperature
+    # scale shared by all five days. Today is the first row, shown by
+    # position alone: the date is plain on every row, so nothing fills
+    # the same patch of panel every refresh.
+    #
+    # What it gives up: a genuinely packed week loses detail from its
+    # busiest days, so this screen is better at reading what is there
+    # than at showing everything. Its charts are also the narrowest of
+    # the screens that carry them (110 px against bold-five's 160) —
+    # still a shape, but a cramped one.
+    - name: row-agenda
+      widgets:
+        - type: row-agenda
+          bounds: [0, 0, 800, 480]
+          refresh: "15m"   # how often it may refresh the panel
+          config:
+            # The shared calendar keys. max_events is rejected here:
+            # rows grow to fit their events and the busiest give up
+            # lines first, so a cap could only contradict that.
+            # days, week_start, show_weather, show_weather_label and
+            # highlight_hour are rejected too, each with the reason, so
+            # a config pasted over from another calendar screen fails
+            # to load rather than quietly ignoring half of what you
+            # wrote.
+            feeds:
+              - "https://example.com/my-calendar.ics"
+            show_location: false
+            refresh: "15m"       # calendar cache TTL, NOT the panel
+                                 # refresh cadence above
+            # Location, model and temp_unit are inherited from the
+            # top-level weather: block; override per widget if needed.
