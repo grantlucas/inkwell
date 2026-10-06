@@ -129,9 +129,10 @@ func parseRefresh(name string, v any) (time.Duration, error) {
 }
 
 // rejectUnknown fails on the first key, in sorted order, that the widget
-// doesn't accept, with the widget's reason when it gave one. Sorted, because ranging a map would name an arbitrary
-// one of several bad keys per run, so fixing them one at a time would
-// look like the error was wandering rather than counting down.
+// doesn't accept, with the widget's reason when it gave one. Sorted,
+// because ranging a map would name an arbitrary one of several bad keys
+// per run, so fixing them one at a time would look like the error was
+// wandering rather than counting down.
 func rejectUnknown(spec Spec, raw map[string]any) error {
 	accepted := slices.Concat(sharedKeys, spec.Extra)
 	if spec.MaxEvents > 0 {

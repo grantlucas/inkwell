@@ -503,7 +503,7 @@ refreshes every fifteen.
 |-----|------|---------|-----------------|--------|
 | `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Same form as `weekly-calendar`, including [feed rules](#feed-rules). |
 | `refresh` | duration | `"15m"` | `>= 1m` | **Calendar data cache TTL** — how often feeds are re-fetched. Not the render cadence. |
-| `max_events` | integer | `3` | Positive | Cap on today's agenda. The scaled time and wrapped title make each event tall, so three is what fits before the overflow marker. |
+| `max_events` | integer | `3` | Positive | Cap on today's agenda. The scaled time and wrapped title make each event tall, so three is what fits before the "+N MORE" line. |
 | `show_location` | bool | `false` | `true`, `false` | Appends the event's location to its title, when it has one and the line has room. |
 | `latitude` | number | inherits `weather.latitude` | `[-90, 90]` | Per-widget forecast location override. |
 | `longitude` | number | inherits `weather.longitude` | `[-180, 180]` | Per-widget forecast location override. |
