@@ -263,8 +263,11 @@ dashboard:
     # set start_hour and end_hour. An event crossing an edge of the window
     # is cut off there with an arrowhead pointing the way it carries on,
     # and events wholly outside it are counted in a "+N EARLIER" or
-    # "+N LATER" note. The widget fills the left of the screen; the right
-    # is where the weather for today and the days ahead will go.
+    # "+N LATER" note. Two overlapping events sit side by side, and a
+    # third at the same time is counted in a "+N" tag. All-day events
+    # are listed in a strip above the grid. The widget fills the left of
+    # the screen; the right is where the weather for today and the days
+    # ahead will go.
     #
     # - name: day-timeline
     #   widgets:
