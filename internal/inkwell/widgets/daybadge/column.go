@@ -7,6 +7,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
@@ -63,12 +64,12 @@ const (
 // says. (A framed column with an otherwise-normal header also read as
 // half-finished.)
 func drawColumn(frame *image.Paletted, r image.Rectangle, day daygrid.Day, unit string) {
-	ascent := daygrid.BodyAscent()
-	daygrid.Scaled(daygrid.BodyBoldFace, weekdayScale, widget.PaperBlack).DrawCentered(
+	ascent := drawkit.BodyAscent()
+	drawkit.Scaled(drawkit.BodyBoldFace, weekdayScale, widget.PaperBlack).DrawCentered(
 		frame, r.Min.X, r.Max.X, r.Min.Y+weekdayTop+ascent*weekdayScale,
 		strings.ToUpper(day.Start.Format("Mon")),
 	)
-	daygrid.Scaled(daygrid.BodyBoldFace, dateScale, widget.PaperBlack).DrawCentered(
+	drawkit.Scaled(drawkit.BodyBoldFace, dateScale, widget.PaperBlack).DrawCentered(
 		frame, r.Min.X, r.Max.X, r.Min.Y+dateTop+ascent*dateScale,
 		fmt.Sprintf("%d", day.Start.Day()),
 	)
@@ -81,6 +82,6 @@ func drawColumn(frame *image.Paletted, r image.Rectangle, day daygrid.Day, unit 
 
 	temps := weatherview.NewHighLow(*day.Forecast, unit)
 	right := r.Max.X - columnTempPadX
-	daygrid.Scaled(daygrid.BodyBoldFace, columnHiScale, widget.PaperBlack).DrawRight(frame, right, top+columnHiBase, temps.High())
-	daygrid.DrawTextRight(frame, right, top+columnLoBase, temps.Low(), daygrid.BodyFace, widget.PaperBlack)
+	drawkit.Scaled(drawkit.BodyBoldFace, columnHiScale, widget.PaperBlack).DrawRight(frame, right, top+columnHiBase, temps.High())
+	drawkit.DrawTextRight(frame, right, top+columnLoBase, temps.Low(), drawkit.BodyFace, widget.PaperBlack)
 }

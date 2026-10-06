@@ -8,6 +8,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daybadge"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
 
@@ -28,7 +29,7 @@ func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg 
 // Render draws today down the left and the next four days as rows down
 // the right.
 func (w *Widget) Render(frame *image.Paletted) error {
-	daygrid.FillWhite(frame, w.Bounds())
+	drawkit.FillWhite(frame, w.Bounds())
 
 	// Too small to draw into without spilling past the widget's bounds
 	// and over its neighbour on the shared frame. A blank region is a
@@ -62,7 +63,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	// The divider separates two different kinds of content, so it is
 	// heavier than a column rule and runs the full height.
 	for i := range dividerW {
-		daygrid.DrawVLine(frame, w.Bounds().Min.X+split+i, w.Bounds().Min.Y, w.Bounds().Max.Y, widget.PaperBlack)
+		drawkit.DrawVLine(frame, w.Bounds().Min.X+split+i, w.Bounds().Min.Y, w.Bounds().Max.Y, widget.PaperBlack)
 	}
 
 	for i, row := range computeDayRows(w.Bounds()) {
@@ -73,7 +74,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 			Agenda:    rowStyle,
 		})
 		if i < dayRows-1 {
-			daygrid.DrawHLine(frame, row.Min.X, row.Max.X, row.Max.Y-1, widget.PaperBlack)
+			drawkit.DrawHLine(frame, row.Min.X, row.Max.X, row.Max.Y-1, widget.PaperBlack)
 		}
 	}
 

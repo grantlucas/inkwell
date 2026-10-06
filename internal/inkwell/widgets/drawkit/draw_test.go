@@ -1,4 +1,4 @@
-package daygrid
+package drawkit
 
 import (
 	"image"
@@ -21,7 +21,7 @@ func TestMustLoadFace_PanicsOnFontError(t *testing.T) {
 			t.Fatal("expected a panic")
 		}
 		msg, ok := r.(string)
-		if !ok || !strings.Contains(msg, "daygrid: load smoke font") {
+		if !ok || !strings.Contains(msg, "drawkit: load smoke font") {
 			t.Errorf("panic = %v, want a string naming the failed face", r)
 		}
 	}()

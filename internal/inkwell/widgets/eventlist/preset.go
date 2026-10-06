@@ -3,7 +3,7 @@ package eventlist
 import (
 	"time"
 
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 // Preset is one of the shapes the day screens list events in. A screen,
@@ -86,7 +86,7 @@ func (p Preset) Style(maxEvents int, showLocation bool, loc *time.Location) Styl
 		s.Empty = Note{Text: emptyDash, Centred: true}
 	case PresetLarge:
 		s.TitleLines, s.Gap, s.Rules = presetTitleLines, largeGap, true
-		s.TimeScale, s.TitleLead = largeTimeScale, daygrid.BodyAscent()
+		s.TimeScale, s.TitleLead = largeTimeScale, drawkit.BodyAscent()
 		s.Empty = Note{Text: NothingScheduled}
 	default:
 		s.Layout = Inline

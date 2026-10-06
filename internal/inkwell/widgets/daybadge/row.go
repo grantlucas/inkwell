@@ -7,6 +7,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
@@ -60,14 +61,14 @@ const (
 func drawRow(frame *image.Paletted, r image.Rectangle, day daygrid.Day, unit string) {
 	x := r.Min.X + rowPadX
 	numeral := fmt.Sprintf("%d", day.Start.Day())
-	drawer := daygrid.Scaled(daygrid.BodyBoldFace, rowScale, widget.PaperBlack)
+	drawer := drawkit.Scaled(drawkit.BodyBoldFace, rowScale, widget.PaperBlack)
 	drawer.Draw(frame, x, r.Min.Y+rowDateBase, numeral)
 
 	abbrX := x + drawer.Measure(numeral) + rowAbbrGap
-	daygrid.DrawText(frame, abbrX, r.Min.Y+rowWeekdayBase,
-		strings.ToUpper(day.Start.Format("Mon")), daygrid.BodyFace, widget.PaperBlack)
-	daygrid.DrawText(frame, abbrX, r.Min.Y+rowMonthBase,
-		strings.ToUpper(day.Start.Format("Jan")), daygrid.BodyFace, widget.PaperBlack)
+	drawkit.DrawText(frame, abbrX, r.Min.Y+rowWeekdayBase,
+		strings.ToUpper(day.Start.Format("Mon")), drawkit.BodyFace, widget.PaperBlack)
+	drawkit.DrawText(frame, abbrX, r.Min.Y+rowMonthBase,
+		strings.ToUpper(day.Start.Format("Jan")), drawkit.BodyFace, widget.PaperBlack)
 
 	if day.Forecast == nil {
 		return
@@ -76,6 +77,6 @@ func drawRow(frame *image.Paletted, r image.Rectangle, day daygrid.Day, unit str
 	weatherview.DrawIcon(frame, bx, r.Min.Y+rowIconY, rowIconSize, day.Forecast.Condition)
 
 	temps := weatherview.NewHighLow(*day.Forecast, unit)
-	daygrid.DrawText(frame, bx+rowHiDX, r.Min.Y+rowHiBase, temps.High(), daygrid.BodyBoldFace, widget.PaperBlack)
-	daygrid.DrawText(frame, bx+rowHiDX, r.Min.Y+rowLoBase, temps.Low(), daygrid.BodyFace, widget.PaperBlack)
+	drawkit.DrawText(frame, bx+rowHiDX, r.Min.Y+rowHiBase, temps.High(), drawkit.BodyBoldFace, widget.PaperBlack)
+	drawkit.DrawText(frame, bx+rowHiDX, r.Min.Y+rowLoBase, temps.Low(), drawkit.BodyFace, widget.PaperBlack)
 }

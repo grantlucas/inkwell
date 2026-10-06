@@ -11,6 +11,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 var _ widget.Widget = (*Widget)(nil)
@@ -30,7 +31,7 @@ func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg 
 
 // Render draws today's hourly grid.
 func (w *Widget) Render(frame *image.Paletted) error {
-	daygrid.FillWhite(frame, w.Bounds())
+	drawkit.FillWhite(frame, w.Bounds())
 
 	// Too small to draw into without a grid too cramped to read, or
 	// spilling past the widget's bounds onto its neighbour. A blank

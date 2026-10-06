@@ -15,7 +15,7 @@ import (
 	"image"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daybadge"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 const (
@@ -123,7 +123,7 @@ func fitLines(counts []int, height int) []int {
 		total += rowHeight(lines[i])
 	}
 
-	floor := (minRowH - 2*agendaPadY) / daygrid.BodyLineH()
+	floor := (minRowH - 2*agendaPadY) / drawkit.BodyLineH()
 	for total > height {
 		busiest := 0
 		for i, n := range lines {
@@ -143,7 +143,7 @@ func fitLines(counts []int, height int) []int {
 
 // rowHeight is the height a row needs for n agenda lines.
 func rowHeight(n int) int {
-	return max(minRowH, 2*agendaPadY+n*daygrid.BodyLineH())
+	return max(minRowH, 2*agendaPadY+n*drawkit.BodyLineH())
 }
 
 // minRowH is the shortest a row may be: the day badge's height, which is

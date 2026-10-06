@@ -19,6 +19,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
@@ -65,7 +66,7 @@ func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg 
 // to carry it, so there is no size guard here. A failed fetch is logged
 // by the day data module and never returned.
 func (w *Widget) Render(frame *image.Paletted) error {
-	daygrid.FillWhite(frame, w.Bounds())
+	drawkit.FillWhite(frame, w.Bounds())
 
 	now := w.Now()
 	data := w.Days.Days(now, w.Config.RangeDays)

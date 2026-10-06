@@ -13,6 +13,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 // testTime is a Monday mid-afternoon: today's agenda still has events
@@ -24,7 +25,7 @@ func fixedClock(t time.Time) func() time.Time { return func() time.Time { return
 
 func newTestFrame(w, h int) *image.Paletted {
 	frame := image.NewPaletted(image.Rect(0, 0, w, h), widget.PaperPalette)
-	daygrid.FillWhite(frame, frame.Bounds())
+	drawkit.FillWhite(frame, frame.Bounds())
 	return frame
 }
 
@@ -206,7 +207,7 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 			// A neighbour already on the frame, outside these bounds.
 			neighbour := image.Rect(0, 481-1, 800, 480)
 			_ = neighbour
-			daygrid.FillRect(frame, image.Rect(0, 0, 800, 480), widget.PaperWhite)
+			drawkit.FillRect(frame, image.Rect(0, 0, 800, 480), widget.PaperWhite)
 
 			w := New(tt.bounds, daygrid.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), drawConfig("C", false))
 			if err := w.Render(frame); err != nil {
@@ -252,11 +253,11 @@ func TestWidget_ARowThatLostEventsSaysHowMany(t *testing.T) {
 		t.Fatalf("Monday kept %d lines for 9 events; the week should have trimmed it", row.Lines)
 	}
 	x := row.Agenda.Min.X + agendaPadX
-	baseline := row.Agenda.Min.Y + agendaPadY + (row.Lines-1)*daygrid.BodyLineH() + daygrid.BodyAscent()
-	box := image.Rect(x, baseline-daygrid.BodyAscent(), row.Agenda.Max.X, baseline-daygrid.BodyAscent()+daygrid.BodyLineH())
+	baseline := row.Agenda.Min.Y + agendaPadY + (row.Lines-1)*drawkit.BodyLineH() + drawkit.BodyAscent()
+	box := image.Rect(x, baseline-drawkit.BodyAscent(), row.Agenda.Max.X, baseline-drawkit.BodyAscent()+drawkit.BodyLineH())
 
 	want := newTestFrame(800, 480)
-	daygrid.DrawText(want, x, baseline, fmt.Sprintf("+%d MORE", 9-(row.Lines-1)), daygrid.BodyBoldFace, widget.PaperBlack)
+	drawkit.DrawText(want, x, baseline, fmt.Sprintf("+%d MORE", 9-(row.Lines-1)), drawkit.BodyBoldFace, widget.PaperBlack)
 	for y := box.Min.Y; y < box.Max.Y; y++ {
 		for xx := box.Min.X; xx < box.Max.X; xx++ {
 			if frame.ColorIndexAt(xx, y) != want.ColorIndexAt(xx, y) {

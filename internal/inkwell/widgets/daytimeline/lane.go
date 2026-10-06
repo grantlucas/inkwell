@@ -5,7 +5,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
@@ -73,6 +73,6 @@ func drawBar(frame *image.Paletted, plot image.Rectangle, top, bottom int, prob 
 		return
 	}
 	r := image.Rect(plot.Min.X, top+1+barPadY, plot.Min.X+n, bottom-barPadY)
-	daygrid.FillRect(frame, r, widget.PaperGray70)
-	daygrid.DrawVLine(frame, r.Max.X-1, r.Min.Y, r.Max.Y, widget.PaperBlack)
+	drawkit.FillRect(frame, r, widget.PaperGray70)
+	drawkit.DrawVLine(frame, r.Max.X-1, r.Min.Y, r.Max.Y, widget.PaperBlack)
 }

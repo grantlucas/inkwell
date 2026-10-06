@@ -13,6 +13,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 // testTime is a Monday mid-afternoon.
@@ -267,11 +268,11 @@ func hasSolidSquare(frame *image.Paletted, side int) bool {
 // The guard has to be able to fail.
 func TestHasSolidSquare(t *testing.T) {
 	frame := image.NewPaletted(image.Rect(0, 0, 100, 100), widget.PaperPalette)
-	daygrid.FillWhite(frame, frame.Rect)
+	drawkit.FillWhite(frame, frame.Rect)
 	if hasSolidSquare(frame, 20) {
 		t.Fatal("blank paper reported a solid square")
 	}
-	daygrid.FillRect(frame, image.Rect(30, 40, 50, 60), widget.PaperBlack)
+	drawkit.FillRect(frame, image.Rect(30, 40, 50, 60), widget.PaperBlack)
 	if !hasSolidSquare(frame, 20) {
 		t.Error("missed a 20x20 black square")
 	}

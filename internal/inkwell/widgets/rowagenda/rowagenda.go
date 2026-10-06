@@ -8,6 +8,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daybadge"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 var _ widget.Widget = (*Widget)(nil)
@@ -26,7 +27,7 @@ func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg 
 
 // Render draws five day rows, today first.
 func (w *Widget) Render(frame *image.Paletted) error {
-	daygrid.FillWhite(frame, w.Bounds())
+	drawkit.FillWhite(frame, w.Bounds())
 
 	// Too small to draw into without spilling past the widget's bounds
 	// and over its neighbour on the shared frame. A blank region is a
@@ -65,12 +66,12 @@ func (w *Widget) Render(frame *image.Paletted) error {
 
 		// A hairline between the badge and the agenda, so the two read
 		// as separate columns rather than as one run of text.
-		daygrid.DrawVLine(frame, row.Agenda.Min.X-ruleInset, row.Bounds.Min.Y, row.Bounds.Max.Y, widget.PaperBlack)
+		drawkit.DrawVLine(frame, row.Agenda.Min.X-ruleInset, row.Bounds.Min.Y, row.Bounds.Max.Y, widget.PaperBlack)
 
 		agenda.Draw(frame, agendaList(row), day.Events)
 
 		if !row.IsLast {
-			daygrid.DrawHLine(frame, row.Bounds.Min.X, row.Bounds.Max.X, row.Bounds.Max.Y-1, widget.PaperBlack)
+			drawkit.DrawHLine(frame, row.Bounds.Min.X, row.Bounds.Max.X, row.Bounds.Max.Y-1, widget.PaperBlack)
 		}
 	}
 

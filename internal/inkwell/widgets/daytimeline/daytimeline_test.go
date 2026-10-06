@@ -11,6 +11,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
 
@@ -225,7 +226,7 @@ func TestWidget_LabelsBlocks(t *testing.T) {
 			}
 			// The label starts at the block's left: its first few
 			// characters, the start time, are inked.
-			timeArea := image.Rect(inner.Min.X, inner.Min.Y, inner.Min.X+5*daygrid.BodyAdvance(), inner.Max.Y)
+			timeArea := image.Rect(inner.Min.X, inner.Min.Y, inner.Min.X+5*drawkit.BodyAdvance(), inner.Max.Y)
 			if countIndexIn(frame, timeArea, contrast) == 0 {
 				t.Error("no label at the block's left")
 			}
@@ -263,7 +264,7 @@ func TestWidget_TallBlocksSayWhenTheyEnd(t *testing.T) {
 				contrast, inner = widget.PaperBlack, block.Inset(outlineW)
 			}
 			// Everything under the first line.
-			below := image.Rect(inner.Min.X, inner.Min.Y+daygrid.BodyLineH(), inner.Max.X-markClear, inner.Max.Y)
+			below := image.Rect(inner.Min.X, inner.Min.Y+drawkit.BodyLineH(), inner.Max.X-markClear, inner.Max.Y)
 			if tt.wantUntil == "" {
 				if n := countIndexIn(frame, below, contrast); n != 0 {
 					t.Errorf("%d px under the first line of a block with no room for a second", n)
@@ -273,12 +274,12 @@ func TestWidget_TallBlocksSayWhenTheyEnd(t *testing.T) {
 			// The second line reads exactly the end time, written in
 			// the regular cut at the label's left.
 			ref := newTestFrame()
-			daygrid.FillRect(ref, block, widget.PaperBlack)
+			drawkit.FillRect(ref, block, widget.PaperBlack)
 			if finished(e, testTime) {
-				daygrid.FillWhite(ref, inner)
+				drawkit.FillWhite(ref, inner)
 			}
-			daygrid.DrawText(ref, inner.Min.X+labelPadX, labelBaseline(inner)+daygrid.BodyLineH(),
-				tt.wantUntil, daygrid.BodyFace, contrast)
+			drawkit.DrawText(ref, inner.Min.X+labelPadX, labelBaseline(inner)+drawkit.BodyLineH(),
+				tt.wantUntil, drawkit.BodyFace, contrast)
 			if !sameIn(frame, ref, below) {
 				t.Errorf("second line doesn't read %q", tt.wantUntil)
 			}
@@ -311,27 +312,27 @@ func TestWidget_ShortBlocksGetAWholeLine(t *testing.T) {
 			if frame.ColorIndexAt(x, top-1) == widget.PaperBlack {
 				t.Errorf("ink above the start, y=%d", top-1)
 			}
-			for y := top; y < top+daygrid.BodyLineH(); y++ {
+			for y := top; y < top+drawkit.BodyLineH(); y++ {
 				if frame.ColorIndexAt(x, y) != widget.PaperBlack {
 					t.Fatalf("block edge has paper at y=%d, %d rows under its start; want a whole line", y, y-top)
 				}
 			}
-			if frame.ColorIndexAt(x, top+daygrid.BodyLineH()) == widget.PaperBlack {
-				t.Errorf("block runs past one line, y=%d", top+daygrid.BodyLineH())
+			if frame.ColorIndexAt(x, top+drawkit.BodyLineH()) == widget.PaperBlack {
+				t.Errorf("block runs past one line, y=%d", top+drawkit.BodyLineH())
 			}
 
 			// The label reads exactly as one drawn into a line-tall
 			// block: nothing of it is cut off.
-			block := image.Rect(x, top, l.Events.Max.X, top+daygrid.BodyLineH())
+			block := image.Rect(x, top, l.Events.Max.X, top+drawkit.BodyLineH())
 			contrast, inner := widget.PaperWhite, block
 			ref := newTestFrame()
-			daygrid.FillRect(ref, block, widget.PaperBlack)
+			drawkit.FillRect(ref, block, widget.PaperBlack)
 			if finished(e, testTime) {
 				contrast, inner = widget.PaperBlack, block.Inset(outlineW)
-				daygrid.FillWhite(ref, inner)
+				drawkit.FillWhite(ref, inner)
 			}
-			daygrid.DrawText(ref, inner.Min.X+labelPadX, labelBaseline(inner), tt.from.Format("15:04"), daygrid.BodyBoldFace, contrast)
-			daygrid.DrawText(ref, inner.Min.X+labelPadX+6*daygrid.BodyAdvance(), labelBaseline(inner), "Standup", daygrid.BodyFace, contrast)
+			drawkit.DrawText(ref, inner.Min.X+labelPadX, labelBaseline(inner), tt.from.Format("15:04"), drawkit.BodyBoldFace, contrast)
+			drawkit.DrawText(ref, inner.Min.X+labelPadX+6*drawkit.BodyAdvance(), labelBaseline(inner), "Standup", drawkit.BodyFace, contrast)
 			if !sameIn(frame, ref, block) {
 				t.Errorf("block doesn't read %q in full", tt.from.Format("15:04")+" Standup")
 			}
@@ -397,7 +398,7 @@ func TestWidget_OverlappingEventsSitSideBySide(t *testing.T) {
 				x, top := xs[w.side], tl.y(w.from)
 				// A block ends a row above its end, and is never shorter
 				// than a line.
-				bottom := max(tl.y(w.to)-1, top+daygrid.BodyLineH())
+				bottom := max(tl.y(w.to)-1, top+drawkit.BodyLineH())
 				if frame.ColorIndexAt(x, top-1) == widget.PaperBlack {
 					t.Errorf("%v side: ink above %s, y=%d", w.side, w.from.Format("15:04"), top-1)
 				}
@@ -577,7 +578,7 @@ func TestWidget_ListsAllDayEventsInAStripAboveTheGrid(t *testing.T) {
 			if l.AllDay.Min.Y != testBounds.Min.Y || l.Grid.Min.Y <= l.AllDay.Max.Y-1 {
 				t.Fatalf("strip %v isn't at the top, above the grid at %d", l.AllDay, l.Grid.Min.Y)
 			}
-			if got := l.AllDay.Dy(); got < tt.wantLines*daygrid.BodyLineH() || got >= (tt.wantLines+1)*daygrid.BodyLineH() {
+			if got := l.AllDay.Dy(); got < tt.wantLines*drawkit.BodyLineH() || got >= (tt.wantLines+1)*drawkit.BodyLineH() {
 				t.Errorf("strip is %d px tall, want room for %d lines", got, tt.wantLines)
 			}
 
@@ -614,7 +615,7 @@ func TestWidget_ShortBlockAtTheWindowEndStaysOnTheGrid(t *testing.T) {
 			if frame.ColorIndexAt(x, last-1) == widget.PaperBlack {
 				t.Errorf("block runs onto the row above the bottom rule, y=%d", last-1)
 			}
-			for y := last - 1 - daygrid.BodyLineH(); y < last-1; y++ {
+			for y := last - 1 - drawkit.BodyLineH(); y < last-1; y++ {
 				if frame.ColorIndexAt(x, y) != widget.PaperBlack {
 					t.Fatalf("paper at y=%d; want a whole line ending above the bottom rule", y)
 				}
@@ -648,13 +649,13 @@ func TestWidget_LabelTimeIsInTheDisplayZone(t *testing.T) {
 	}
 
 	ref := newTestFrame()
-	daygrid.FillRect(ref, block, widget.PaperBlack)
+	drawkit.FillRect(ref, block, widget.PaperBlack)
 	drawLabel(ref, block, e, toronto, false, widget.PaperWhite)
 	if !sameIn(frame, ref, block) {
 		t.Error("label differs from one written at 15:00")
 	}
 	wrong := newTestFrame()
-	daygrid.FillRect(wrong, block, widget.PaperBlack)
+	drawkit.FillRect(wrong, block, widget.PaperBlack)
 	drawLabel(wrong, block, e, time.UTC, false, widget.PaperWhite)
 	if sameIn(frame, wrong, block) {
 		t.Error("label matches one written in UTC")
@@ -712,12 +713,12 @@ func TestWidget_DrawsAnHourGrid(t *testing.T) {
 			// and every other hour is labelled when the rows are too
 			// short for a label each.
 			step := 1
-			if tl.y(start.Add(time.Hour))-tl.y(start) < daygrid.BodyLineH() {
+			if tl.y(start.Add(time.Hour))-tl.y(start) < drawkit.BodyLineH() {
 				step = 2
 			}
 			for h := 0; h < tt.win.EndHour-tt.win.StartHour; h += step {
 				y0 := tl.y(start.Add(time.Duration(h) * time.Hour))
-				row := image.Rect(l.Gutter.Min.X, y0+1, l.Gutter.Max.X-1, y0+daygrid.BodyLineH())
+				row := image.Rect(l.Gutter.Min.X, y0+1, l.Gutter.Max.X-1, y0+drawkit.BodyLineH())
 				if countIndexIn(frame, row, widget.PaperBlack) == 0 {
 					t.Errorf("no label for hour %d", tt.win.StartHour+h)
 				}
@@ -957,7 +958,7 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 		t.Run(tt.label, func(t *testing.T) {
 			frame := newTestFrame()
 			paintNeighbours(frame, tt.bounds)
-			daygrid.FillRect(frame, tt.bounds, widget.PaperBlack)
+			drawkit.FillRect(frame, tt.bounds, widget.PaperBlack)
 			if err := newWidget(tt.bounds, typicalDay(), defaultConfig()).Render(frame); err != nil {
 				t.Fatalf("Render: %v", err)
 			}

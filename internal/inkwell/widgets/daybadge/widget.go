@@ -9,6 +9,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 // widgetName prefixes every config error so a dashboard that fails to
@@ -46,7 +47,7 @@ func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg 
 // and draws no weather.
 func (w *Widget) Render(frame *image.Paletted) error {
 	b := w.Bounds()
-	daygrid.FillWhite(frame, b)
+	drawkit.FillWhite(frame, b)
 
 	size := w.Config.Style.Size()
 	if b.Dx() < size.X || b.Dy() < size.Y {

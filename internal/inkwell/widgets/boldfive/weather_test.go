@@ -7,7 +7,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 // The day badge above the chart (the date, icon and readings) is the
@@ -16,7 +16,7 @@ import (
 
 func newTestFrame(w, h int) *image.Paletted {
 	frame := image.NewPaletted(image.Rect(0, 0, w, h), widget.PaperPalette)
-	daygrid.FillWhite(frame, frame.Bounds())
+	drawkit.FillWhite(frame, frame.Bounds())
 	return frame
 }
 

@@ -8,6 +8,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daybadge"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 var _ widget.Widget = (*Widget)(nil)
@@ -26,7 +27,7 @@ func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg 
 
 // Render draws five day columns starting with today.
 func (w *Widget) Render(frame *image.Paletted) error {
-	daygrid.FillWhite(frame, w.Bounds())
+	drawkit.FillWhite(frame, w.Bounds())
 
 	// Too short to draw into without spilling past the widget's bounds
 	// and over its neighbour on the shared frame. A blank region is a
@@ -66,7 +67,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 			// Solid PaperBlack: a PaperGrayNN hairline snaps to white
 			// under the BW threshold and vanishes into Gray4's light
 			// bucket, so it would read as a divider on neither mode.
-			daygrid.DrawVLine(frame, col.Bounds.Max.X-1, w.Bounds().Min.Y, w.Bounds().Max.Y, widget.PaperBlack)
+			drawkit.DrawVLine(frame, col.Bounds.Max.X-1, w.Bounds().Min.Y, w.Bounds().Max.Y, widget.PaperBlack)
 		}
 	}
 	return nil

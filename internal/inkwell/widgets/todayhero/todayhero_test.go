@@ -13,6 +13,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 // testTime is a Monday mid-afternoon: today's agenda still has events
@@ -24,7 +25,7 @@ func fixedClock(t time.Time) func() time.Time { return func() time.Time { return
 
 func newTestFrame(w, h int) *image.Paletted {
 	frame := image.NewPaletted(image.Rect(0, 0, w, h), widget.PaperPalette)
-	daygrid.FillWhite(frame, frame.Bounds())
+	drawkit.FillWhite(frame, frame.Bounds())
 	return frame
 }
 
@@ -310,7 +311,7 @@ func TestHasSolidSquare(t *testing.T) {
 	if hasSolidSquare(frame, 20) {
 		t.Fatal("blank paper reported a solid square")
 	}
-	daygrid.FillRect(frame, image.Rect(30, 40, 50, 60), widget.PaperBlack)
+	drawkit.FillRect(frame, image.Rect(30, 40, 50, 60), widget.PaperBlack)
 	if !hasSolidSquare(frame, 20) {
 		t.Error("missed a 20x20 black square")
 	}
@@ -361,15 +362,15 @@ func TestWidget_DayRowListsThreeAndSaysHowManyMore(t *testing.T) {
 	// Tuesday is tomorrow, the first row.
 	row := computeDayRows(panel)[0]
 	x := row.Min.X + rowAgendaDX
-	titleX := x + daygrid.TextWidth(daygrid.BodyFace, "ALL DAY ")
-	baseline := func(i int) int { return row.Min.Y + rowPadX + i*daygrid.BodyLineH() + daygrid.BodyAscent() }
+	titleX := x + drawkit.TextWidth(drawkit.BodyFace, "ALL DAY ")
+	baseline := func(i int) int { return row.Min.Y + rowPadX + i*drawkit.BodyLineH() + drawkit.BodyAscent() }
 
 	want := newTestFrame(800, 480)
 	for i := range 3 {
-		daygrid.DrawText(want, x, baseline(i), events[i].Start.Format("15:04"), daygrid.BodyFace, widget.PaperBlack)
-		daygrid.DrawText(want, titleX, baseline(i), "Event", daygrid.BodyFace, widget.PaperBlack)
+		drawkit.DrawText(want, x, baseline(i), events[i].Start.Format("15:04"), drawkit.BodyFace, widget.PaperBlack)
+		drawkit.DrawText(want, titleX, baseline(i), "Event", drawkit.BodyFace, widget.PaperBlack)
 	}
-	daygrid.DrawText(want, x, baseline(3), "+2 MORE", daygrid.BodyBoldFace, widget.PaperBlack)
+	drawkit.DrawText(want, x, baseline(3), "+2 MORE", drawkit.BodyBoldFace, widget.PaperBlack)
 
 	// The agenda column, above the rule under the row.
 	agenda := image.Rect(x, row.Min.Y, row.Max.X, row.Max.Y-1)
@@ -418,7 +419,7 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
-			daygrid.FillRect(frame, image.Rect(0, 0, 800, 480), widget.PaperWhite)
+			drawkit.FillRect(frame, image.Rect(0, 0, 800, 480), widget.PaperWhite)
 
 			// A neighbour already on the shared frame, in the space
 			// this widget would spill into. The draw helpers clip to
@@ -428,7 +429,7 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 			if neighbour.Empty() {
 				neighbour = image.Rect(0, tt.bounds.Max.Y, 800, 480)
 			}
-			daygrid.FillRect(frame, neighbour, widget.PaperGray70)
+			drawkit.FillRect(frame, neighbour, widget.PaperGray70)
 
 			w := New(tt.bounds, daygrid.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), drawConfig("C", false))
 			if err := w.Render(frame); err != nil {

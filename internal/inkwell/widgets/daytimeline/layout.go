@@ -4,7 +4,7 @@ import (
 	"image"
 	"time"
 
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 const (
@@ -43,11 +43,11 @@ const notePadY = 2
 
 // noteH is the band an "earlier" or "later" note takes: one body line
 // and its padding.
-func noteH() int { return daygrid.BodyLineH() + 2*notePadY }
+func noteH() int { return drawkit.BodyLineH() + 2*notePadY }
 
 // stripH is the all-day strip listing lines lines: the lines and the
 // same padding as a note.
-func stripH(lines int) int { return lines*daygrid.BodyLineH() + 2*notePadY }
+func stripH(lines int) int { return lines*drawkit.BodyLineH() + 2*notePadY }
 
 // sections says which of the optional bands this render needs. The bands
 // take height only when they have something to say, so an ordinary day

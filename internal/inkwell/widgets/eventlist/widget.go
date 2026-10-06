@@ -8,6 +8,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 // widgetName prefixes every config error so a dashboard that fails to
@@ -59,7 +60,7 @@ func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg 
 // more and says so. A failed fetch is logged by the day data module and
 // never returned, so it lists what arrived.
 func (w *Widget) Render(frame *image.Paletted) error {
-	daygrid.FillWhite(frame, w.Bounds())
+	drawkit.FillWhite(frame, w.Bounds())
 
 	now := w.Now()
 	cfg := w.Config

@@ -8,6 +8,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
@@ -50,16 +51,16 @@ func drawCompact(frame *image.Paletted, r image.Rectangle, day daygrid.Day, now 
 	if isTomorrow(day, now) {
 		tag = "TOMORROW"
 	}
-	daygrid.DrawText(frame, x, r.Min.Y+compactTagBase, tag, daygrid.BodyFace, widget.PaperBlack)
-	daygrid.Scaled(daygrid.BodyBoldFace, compactScale, widget.PaperBlack).Draw(
+	drawkit.DrawText(frame, x, r.Min.Y+compactTagBase, tag, drawkit.BodyFace, widget.PaperBlack)
+	drawkit.Scaled(drawkit.BodyBoldFace, compactScale, widget.PaperBlack).Draw(
 		frame, x, r.Min.Y+compactDateBase, fmt.Sprintf("%d", day.Start.Day()))
 
 	if day.Forecast == nil {
 		return
 	}
 	hiLo := weatherview.NewHighLow(*day.Forecast, unit).Pair()
-	tempX := r.Max.X - daygrid.TextWidth(daygrid.BodyFace, hiLo)
-	daygrid.DrawText(frame, tempX, r.Min.Y+compactTempBase, hiLo, daygrid.BodyFace, widget.PaperBlack)
+	tempX := r.Max.X - drawkit.TextWidth(drawkit.BodyFace, hiLo)
+	drawkit.DrawText(frame, tempX, r.Min.Y+compactTempBase, hiLo, drawkit.BodyFace, widget.PaperBlack)
 
 	iconX := (r.Min.X + compactNumeralEnd + tempX - compactIconSize) / 2
 	weatherview.DrawIcon(frame, iconX, r.Min.Y+compactIconY, compactIconSize, day.Forecast.Condition)

@@ -13,9 +13,9 @@
 // any negative-UTC zone. Independent copies of that would drift, and the
 // failure is silent and off by one day.
 //
-// It also holds the drawing helpers the day widgets share. Every error
-// message takes a widget name, so a dashboard that fails to load still
-// says which widget rejected the config.
+// Every error message takes a widget name, so a dashboard that fails to
+// load still says which widget rejected the config. The text and rule
+// helpers the day widgets draw with are drawkit's.
 package daygrid
 
 import (

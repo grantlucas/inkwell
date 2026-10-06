@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
 
@@ -27,7 +27,7 @@ func TestPreset_Style(t *testing.T) {
 			ShowLocation: true, Location: toronto,
 		}},
 		{"large is today-hero's agenda", eventlist.PresetLarge, eventlist.Style{
-			MaxEvents: 4, TitleLines: 2, TimeScale: 2, TitleLead: daygrid.BodyAscent(), Gap: 20, Rules: true,
+			MaxEvents: 4, TitleLines: 2, TimeScale: 2, TitleLead: drawkit.BodyAscent(), Gap: 20, Rules: true,
 			Empty:        eventlist.Note{Text: eventlist.NothingScheduled},
 			ShowLocation: true, Location: toronto,
 		}},

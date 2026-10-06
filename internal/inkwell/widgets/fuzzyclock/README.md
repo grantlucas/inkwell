@@ -11,7 +11,7 @@ widget — pair it with a slow render cadence (e.g. `refresh: "5m"`) and the
 panel stays quiet while the time stays glanceable.
 
 The text is drawn in the bold 20 px Tamzen tier as solid black on a white
-background, through the same `daygrid` text helpers the other screens use, so
+background, through the same `drawkit` text helpers the other screens use, so
 it is a 1-bit mask that survives both the `bw` threshold and the `gray4`
 quantization cleanly (see the rendering rules in the repository
 [`CLAUDE.md`](../../../../CLAUDE.md)).

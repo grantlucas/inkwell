@@ -4,7 +4,7 @@ import (
 	"image"
 	"testing"
 
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 var panel = image.Rect(0, 0, 800, 480)
@@ -83,7 +83,7 @@ func TestPlanRows_HeightFollowsContent(t *testing.T) {
 		if r.Lines != max(counts[i], 1) {
 			t.Errorf("row %d has %d lines for %d events, want room for all of them", i, r.Lines, counts[i])
 		}
-		if need := 2*agendaPadY + r.Lines*daygrid.BodyLineH(); r.Bounds.Dy() < need {
+		if need := 2*agendaPadY + r.Lines*drawkit.BodyLineH(); r.Bounds.Dy() < need {
 			t.Errorf("row %d is %d px, too short for its %d lines (%d px)", i, r.Bounds.Dy(), r.Lines, need)
 		}
 	}
@@ -145,7 +145,7 @@ func TestPlanRows_OverflowTakesFromTheBusiestRows(t *testing.T) {
 				t.Errorf("rows end at %d, want %d", end, panel.Max.Y)
 			}
 			for i, r := range got {
-				if need := 2*agendaPadY + r.Lines*daygrid.BodyLineH(); r.Bounds.Dy() < need {
+				if need := 2*agendaPadY + r.Lines*drawkit.BodyLineH(); r.Bounds.Dy() < need {
 					t.Errorf("row %d is %d px, too short for its %d lines", i, r.Bounds.Dy(), r.Lines)
 				}
 			}
@@ -169,7 +169,7 @@ func TestPlanRows_StopsTrimmingAtTheMinimum(t *testing.T) {
 // The minimum row is what keeps the chart readable, and it carries
 // three lines of agenda before a row needs to grow.
 func TestMinRowH_HoldsThreeLines(t *testing.T) {
-	if need := 2*agendaPadY + 3*daygrid.BodyLineH(); minRowH < need {
+	if need := 2*agendaPadY + 3*drawkit.BodyLineH(); minRowH < need {
 		t.Errorf("minRowH = %d, too short for three agenda lines (%d)", minRowH, need)
 	}
 }

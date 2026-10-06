@@ -18,6 +18,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
@@ -60,9 +61,9 @@ var (
 	// apart: the title, the condition word and the temperatures. The
 	// block ends at the temperatures' baseline: they are digits, with
 	// nothing below it.
-	titleBaseline = daygrid.BodyAscent()
-	condBaseline  = titleBaseline + daygrid.BodyLineH()
-	tempBaseline  = condBaseline + daygrid.BodyLineH()
+	titleBaseline = drawkit.BodyAscent()
+	condBaseline  = titleBaseline + drawkit.BodyLineH()
+	tempBaseline  = condBaseline + drawkit.BodyLineH()
 
 	// textX is where the condition word and the temperatures start,
 	// right of the icon, as an offset from the row's left edge.
@@ -70,9 +71,9 @@ var (
 	// chartDX is where a row's chart starts: clear of the widest title
 	// and the widest text beside the icon.
 	chartDX = max(
-		padX+daygrid.TextWidth(daygrid.BodyBoldFace, widestTitle),
-		textX+daygrid.TextWidth(daygrid.BodyFace, widestCondition),
-		textX+daygrid.TextWidth(daygrid.BodyBoldFace, widestHigh)+loGap+daygrid.TextWidth(daygrid.BodyFace, widestLow),
+		padX+drawkit.TextWidth(drawkit.BodyBoldFace, widestTitle),
+		textX+drawkit.TextWidth(drawkit.BodyFace, widestCondition),
+		textX+drawkit.TextWidth(drawkit.BodyBoldFace, widestHigh)+loGap+drawkit.TextWidth(drawkit.BodyFace, widestLow),
 	) + chartGap
 
 	// minChartW keeps a chart wide enough to tell the hours apart.
@@ -105,7 +106,7 @@ func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg 
 // every other widget too.
 func (w *Widget) Render(frame *image.Paletted) error {
 	b := w.Bounds()
-	daygrid.FillWhite(frame, b)
+	drawkit.FillWhite(frame, b)
 
 	n := w.Config.Days
 	rowH := b.Dy() / n
@@ -129,7 +130,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 			// a common height and line up.
 			r.Max.Y = b.Max.Y
 		} else {
-			daygrid.DrawHLine(frame, r.Min.X, r.Max.X, r.Max.Y-1, widget.PaperBlack)
+			drawkit.DrawHLine(frame, r.Min.X, r.Max.X, r.Max.Y-1, widget.PaperBlack)
 		}
 		renderRow(frame, r, d, unit, rng)
 	}
@@ -154,27 +155,27 @@ func sharedRange(rows []daygrid.Day) weatherview.TempRange {
 func renderRow(frame *image.Paletted, r image.Rectangle, d daygrid.Day, unit string, rng weatherview.TempRange) {
 	x := r.Min.X + padX
 	top := r.Min.Y + (r.Dy()-tempBaseline)/2
-	daygrid.DrawText(frame, x, top+titleBaseline,
-		strings.ToUpper(d.Start.Format("Monday 2")), daygrid.BodyBoldFace, widget.PaperBlack)
+	drawkit.DrawText(frame, x, top+titleBaseline,
+		strings.ToUpper(d.Start.Format("Monday 2")), drawkit.BodyBoldFace, widget.PaperBlack)
 
 	if d.Forecast == nil {
-		daygrid.DrawText(frame, x, top+condBaseline, noForecast, daygrid.BodyFace, widget.PaperBlack)
+		drawkit.DrawText(frame, x, top+condBaseline, noForecast, drawkit.BodyFace, widget.PaperBlack)
 		return
 	}
 	f := *d.Forecast
 
 	// The icon is centred on the two lines beside it: from the condition
 	// word's cap top to the temperatures' baseline.
-	linesTop := top + condBaseline - daygrid.BodyAscent()
-	linesH := tempBaseline - condBaseline + daygrid.BodyAscent()
+	linesTop := top + condBaseline - drawkit.BodyAscent()
+	linesH := tempBaseline - condBaseline + drawkit.BodyAscent()
 	weatherview.DrawIcon(frame, x, linesTop+(linesH-iconSize)/2, iconSize, f.Condition)
-	daygrid.DrawText(frame, r.Min.X+textX, top+condBaseline,
-		strings.ToUpper(f.Condition.Label()), daygrid.BodyFace, widget.PaperBlack)
+	drawkit.DrawText(frame, r.Min.X+textX, top+condBaseline,
+		strings.ToUpper(f.Condition.Label()), drawkit.BodyFace, widget.PaperBlack)
 
 	temps := weatherview.NewHighLow(f, unit)
-	daygrid.DrawText(frame, r.Min.X+textX, top+tempBaseline, temps.High(), daygrid.BodyBoldFace, widget.PaperBlack)
-	loX := r.Min.X + textX + daygrid.TextWidth(daygrid.BodyBoldFace, temps.High()) + loGap
-	daygrid.DrawText(frame, loX, top+tempBaseline, temps.Low(), daygrid.BodyFace, widget.PaperBlack)
+	drawkit.DrawText(frame, r.Min.X+textX, top+tempBaseline, temps.High(), drawkit.BodyBoldFace, widget.PaperBlack)
+	loX := r.Min.X + textX + drawkit.TextWidth(drawkit.BodyBoldFace, temps.High()) + loGap
+	drawkit.DrawText(frame, loX, top+tempBaseline, temps.Low(), drawkit.BodyFace, widget.PaperBlack)
 
 	// No now-marker: "now" is not on any of these days.
 	chart := image.Rect(r.Min.X+chartDX, r.Min.Y+padY, r.Max.X-padX, r.Max.Y-padY)

@@ -12,6 +12,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daybadge"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 // testTime is a Monday mid-afternoon.
@@ -176,7 +177,7 @@ func TestStyle_CompactTagsTomorrow(t *testing.T) {
 		t.Run(tt.label, func(t *testing.T) {
 			got := draw(daybadge.Compact, dayAt(tt.day, nil), "C")
 			want := newFrame()
-			daygrid.DrawText(want, r.Min.X+12, r.Min.Y+20, tt.want, daygrid.BodyFace, widget.PaperBlack)
+			drawkit.DrawText(want, r.Min.X+12, r.Min.Y+20, tt.want, drawkit.BodyFace, widget.PaperBlack)
 			for y := tag.Min.Y; y < tag.Max.Y; y++ {
 				for x := tag.Min.X; x < tag.Max.X; x++ {
 					if got.ColorIndexAt(x, y) != want.ColorIndexAt(x, y) {

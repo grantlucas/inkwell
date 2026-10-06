@@ -6,7 +6,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
 
@@ -31,7 +31,7 @@ func agendaStyle(maxEvents int, showLocation bool, loc *time.Location) eventlist
 // above it. How the events are fitted and counted, and what an empty day
 // says, is the event list's.
 func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calendar.Event, style eventlist.Style) {
-	daygrid.DrawHLine(frame, bounds.Min.X, bounds.Max.X, bounds.Min.Y, widget.PaperBlack)
+	drawkit.DrawHLine(frame, bounds.Min.X, bounds.Max.X, bounds.Min.Y, widget.PaperBlack)
 
 	list := image.Rect(bounds.Min.X+eventsPadX, bounds.Min.Y+eventsTopPad, bounds.Max.X-eventsPadX, bounds.Max.Y)
 	style.Draw(frame, list, events)

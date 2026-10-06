@@ -4,7 +4,7 @@ import (
 	"image"
 	"time"
 
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
 
@@ -52,6 +52,6 @@ func agendaList(row rowLayout) image.Rectangle {
 	// row too narrow for its padding into a list to the left of it.
 	return image.Rectangle{
 		Min: image.Pt(row.Agenda.Min.X+agendaPadX, top),
-		Max: image.Pt(row.Agenda.Max.X-agendaPadX, min(top+row.Lines*daygrid.BodyLineH(), row.Agenda.Max.Y)),
+		Max: image.Pt(row.Agenda.Max.X-agendaPadX, min(top+row.Lines*drawkit.BodyLineH(), row.Agenda.Max.Y)),
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 // testTime is a Monday mid-afternoon, so today's column has both
@@ -327,9 +328,9 @@ func TestWidget_BelowHeaderFitsThreeWrappedEventsAndTheCount(t *testing.T) {
 	}
 
 	today := computeColumns(belowHeader)[0].Events
-	lineH := daygrid.BodyLineH()
+	lineH := drawkit.BodyLineH()
 	const gap = 8 // the stacked list's paper between events
-	moreY := today.Min.Y + eventsTopPad + daygrid.BodyAscent() + 3*(3*lineH+gap)
+	moreY := today.Min.Y + eventsTopPad + drawkit.BodyAscent() + 3*(3*lineH+gap)
 	if !moreLineAt(frame, today, moreY, "+2 MORE") {
 		t.Errorf("no \"+2 MORE\" line under three events at baseline %d", moreY)
 	}
