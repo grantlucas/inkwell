@@ -5,7 +5,7 @@ import "github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
 const (
 	// defaultMaxEvents is three: the hero agenda spends its height on a
 	// scaled time and a wrapped title, so three is what fits before the
-	// overflow marker.
+	// "+N MORE" line.
 	defaultMaxEvents = 3
 
 	// widgetName prefixes every config error so a dashboard that fails

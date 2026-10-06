@@ -13,6 +13,12 @@ import (
 // been cut. U+00BB is in the range and actually draws.
 const ellipsis = "»"
 
+// NothingScheduled is what an inline list with no events says, for a
+// widget to pass as Style.Empty. Upper case, like the "+N MORE" line and
+// the ALL DAY label: mixed case in this one string read as a second
+// typographic system on the same row.
+const NothingScheduled = "NOTHING SCHEDULED"
+
 // timeLabel is the event's clock label: "ALL DAY", or a 24-hour time in
 // the style's Location. Times stay precise (16:15, not "quarter past
 // four"): they are data, not a clock, and fuzzing them would lose real

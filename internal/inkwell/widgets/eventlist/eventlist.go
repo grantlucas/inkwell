@@ -98,8 +98,8 @@ type block struct {
 	// height runs from the block's top to the bottom of its last line,
 	// descent included.
 	height int
-	// marker is set on the "+N MORE" line.
-	marker bool
+	// more is set on the "+N MORE" line.
+	more bool
 }
 
 // placed is a block at its top edge.
@@ -121,7 +121,7 @@ type placed struct {
 func (s Style) Draw(frame *image.Paletted, r image.Rectangle, events []calendar.Event) int {
 	blocks, hidden := s.layout(r, events)
 	for i, b := range blocks {
-		if s.Rules && i > 0 && !b.marker {
+		if s.Rules && i > 0 && !b.more {
 			// Across the middle of the gap above this event.
 			daygrid.DrawHLine(frame, r.Min.X, r.Max.X, b.top-s.Gap+s.Gap/2, widget.PaperBlack)
 		}
@@ -226,9 +226,9 @@ func (s Style) layout(r image.Rectangle, events []calendar.Event) ([]placed, int
 		return nil, len(events)
 	}
 	for {
-		more, top := marker(len(events)-len(out), maxChars), s.next(out, r)
-		if fits(more, top) {
-			return append(out, placed{block: more, top: top}), len(events) - len(out)
+		line, top := moreLine(len(events)-len(out), maxChars), s.next(out, r)
+		if fits(line, top) {
+			return append(out, placed{block: line, top: top}), len(events) - len(out)
 		}
 		if len(out) == 0 {
 			return nil, len(events)
@@ -335,12 +335,12 @@ func (s Style) timeText(e calendar.Event, maxChars int) string {
 	return label
 }
 
-// marker is the "+N MORE" line. It is cut to the list's width like every
+// moreLine is the "+N MORE" line. It is cut to the list's width like every
 // other line: on a narrow list "+12 MORE" would otherwise overhang
 // whatever is beside it.
-func marker(hidden, maxChars int) block {
+func moreLine(hidden, maxChars int) block {
 	b := note(fmt.Sprintf("+%d MORE", hidden), daygrid.BodyBoldFace, maxChars)
-	b.marker = true
+	b.more = true
 	return b
 }
 

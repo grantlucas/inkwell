@@ -20,18 +20,18 @@ func eventsRect() image.Rectangle {
 // a rendering fault.
 func TestRenderEvents_EmptyDay(t *testing.T) {
 	frame := newTestFrame(160, 480)
-	renderEvents(frame, eventsRect(), nil, eventStyle(defaultMaxEvents, false, time.UTC))
+	renderEvents(frame, eventsRect(), nil, agendaStyle(defaultMaxEvents, false, time.UTC))
 	if countIndex(frame, widget.PaperBlack) <= eventsRect().Dx() {
-		t.Error("nothing drawn under the rule — the empty marker is missing")
+		t.Error("nothing drawn under the rule — the empty-day dash is missing")
 	}
 }
 
-// A column too narrow for the event list is too narrow for the empty
-// marker too: centred "--" would overhang the dividers either side.
-func TestRenderEvents_TooNarrowForTheEmptyMarker(t *testing.T) {
+// A column too narrow for the event list is too narrow for the empty-day
+// dash too: centred "--" would overhang the dividers either side.
+func TestRenderEvents_TooNarrowForTheEmptyDayDash(t *testing.T) {
 	frame := newTestFrame(160, 480)
 	narrow := image.Rect(0, 216, 2*eventsPadX+2*daygrid.BodyAdvance(), 480)
-	renderEvents(frame, narrow, nil, eventStyle(defaultMaxEvents, false, time.UTC))
+	renderEvents(frame, narrow, nil, agendaStyle(defaultMaxEvents, false, time.UTC))
 	if got := countIndex(frame, widget.PaperBlack); got != narrow.Dx() {
 		t.Errorf("%d px inked, want only the %d px rule", got, narrow.Dx())
 	}
@@ -42,7 +42,7 @@ func TestRenderEvents_TooNarrowForTheEmptyMarker(t *testing.T) {
 func TestRenderEvents_DrawsTopRule(t *testing.T) {
 	frame := newTestFrame(160, 480)
 	rect := eventsRect()
-	renderEvents(frame, rect, nil, eventStyle(defaultMaxEvents, false, time.UTC))
+	renderEvents(frame, rect, nil, agendaStyle(defaultMaxEvents, false, time.UTC))
 
 	for x := rect.Min.X; x < rect.Max.X; x++ {
 		if frame.ColorIndexAt(x, rect.Min.Y) != widget.PaperBlack {

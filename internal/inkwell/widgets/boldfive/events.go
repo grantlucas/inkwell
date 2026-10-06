@@ -25,14 +25,14 @@ const (
 	maxTitleLines = 2
 )
 
-// eventStyle is how a column lists its events: the time above the title
+// agendaStyle is how a column lists its events: the time above the title
 // at body size, up to maxEvents of them.
 //
 // loc is the zone event clock labels are rendered in. A parsed
 // Event.Start is a correct instant but carries whatever zone its feed
 // serialized it with, so formatting it directly would leak that zone
 // onto the panel. It must never be nil.
-func eventStyle(maxEvents int, showLocation bool, loc *time.Location) eventlist.Style {
+func agendaStyle(maxEvents int, showLocation bool, loc *time.Location) eventlist.Style {
 	return eventlist.Style{
 		MaxEvents:    maxEvents,
 		TitleLines:   maxTitleLines,
@@ -50,7 +50,7 @@ func renderEvents(frame *image.Paletted, bounds image.Rectangle, events []calend
 
 	list := image.Rect(bounds.Min.X+eventsPadX, bounds.Min.Y+eventsTopPad, bounds.Max.X-eventsPadX, bounds.Max.Y)
 	if list.Dx() < eventlist.MinChars*daygrid.BodyAdvance() {
-		// Too narrow for the list, and so for its empty marker: centred
+		// Too narrow for the list, and so for its empty-day dash: centred
 		// in a column this narrow it would overhang the dividers.
 		return
 	}

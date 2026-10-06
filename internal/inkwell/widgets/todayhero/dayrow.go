@@ -47,11 +47,6 @@ const (
 	// hero agenda's). A 120 px row holds five lines; three events and
 	// the "+N MORE" line under them leave the row room to breathe.
 	rowMaxEvents = 3
-
-	// Upper case, like every other label this screen paints —
-	// TOMORROW, ALL DAY, DONE FOR TODAY. Mixed case in the rows alone
-	// would read as a second typographic system.
-	emptyRowMsg = "NOTHING SCHEDULED"
 )
 
 // dayRowOptions carries what a row needs beyond its events.
@@ -134,7 +129,7 @@ func dayRowStyle(showLocation bool, loc *time.Location) eventlist.Style {
 	return eventlist.Style{
 		Layout:       eventlist.Inline,
 		MaxEvents:    rowMaxEvents,
-		Empty:        emptyRowMsg,
+		Empty:        eventlist.NothingScheduled,
 		ShowLocation: showLocation,
 		Location:     loc,
 	}

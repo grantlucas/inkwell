@@ -14,11 +14,6 @@ const (
 	// planRows sizes a row as this twice plus its lines, so changing it
 	// changes how many lines a week can carry.
 	agendaPadY = 8
-
-	// Upper case, like the "+N MORE" marker below it and the ALL DAY
-	// label beside it. Mixed case in this one string read as a second
-	// typographic system on the same row.
-	emptyMsg = "NOTHING SCHEDULED"
 )
 
 // agendaStyle is how a row lists its day: one column of inline lines,
@@ -36,7 +31,7 @@ const (
 func agendaStyle(showLocation bool, loc *time.Location) eventlist.Style {
 	return eventlist.Style{
 		Layout:       eventlist.Inline,
-		Empty:        emptyMsg,
+		Empty:        eventlist.NothingScheduled,
 		ShowLocation: showLocation,
 		Location:     loc,
 	}

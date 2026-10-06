@@ -43,7 +43,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	// serialized them with, so they still need converting.
 	now := w.Now()
 	data := w.Days.Days(now, columns)
-	agenda := eventStyle(w.Config.MaxEvents, w.Config.ShowLocation, now.Location())
+	agenda := agendaStyle(w.Config.MaxEvents, w.Config.ShowLocation, now.Location())
 
 	for i, col := range computeColumns(w.Bounds()) {
 		day := data.Days[i]

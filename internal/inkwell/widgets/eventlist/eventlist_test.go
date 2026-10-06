@@ -556,7 +556,7 @@ func TestDraw_InlineEventText(t *testing.T) {
 // the same fit rule, and it is a line a caller sizing the list needs.
 func TestDraw_Empty(t *testing.T) {
 	adv := daygrid.BodyAdvance()
-	const msg = "NOTHING SCHEDULED"
+	const msg = eventlist.NothingScheduled
 	tests := []struct {
 		label  string
 		style  eventlist.Style
