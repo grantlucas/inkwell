@@ -48,12 +48,24 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	data := w.Days.Days(now, 1)
 	today := data.Days[0]
 
-	// Which events are outside the window decides whether the note
-	// bands take any height, and so where the grid's rows fall.
+	// What is all day and which events are outside the window decide
+	// whether the strip and the note bands take any height, and so where
+	// the grid's rows fall. The strip lists in the event column, which
+	// is as wide whatever the bands take.
 	start, end := w.Window.on(today.Start)
-	p := place(today.Events, start, end)
-	l := computeLayout(w.Bounds(), sections{Earlier: p.Earlier > 0, Later: p.Later > 0})
+	p := place(today, start, end)
+	list := allDayList(now.Location(), w.Config.ShowLocation)
+	width := computeLayout(w.Bounds(), sections{}).Events.Dx()
+	l := computeLayout(w.Bounds(), sections{
+		AllDay:  min(list.Lines(p.AllDay, width), stripLines),
+		Earlier: p.Earlier > 0,
+		Later:   p.Later > 0,
+	})
 	tl := newTimeline(today.Start, w.Window, l.Grid)
+
+	if len(p.AllDay) > 0 {
+		list.Draw(frame, stripText(l), p.AllDay)
+	}
 
 	// The lane goes down before the grid, so the hour rules cross it and
 	// the temperature line, sitting between them, never meets one.
@@ -61,9 +73,15 @@ func (w *Widget) Render(frame *image.Paletted) error {
 		drawLane(frame, l.Lane, tl, w.Window, today.Forecast.Hourly, data.TempRange)
 	}
 	drawGrid(frame, l, tl, w.Window)
+	a := arrange(p.Placed, l.Events, tl)
+	// The words on the grid, which the now marker passes behind.
 	var labels []image.Rectangle
-	for _, e := range p.Placed {
-		labels = append(labels, drawBlock(frame, l.Events, tl, e, now, w.Config.ShowLocation)...)
+	for _, b := range a.Blocks {
+		labels = append(labels, drawBlock(frame, b.Rect, tl, b.Event, now, w.Config.ShowLocation)...)
+	}
+	for _, t := range a.Tags {
+		drawTag(frame, t)
+		labels = append(labels, t.Rect)
 	}
 	if p.Earlier > 0 {
 		drawNote(frame, l.Earlier, l.Events.Min.X, fmt.Sprintf("+%d EARLIER", p.Earlier))

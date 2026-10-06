@@ -636,15 +636,34 @@ it moves with the schedule, so it does not burn in the way a fixed fill
 would.
 
 Each block is labelled with its start time and title, and a block with
-room for a second line adds "UNTIL" and its end time.
+room for a second line adds "UNTIL" and its end time. A block is never
+shorter than one line of text: an event too short for that, or with no
+end time, still starts at its real time but is drawn a line tall so its
+label reads in full.
+
+Two events whose blocks would overlap share the column side by side,
+each still at its own start and end, so a partial clash shows as two
+blocks of different heights. Overlap is judged on the blocks as drawn,
+so a short event's line-tall block running into the next event puts
+the two side by side too, and nothing is printed over anything else. A
+third event at the same time is not drawn: a small "+N" tag at the
+right of the column, level with it, counts every event left out of that
+clash. One event carried by two feeds, with the same title, start and
+end, is drawn once.
+
+All-day events are listed in a strip above the grid, one per line, up
+to two lines; when there are more, the second line says "+N MORE". A
+timed event running through the whole of today, such as the middle day
+of a conference, is listed there as all day. A timed event that starts
+or ends today, even one crossing midnight, is a block on the grid like
+any other. The strip takes height only when it has something to list.
 
 The grid shows a window of whole hours, labelled down its left edge.
 An event crossing an edge of the window is cut off at the edge, with an
 arrowhead pointing the way it carries on. Events wholly outside the
 window are not drawn; a "+N EARLIER" note above the grid or a
 "+N LATER" note below it counts them, and each note takes height only
-when there is something to count. A block too short to hold a line of
-text is drawn without its label.
+when there is something to count.
 
 Between the hour labels and the events runs the weather lane: today's
 forecast for the same hours, one row per hour of the window. The chance
@@ -658,11 +677,11 @@ lane is left blank.
 A now marker crosses the lane and the events at the current time, so
 what is past and what is still to come read apart at a glance. It is
 paper where it crosses a solid block, and passes behind a block's label
-rather than striking it through. Outside the window it is not drawn.
+rather than striking it through, or behind a "+N" tag. Outside the
+window it is not drawn.
 
 The widget is meant for the left of a screen, and needs at least
-240 × 160 px. It draws no all-day events yet: the strip of all-day
-events above the grid is still to come.
+240 × 160 px.
 
 <!-- markdownlint-disable MD013 -->
 | Key | Type | Default | Accepted values | Impact |
@@ -724,6 +743,49 @@ since the widget reads no calendar, and so is `days`, which belongs to
 - type: today-weather
   bounds: [534, 48, 800, 208]
   refresh: "1h"    # the forecast changes slowly
+```
+
+### `weather-ahead`
+
+The days after today as rows of weather only, four by default. Each row
+has the weekday and date in bold, the condition icon with the condition
+name beside it, the high and low under the name, and a combined chart
+filling the rest of the row. Every chart plots against one temperature
+range taken across the widget's own rows, so a cold day sits visibly
+lower than a warm one. Today is left to `today-weather`, which usually
+sits above it; the two are separate so each can be placed and scheduled
+on its own.
+
+The rows split the widget's height evenly, with a rule between them.
+Each row needs at least 222 × 62 px, so four days need 222 × 248 px and
+a week needs 222 × 434 px. Below that it logs and draws nothing rather
+than spilling onto its neighbours. The right-hand third of the panel
+under `today-weather`, 266 × 272 px, holds four days.
+
+A day the forecast doesn't reach says `NO FORECAST` under its date
+instead of drawing numbers nobody forecast. A failed fetch doesn't stop
+the rest of the screen drawing.
+
+<!-- markdownlint-disable MD013 -->
+| Key | Type | Default | Accepted values | Impact |
+|-----|------|---------|-----------------|--------|
+| `days` | int | `4` | `[1, 7]` | How many days after today to show, one row each. |
+| `latitude` | number | inherits `weather.latitude` | `[-90, 90]` | Per-widget forecast location override. |
+| `longitude` | number | inherits `weather.longitude` | `[-180, 180]` | Per-widget forecast location override. |
+| `temp_unit` | string | inherits `weather.temp_unit` | `C`, `F` | Per-widget unit override. |
+| `weather_model` | string | inherits `weather.model` | `gfs`, `ecmwf`, `gem` | Per-widget model override. |
+<!-- markdownlint-enable MD013 -->
+
+All of them are optional. The calendar settings — `feeds`, `refresh`,
+`show_location`, `max_events` — are rejected with the reason, since the
+widget reads no calendar.
+
+```yaml
+- type: weather-ahead
+  bounds: [534, 208, 800, 480]
+  refresh: "1h"    # the forecast changes slowly
+  config:
+    days: 4
 ```
 
 ## Worked examples

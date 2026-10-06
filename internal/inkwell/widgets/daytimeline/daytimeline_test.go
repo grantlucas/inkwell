@@ -11,6 +11,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
 
 // testTime is a Monday early afternoon, so today has finished events
@@ -81,7 +82,7 @@ func TestWidget_EventsSitAtTheirTrueTimes(t *testing.T) {
 		from, to time.Time
 	}{
 		{label: "finished two hours", from: at(9, 0), to: at(11, 0)},
-		{label: "upcoming half hour", from: at(15, 0), to: at(15, 30)},
+		{label: "upcoming hour", from: at(15, 0), to: at(16, 0)},
 		{label: "upcoming off the hour", from: at(16, 40), to: at(18, 10)},
 	}
 	for _, tt := range tests {
@@ -285,15 +286,18 @@ func TestWidget_TallBlocksSayWhenTheyEnd(t *testing.T) {
 	}
 }
 
-// A block too short to hold a line of capitals carries no label: the
-// tops of clipped glyphs would read as noise, not words.
-func TestWidget_ShortBlocksAreUnlabelled(t *testing.T) {
+// An event too short for a legible label still gets one: its block
+// starts at its true time but is drawn a whole text line tall, so the
+// label is written in full rather than clipped or left off. The block
+// is exactly that line, with no second line saying when it ends.
+func TestWidget_ShortBlocksGetAWholeLine(t *testing.T) {
 	tests := []struct {
 		label    string
 		from, to time.Time
 	}{
 		{label: "upcoming ten minutes", from: at(15, 0), to: at(15, 10)},
 		{label: "finished ten minutes", from: at(9, 0), to: at(9, 10)},
+		{label: "upcoming half hour", from: at(15, 0), to: at(15, 30)},
 		{label: "a reminder with no end", from: at(16, 0), to: at(16, 0)},
 	}
 	for _, tt := range tests {
@@ -301,14 +305,319 @@ func TestWidget_ShortBlocksAreUnlabelled(t *testing.T) {
 			e := span("Standup", tt.from, tt.to)
 			frame := renderToFrame(t, newWidget(testBounds, []ical.Event{e}, defaultConfig()))
 			l, tl := gridOf(testBounds, defaultConfig().Window)
-			block := blockRect(l.Events, tl, e)
+			x := l.Events.Min.X
+			top := tl.y(tt.from)
 
+			if frame.ColorIndexAt(x, top-1) == widget.PaperBlack {
+				t.Errorf("ink above the start, y=%d", top-1)
+			}
+			for y := top; y < top+daygrid.BodyLineH(); y++ {
+				if frame.ColorIndexAt(x, y) != widget.PaperBlack {
+					t.Fatalf("block edge has paper at y=%d, %d rows under its start; want a whole line", y, y-top)
+				}
+			}
+			if frame.ColorIndexAt(x, top+daygrid.BodyLineH()) == widget.PaperBlack {
+				t.Errorf("block runs past one line, y=%d", top+daygrid.BodyLineH())
+			}
+
+			// The label reads exactly as one drawn into a line-tall
+			// block: nothing of it is cut off.
+			block := image.Rect(x, top, l.Events.Max.X, top+daygrid.BodyLineH())
 			contrast, inner := widget.PaperWhite, block
+			ref := newTestFrame()
+			daygrid.FillRect(ref, block, widget.PaperBlack)
 			if finished(e, testTime) {
 				contrast, inner = widget.PaperBlack, block.Inset(outlineW)
+				daygrid.FillWhite(ref, inner)
 			}
-			if n := countIndexIn(frame, inner, contrast); n != 0 {
-				t.Errorf("%d px of label in a %d-row block", n, block.Dy())
+			daygrid.DrawText(ref, inner.Min.X+labelPadX, labelBaseline(inner), tt.from.Format("15:04"), daygrid.BodyBoldFace, contrast)
+			daygrid.DrawText(ref, inner.Min.X+labelPadX+6*daygrid.BodyAdvance(), labelBaseline(inner), "Standup", daygrid.BodyFace, contrast)
+			if !sameIn(frame, ref, block) {
+				t.Errorf("block doesn't read %q in full", tt.from.Format("15:04")+" Standup")
+			}
+		})
+	}
+}
+
+// lane is one side of the event column when two events share it.
+type lane int
+
+const (
+	left lane = iota
+	right
+)
+
+// Two events whose blocks would overlap share the event column side by
+// side, each at its own true start and end, so a partial overlap shows
+// as two blocks of different heights. Overlap is judged on the blocks as
+// drawn: a short event's line-tall block running into the next event
+// puts the two side by side too, so nothing overprints. A gap down the
+// middle keeps the two apart.
+func TestWidget_OverlappingEventsSitSideBySide(t *testing.T) {
+	type want struct {
+		side     lane
+		from, to time.Time
+	}
+	tests := []struct {
+		label  string
+		events []ical.Event
+		want   []want
+	}{
+		{
+			label:  "partial overlap",
+			events: []ical.Event{span("Review", at(15, 0), at(17, 0)), span("Call", at(16, 0), at(18, 0))},
+			want:   []want{{left, at(15, 0), at(17, 0)}, {right, at(16, 0), at(18, 0)}},
+		},
+		{
+			label:  "full overlap",
+			events: []ical.Event{span("Review", at(15, 0), at(17, 0)), span("Call", at(15, 0), at(17, 0))},
+			want:   []want{{left, at(15, 0), at(17, 0)}, {right, at(15, 0), at(17, 0)}},
+		},
+		{
+			label:  "one inside the other, finished",
+			events: []ical.Event{span("Offsite", at(8, 0), at(12, 0)), span("Call", at(9, 0), at(10, 0))},
+			want:   []want{{left, at(8, 0), at(12, 0)}, {right, at(9, 0), at(10, 0)}},
+		},
+		{
+			label: "a short event running into the next",
+			events: []ical.Event{
+				span("Standup", at(15, 0), at(15, 30)),
+				span("Design review", at(15, 30), at(17, 0)),
+			},
+			want: []want{{left, at(15, 0), at(15, 0)}, {right, at(15, 30), at(17, 0)}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			frame := renderToFrame(t, newWidget(testBounds, tt.events, defaultConfig()))
+			l, tl := gridOf(testBounds, defaultConfig().Window)
+			xs := map[lane]int{left: l.Events.Min.X, right: l.Events.Max.X - 1}
+
+			for _, w := range tt.want {
+				x, top := xs[w.side], tl.y(w.from)
+				// A block ends a row above its end, and is never shorter
+				// than a line.
+				bottom := max(tl.y(w.to)-1, top+daygrid.BodyLineH())
+				if frame.ColorIndexAt(x, top-1) == widget.PaperBlack {
+					t.Errorf("%v side: ink above %s, y=%d", w.side, w.from.Format("15:04"), top-1)
+				}
+				for y := top; y < bottom; y++ {
+					if frame.ColorIndexAt(x, y) != widget.PaperBlack {
+						t.Fatalf("%v side: paper at y=%d inside %s-%s", w.side, y, w.from.Format("15:04"), w.to.Format("15:04"))
+					}
+				}
+				if frame.ColorIndexAt(x, bottom) == widget.PaperBlack {
+					t.Errorf("%v side: ink below the block, y=%d", w.side, bottom)
+				}
+			}
+
+			// Down the middle of the column, only the dotted hour rules.
+			mid := l.Events.Min.X + l.Events.Dx()/2
+			run := 0
+			for y := l.Grid.Min.Y + 1; y < l.Grid.Max.Y-1; y++ {
+				if frame.ColorIndexAt(mid, y) != widget.PaperBlack || onNowMarker(frame, l, y) {
+					run = 0
+					continue
+				}
+				if run++; run > 1 {
+					t.Fatalf("blocks meet in the middle of the column at y=%d", y)
+				}
+			}
+		})
+	}
+}
+
+// A third event at the same time as two others isn't drawn: there is no
+// lane left for it, and a third lane would cut every block to a sliver.
+// A tag at the column's right, level with the first event left out,
+// counts every one left out of the group, and the two lanes narrow to
+// leave it room.
+func TestWidget_CountsAThirdSimultaneousEventInATag(t *testing.T) {
+	tests := []struct {
+		label   string
+		events  []ical.Event
+		first   time.Time
+		wantTag string
+	}{
+		{
+			label: "three at once",
+			events: []ical.Event{
+				span("Offsite", at(15, 0), at(17, 0)),
+				span("Call", at(15, 0), at(16, 0)),
+				span("Dentist", at(15, 30), at(16, 30)),
+			},
+			first:   at(15, 30),
+			wantTag: "+1",
+		},
+		{
+			label: "four at once",
+			events: []ical.Event{
+				span("Offsite", at(15, 0), at(17, 0)),
+				span("Call", at(15, 0), at(16, 0)),
+				span("Dentist", at(15, 30), at(16, 30)),
+				span("Pickup", at(15, 45), at(16, 15)),
+			},
+			first:   at(15, 30),
+			wantTag: "+2",
+		},
+		{
+			label: "finished, three at once",
+			events: []ical.Event{
+				span("Offsite", at(8, 0), at(12, 0)),
+				span("Call", at(9, 0), at(10, 0)),
+				span("Dentist", at(9, 0), at(11, 0)),
+			},
+			first:   at(9, 0),
+			wantTag: "+1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			frame := renderToFrame(t, newWidget(testBounds, tt.events, defaultConfig()))
+			l, tl := gridOf(testBounds, defaultConfig().Window)
+			top := tl.y(tt.first)
+
+			tg := newTag(tt.wantTag, l.Events.Max.X, top)
+			if tg.Rect.Max.X != l.Events.Max.X || tg.Rect.Min.Y != top {
+				t.Fatalf("tag at %v, want it at the column's right level with %s", tg.Rect, tt.first.Format("15:04"))
+			}
+			ref := newTestFrame()
+			drawTag(ref, tg)
+			if !sameIn(frame, ref, tg.Rect) {
+				t.Errorf("no %q tag at %v", tt.wantTag, tg.Rect)
+			}
+			// The tag reads as ink on paper.
+			if countIndexIn(ref, tg.Rect.Inset(2), widget.PaperBlack) == 0 {
+				t.Errorf("tag %q has no text", tt.wantTag)
+			}
+			// The lanes stop short of the tag: down its column, above
+			// and below it, there is only paper and the hour rules.
+			x := tg.Rect.Min.X - 1
+			for y := l.Grid.Min.Y + 1; y < l.Grid.Max.Y-1; y++ {
+				if onNowMarker(frame, l, y) || onNowMarker(frame, l, y+1) {
+					continue
+				}
+				if frame.ColorIndexAt(x, y) == widget.PaperBlack && frame.ColorIndexAt(x, y+1) == widget.PaperBlack {
+					t.Fatalf("a block runs into the tag's column at y=%d", y)
+				}
+			}
+		})
+	}
+}
+
+// allDay is an all-day event today, anchored at UTC midnight as the
+// parser anchors a VALUE=DATE.
+func allDay(summary string) ical.Event {
+	return ical.Event{UID: summary, Summary: summary, AllDay: true,
+		Start: time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC), End: time.Date(2026, 3, 17, 0, 0, 0, 0, time.UTC)}
+}
+
+// All-day events, and timed events running through the whole of today,
+// have no time on the grid to sit at, so they're listed in a strip above
+// it through the event list: up to two lines, the second becoming
+// "+N MORE" when there are more. A multi-day timed event reads ALL DAY
+// for today, like the all-day events beside it. The strip takes height
+// only when it has something to list.
+func TestWidget_ListsAllDayEventsInAStripAboveTheGrid(t *testing.T) {
+	conference := span("Conference", at(-15, 0), at(41, 0))
+	tests := []struct {
+		label     string
+		events    []ical.Event
+		wantLines int
+		wantList  []ical.Event
+	}{
+		{label: "no all-day events", events: []ical.Event{span("Lunch", at(12, 0), at(13, 0))}},
+		{
+			label:     "one all-day event",
+			events:    []ical.Event{allDay("Car in for service"), span("Lunch", at(12, 0), at(13, 0))},
+			wantLines: 1,
+			wantList:  []ical.Event{allDay("Car in for service")},
+		},
+		{
+			label:     "two all-day events",
+			events:    []ical.Event{allDay("Car in for service"), allDay("Recycling day")},
+			wantLines: 2,
+			wantList:  []ical.Event{allDay("Car in for service"), allDay("Recycling day")},
+		},
+		{
+			label:     "more than two",
+			events:    []ical.Event{allDay("Car in for service"), allDay("Recycling day"), allDay("Grandma's birthday")},
+			wantLines: 2,
+			wantList:  []ical.Event{allDay("Car in for service"), allDay("Recycling day"), allDay("Grandma's birthday")},
+		},
+		{
+			label:     "a timed event through the whole day",
+			events:    []ical.Event{conference},
+			wantLines: 1,
+			wantList:  []ical.Event{{UID: "Conference", Summary: "Conference", AllDay: true, Start: conference.Start, End: conference.End}},
+		},
+		{
+			label:  "a timed event from yesterday ending today",
+			events: []ical.Event{span("Night shift", at(-2, 0), at(8, 0))},
+		},
+		{
+			label:  "a timed event from today ending tomorrow",
+			events: []ical.Event{span("Night shift", at(20, 0), at(30, 0))},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			frame := renderToFrame(t, newWidget(testBounds, tt.events, defaultConfig()))
+			l := computeLayout(testBounds, sections{AllDay: tt.wantLines})
+
+			if tt.wantLines == 0 {
+				if !l.AllDay.Empty() {
+					t.Fatalf("strip %v with nothing to list", l.AllDay)
+				}
+				if l.Grid.Min.Y != testBounds.Min.Y+gridPadY {
+					t.Errorf("grid starts at %d with no strip, want %d", l.Grid.Min.Y, testBounds.Min.Y+gridPadY)
+				}
+				return
+			}
+			if l.AllDay.Min.Y != testBounds.Min.Y || l.Grid.Min.Y <= l.AllDay.Max.Y-1 {
+				t.Fatalf("strip %v isn't at the top, above the grid at %d", l.AllDay, l.Grid.Min.Y)
+			}
+			if got := l.AllDay.Dy(); got < tt.wantLines*daygrid.BodyLineH() || got >= (tt.wantLines+1)*daygrid.BodyLineH() {
+				t.Errorf("strip is %d px tall, want room for %d lines", got, tt.wantLines)
+			}
+
+			// The strip reads as the event list draws these events.
+			ref := newTestFrame()
+			eventlist.Style{Layout: eventlist.Inline, Location: time.UTC}.Draw(ref, stripText(l), tt.wantList)
+			if !sameIn(frame, ref, l.AllDay) {
+				t.Error("strip differs from the event list of its events")
+			}
+		})
+	}
+}
+
+// A short event at the very end of the window has no line's height left
+// below its start, so its block is lifted to end where the grid does
+// rather than run over the bottom rule.
+func TestWidget_ShortBlockAtTheWindowEndStaysOnTheGrid(t *testing.T) {
+	tests := []struct {
+		label    string
+		from, to time.Time
+	}{
+		{label: "last ten minutes", from: at(21, 50), to: at(22, 0)},
+		{label: "a reminder in the last minute", from: at(21, 59), to: at(21, 59)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			e := span("Lock up", tt.from, tt.to)
+			frame := renderToFrame(t, newWidget(testBounds, []ical.Event{e}, defaultConfig()))
+			l, _ := gridOf(testBounds, defaultConfig().Window)
+			x := l.Events.Min.X
+			// The bottom rule is the grid's last row; one row of paper
+			// sits above it, and the block a line tall above that.
+			last := l.Grid.Max.Y - 1
+			if frame.ColorIndexAt(x, last-1) == widget.PaperBlack {
+				t.Errorf("block runs onto the row above the bottom rule, y=%d", last-1)
+			}
+			for y := last - 1 - daygrid.BodyLineH(); y < last-1; y++ {
+				if frame.ColorIndexAt(x, y) != widget.PaperBlack {
+					t.Fatalf("paper at y=%d; want a whole line ending above the bottom rule", y)
+				}
 			}
 		})
 	}
@@ -454,6 +763,16 @@ func TestWidget_Golden(t *testing.T) {
 		{label: "now in the middle of a block", events: typicalDay(), forecast: rainyToday(), now: at(15, 45)},
 		{label: "now just before the window end", events: typicalDay(), forecast: rainyToday(), now: at(21, 45)},
 		{
+			label: "now through side-by-side blocks and a tag",
+			events: []ical.Event{
+				span("Offsite", at(13, 0), at(15, 0)),
+				span("Vendor call", at(13, 30), at(15, 0)),
+				span("Dentist", at(13, 45), at(14, 30)),
+			},
+			forecast: rainyToday(),
+			now:      at(14, 10),
+		},
+		{
 			label: "clipped at each edge",
 			events: []ical.Event{
 				span("Red-eye flight home", at(5, 0), at(8, 30)),
@@ -490,6 +809,63 @@ func TestWidget_Golden(t *testing.T) {
 			},
 			cfg: func(c *Config) { c.ShowLocation = true },
 			now: at(20, 0),
+		},
+		{
+			label: "partial overlap",
+			events: []ical.Event{
+				span("Design review", at(10, 0), at(12, 0)),
+				span("Vendor call", at(11, 0), at(12, 30)),
+				span("Planning", at(15, 0), at(16, 30)),
+				span("Interview", at(16, 0), at(17, 0)),
+			},
+		},
+		{
+			label: "full overlap",
+			events: []ical.Event{
+				span("Board meeting", at(14, 0), at(16, 0)),
+				span("School pickup", at(14, 0), at(16, 0)),
+			},
+		},
+		{
+			label: "three simultaneous events",
+			events: []ical.Event{
+				span("Offsite", at(9, 0), at(12, 0)),
+				span("Standup", at(9, 0), at(9, 15)),
+				span("Expense report", at(9, 0), at(10, 0)),
+				span("Workshop", at(14, 0), at(17, 0)),
+				span("Dentist", at(14, 30), at(15, 30)),
+				span("Pickup", at(15, 0), at(16, 0)),
+				span("Call Mom", at(15, 15), at(15, 45)),
+			},
+		},
+		{
+			label:  "one all-day event",
+			events: append([]ical.Event{allDay("Car in for service")}, typicalDay()...),
+		},
+		{
+			label: "more than two all-day events",
+			events: append([]ical.Event{
+				allDay("Car in for service"),
+				allDay("Recycling day"),
+				allDay("Grandma's birthday"),
+				span("Conference", at(-15, 0), at(41, 0)),
+				span("Gym", at(5, 30), at(6, 30)),
+			}, typicalDay()...),
+		},
+		{
+			label: "a multi-day event through today",
+			events: []ical.Event{
+				span("Cottage weekend", at(-30, 0), at(40, 0)),
+				span("Lunch", at(12, 0), at(13, 0)),
+			},
+		},
+		{
+			label: "neither all-day nor multi-day",
+			events: []ical.Event{
+				span("Night shift", at(-2, 0), at(8, 0)),
+				span("Lunch", at(12, 0), at(13, 0)),
+				span("Red-eye flight", at(21, 0), at(30, 0)),
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -529,6 +905,12 @@ func TestWidget_StaysInsideItsBounds(t *testing.T) {
 		span("Late call", at(22, 0), at(23, 0)),
 		span("Overnight", at(20, 0), at(30, 0)),
 		span("Early", at(4, 0), at(8, 0)),
+		allDay("Car in for service"),
+		allDay("Recycling day"),
+		allDay("Grandma's birthday"),
+		span("Clash", at(13, 0), at(13, 30)),
+		span("Another clash", at(13, 15), at(14, 0)),
+		span("Lock up", at(21, 55), at(22, 0)),
 	)
 	tests := []struct {
 		label  string
