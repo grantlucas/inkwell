@@ -636,19 +636,37 @@ it moves with the schedule, so it does not burn in the way a fixed fill
 would.
 
 Each block is labelled with its start time and title, and a block with
-room for a second line adds "UNTIL" and its end time.
+room for a second line adds "UNTIL" and its end time. A block is never
+shorter than one line of text: an event too short for that, or with no
+end time, still starts at its real time but is drawn a line tall so its
+label reads in full.
+
+Two events whose blocks would overlap share the column side by side,
+each still at its own start and end, so a partial clash shows as two
+blocks of different heights. Overlap is judged on the blocks as drawn,
+so a short event's line-tall block running into the next event puts
+the two side by side too, and nothing is printed over anything else. A
+third event at the same time is not drawn: a small "+N" tag at the
+right of the column, level with it, counts every event left out of that
+clash. One event carried by two feeds, with the same title, start and
+end, is drawn once.
+
+All-day events are listed in a strip above the grid, one per line, up
+to two lines; when there are more, the second line says "+N MORE". A
+timed event running through the whole of today, such as the middle day
+of a conference, is listed there as all day. A timed event that starts
+or ends today, even one crossing midnight, is a block on the grid like
+any other. The strip takes height only when it has something to list.
 
 The grid shows a window of whole hours, labelled down its left edge.
 An event crossing an edge of the window is cut off at the edge, with an
 arrowhead pointing the way it carries on. Events wholly outside the
 window are not drawn; a "+N EARLIER" note above the grid or a
 "+N LATER" note below it counts them, and each note takes height only
-when there is something to count. A block too short to hold a line of
-text is drawn without its label.
+when there is something to count.
 
-The widget is meant for the left of a screen. It draws no weather and
-no all-day events yet: the weather lane beside the grid and the strip
-of all-day events above it are still to come.
+The widget is meant for the left of a screen. It draws no weather yet:
+the weather lane beside the grid is still to come.
 
 <!-- markdownlint-disable MD013 -->
 | Key | Type | Default | Accepted values | Impact |

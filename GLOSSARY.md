@@ -72,6 +72,11 @@ The strip of the day-timeline that carries hourly precipitation and temperature
 alongside the agenda hours.
 _Avoid_: Weather column, side chart
 
+**All-day strip**:
+The lines above the day-timeline's grid listing today's all-day events, and
+timed events that run through the whole of today.
+_Avoid_: All-day row, banner
+
 **Fuzzy clock**:
 The time written in words, such as "twenty to eleven".
 _Avoid_: Word clock, text clock

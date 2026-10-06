@@ -29,14 +29,24 @@ const (
 	minHeight = 160
 )
 
+// notePadY is the paper above and below the text of a band over or
+// under the grid.
+const notePadY = 2
+
 // noteH is the band an "earlier" or "later" note takes: one body line
 // and its padding.
-func noteH() int { return daygrid.BodyLineH() + 4 }
+func noteH() int { return daygrid.BodyLineH() + 2*notePadY }
+
+// stripH is the all-day strip listing lines lines: the lines and the
+// same padding as a note.
+func stripH(lines int) int { return lines*daygrid.BodyLineH() + 2*notePadY }
 
 // sections says which of the optional bands this render needs. The bands
 // take height only when they have something to say, so an ordinary day
 // gives the grid the whole height.
 type sections struct {
+	// AllDay is how many lines the all-day strip lists, 0 for no strip.
+	AllDay  int
 	Earlier bool
 	Later   bool
 }
@@ -44,6 +54,9 @@ type sections struct {
 // layout is where each part of the widget goes. Across the grid, left to
 // right: the hour labels, the weather lane, a rule, then the events.
 type layout struct {
+	// AllDay is the all-day strip across the top, empty when today has
+	// nothing all day.
+	AllDay image.Rectangle
 	// Earlier and Later are the note bands above and below the grid,
 	// empty when nothing falls outside the window on that side.
 	Earlier, Later image.Rectangle
@@ -58,13 +71,16 @@ type layout struct {
 	Events image.Rectangle
 }
 
-// computeLayout splits the widget's bounds. The agenda is the whole of
-// the bounds for now; the all-day strip comes off its top in a later
-// change, and everything below is laid out inside whatever is left.
+// computeLayout splits the widget's bounds. The all-day strip comes off
+// the top, and everything below is laid out inside whatever is left.
 func computeLayout(bounds image.Rectangle, s sections) layout {
 	agenda := bounds
 
 	var l layout
+	if s.AllDay > 0 {
+		l.AllDay = image.Rect(bounds.Min.X, bounds.Min.Y, bounds.Max.X, bounds.Min.Y+stripH(s.AllDay))
+		agenda.Min.Y = l.AllDay.Max.Y
+	}
 	top, bottom := agenda.Min.Y+gridPadY, agenda.Max.Y-gridPadY
 	if s.Earlier {
 		l.Earlier = image.Rect(agenda.Min.X, agenda.Min.Y, agenda.Max.X, agenda.Min.Y+noteH())
@@ -79,6 +95,13 @@ func computeLayout(bounds image.Rectangle, s sections) layout {
 	l.Lane = image.Rect(l.Gutter.Max.X, top, l.Gutter.Max.X, bottom)
 	l.Events = image.Rect(l.Lane.Max.X+ruleW+eventsPadX, top, l.Grid.Max.X-eventsPadX, bottom)
 	return l
+}
+
+// stripText is where the all-day strip's list goes: under the event
+// column, so it lines up with the blocks and the notes, inside the
+// strip's padding.
+func stripText(l layout) image.Rectangle {
+	return image.Rect(l.Events.Min.X, l.AllDay.Min.Y+notePadY, l.Events.Max.X, l.AllDay.Max.Y-notePadY)
 }
 
 // timeline maps today's clock onto the grid's rows: the window's start
