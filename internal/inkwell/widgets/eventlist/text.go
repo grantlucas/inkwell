@@ -43,14 +43,14 @@ func (s Style) title(e calendar.Event) string {
 	return e.Summary
 }
 
-// wrap breaks text into at most maxLines lines of at most maxChars,
+// Wrap breaks text into at most maxLines lines of at most maxChars,
 // preferring word boundaries and cutting whatever will not fit.
 //
 // The budget is in characters, so every measurement and every cut is in
 // runes. Byte arithmetic would wrap an accented title a character or
 // two early and, worse, slice a multi-byte glyph in half, leaving the
 // panel to paint replacement glyphs.
-func wrap(text string, maxChars, maxLines int) []string {
+func Wrap(text string, maxChars, maxLines int) []string {
 	fields := strings.Fields(text)
 	if len(fields) == 0 {
 		return nil

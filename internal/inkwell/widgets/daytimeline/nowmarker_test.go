@@ -84,13 +84,15 @@ func TestNowMarker_CrossesTheLaneAndGridInsideTheWindow(t *testing.T) {
 // cancelled. The label reads exactly as it does with no marker on the
 // grid, and the marker still crosses the rest of the block.
 func TestNowMarker_PassesBehindALabel(t *testing.T) {
-	e := span("Quarterly planning", at(15, 0), at(17, 0))
+	e := span("Quarterly planning session with the extended platform group", at(15, 0), at(17, 0))
 	l, tl := gridOf(testBounds, defaultConfig().Window)
 	block := blockRect(l.Events, tl, e)
 	render := func(now time.Time) *image.Paletted {
 		return renderToFrame(t, New(testBounds, daydata.InMemory([]ical.Event{e}, nil), fixedClock(now), defaultConfig()))
 	}
-	// The "UNTIL 17:00" line's caps sit a line under the first's.
+	// The title's second line, "with the extended platform group", has
+	// its caps a line under the first's.
+	const second = "with the extended platform group"
 	until := labelBaseline(block) + drawkit.BodyLineH() - capH/2
 	var now time.Time
 	for m := range 120 {
@@ -100,7 +102,7 @@ func TestNowMarker_PassesBehindALabel(t *testing.T) {
 	}
 	crossing, unmarked := render(now), render(at(6, 0))
 
-	text := image.Rect(block.Min.X+labelPadX, until-capH, block.Min.X+labelPadX+len("UNTIL 17:00")*drawkit.BodyAdvance(), until+capH)
+	text := image.Rect(block.Min.X+labelPadX, until-capH, block.Min.X+labelPadX+len(second)*drawkit.BodyAdvance(), until+capH)
 	if !sameIn(crossing, unmarked, text) {
 		t.Error("the marker changes the label it crosses")
 	}

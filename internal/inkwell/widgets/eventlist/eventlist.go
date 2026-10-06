@@ -323,7 +323,7 @@ func (s Style) stacked(e calendar.Event, width int) block {
 	if lead <= 0 {
 		lead = lineH
 	}
-	for i, l := range wrap(s.title(e), maxChars, max(s.TitleLines, 1)) {
+	for i, l := range Wrap(s.title(e), maxChars, max(s.TitleLines, 1)) {
 		if i == 0 {
 			baseline += lead
 		} else {

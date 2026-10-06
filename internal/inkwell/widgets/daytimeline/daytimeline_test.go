@@ -238,50 +238,65 @@ func TestWidget_LabelsBlocks(t *testing.T) {
 	}
 }
 
-// A block with room for a second line says when its event ends, which
-// the block's length only shows approximately. One a line tall doesn't,
-// and neither does a reminder with no end.
-func TestWidget_TallBlocksSayWhenTheyEnd(t *testing.T) {
+// A block with room for more than one line gives them to the title: it
+// wraps at word boundaries onto the lines under the start time, and only
+// the last line that fits is cut with ». The block's height and its
+// continuation marks say where the event ends. A block one line tall
+// keeps the time and the title on that line, and draws nothing under it.
+func TestWidget_TallBlocksWrapTheTitle(t *testing.T) {
+	const title = "Quarterly planning session with the extended platform group"
 	tests := []struct {
-		label     string
-		from, to  time.Time
-		wantUntil string
+		label    string
+		title    string
+		from, to time.Time
+		// want is each line after the start time, the first beside it.
+		want []string
 	}{
-		{label: "upcoming two hours", from: at(15, 0), to: at(17, 0), wantUntil: "UNTIL 17:00"},
-		{label: "finished two hours", from: at(9, 0), to: at(11, 0), wantUntil: "UNTIL 11:00"},
-		{label: "runs past the window", from: at(20, 0), to: at(25, 0), wantUntil: "UNTIL 01:00"},
-		{label: "one hour", from: at(15, 0), to: at(16, 0)},
+		{
+			label: "upcoming, wrapped at a word",
+			title: title, from: at(15, 0), to: at(16, 30),
+			want: []string{"Quarterly planning session", "with the extended platform group"},
+		},
+		{
+			label: "finished, wrapped at a word",
+			title: title, from: at(9, 0), to: at(10, 30),
+			want: []string{"Quarterly planning session", "with the extended platform group"},
+		},
+		{
+			label: "the last line that fits is cut",
+			title: "Quarterly planning session with the extended platform engineering group",
+			from:  at(15, 0), to: at(16, 30),
+			want: []string{"Quarterly planning session", "with the extended platform enginee»"},
+		},
+		{
+			label: "one line tall",
+			title: title, from: at(15, 0), to: at(16, 0),
+			want: []string{"Quarterly planning session w»"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			e := span("Block", tt.from, tt.to)
+			e := span(tt.title, tt.from, tt.to)
 			frame := renderToFrame(t, newWidget(testBounds, []ical.Event{e}, defaultConfig()))
 			l, tl := gridOf(testBounds, defaultConfig().Window)
 			block := blockRect(l.Events, tl, e)
 
+			ref := newTestFrame()
+			drawkit.FillRect(ref, block, widget.PaperBlack)
 			contrast, inner := widget.PaperWhite, block
 			if finished(e, testTime) {
 				contrast, inner = widget.PaperBlack, block.Inset(outlineW)
-			}
-			// Everything under the first line.
-			below := image.Rect(inner.Min.X, inner.Min.Y+drawkit.BodyLineH(), inner.Max.X-markClear, inner.Max.Y)
-			if tt.wantUntil == "" {
-				if n := countIndexIn(frame, below, contrast); n != 0 {
-					t.Errorf("%d px under the first line of a block with no room for a second", n)
-				}
-				return
-			}
-			// The second line reads exactly the end time, written in
-			// the regular cut at the label's left.
-			ref := newTestFrame()
-			drawkit.FillRect(ref, block, widget.PaperBlack)
-			if finished(e, testTime) {
 				drawkit.FillWhite(ref, inner)
 			}
-			drawkit.DrawText(ref, inner.Min.X+labelPadX, labelBaseline(inner)+drawkit.BodyLineH(),
-				tt.wantUntil, drawkit.BodyFace, contrast)
-			if !sameIn(frame, ref, below) {
-				t.Errorf("second line doesn't read %q", tt.wantUntil)
+			x, baseline := inner.Min.X+labelPadX, labelBaseline(inner)
+			clip, _ := ref.SubImage(inner).(*image.Paletted)
+			drawkit.DrawText(clip, x, baseline, tt.from.Format("15:04"), drawkit.BodyBoldFace, contrast)
+			drawkit.DrawText(clip, x+6*drawkit.BodyAdvance(), baseline, tt.want[0], drawkit.BodyFace, contrast)
+			for i, line := range tt.want[1:] {
+				drawkit.DrawText(clip, x, baseline+(i+1)*drawkit.BodyLineH(), line, drawkit.BodyFace, contrast)
+			}
+			if !sameIn(frame, ref, block) {
+				t.Errorf("block doesn't read %q", tt.want)
 			}
 		})
 	}
@@ -290,7 +305,7 @@ func TestWidget_TallBlocksSayWhenTheyEnd(t *testing.T) {
 // An event too short for a legible label still gets one: its block
 // starts at its true time but is drawn a whole text line tall, so the
 // label is written in full rather than clipped or left off. The block
-// is exactly that line, with no second line saying when it ends.
+// is exactly that line, with no second line of title under it.
 func TestWidget_ShortBlocksGetAWholeLine(t *testing.T) {
 	tests := []struct {
 		label    string

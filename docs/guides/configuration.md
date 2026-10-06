@@ -610,8 +610,11 @@ apart without reading a time. A solid block is a large black fill, but
 it moves with the schedule, so it does not burn in the way a fixed fill
 would.
 
-Each block is labelled with its start time and title, and a block with
-room for a second line adds "UNTIL" and its end time. A block is never
+Each block is labelled with its start time and title. A block with room
+for more than one line wraps the title onto the lines under the time, at
+word boundaries, and cuts only the last line that fits with "»"; the
+block's height and its continuation arrows say where the event ends. A
+block is never
 shorter than one line of text: an event too short for that, or with no
 end time, still starts at its real time but is drawn a line tall so its
 label reads in full.
