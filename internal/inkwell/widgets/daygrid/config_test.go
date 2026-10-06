@@ -15,6 +15,12 @@ var listing = daygrid.Spec{Widget: "test-widget", MaxEvents: 3}
 // weatherOnly is a widget that draws the forecast and no events.
 var weatherOnly = daygrid.Spec{Widget: "test-widget", WeatherOnly: true}
 
+// calendarOnly is a widget that lists events and draws no forecast.
+var calendarOnly = daygrid.Spec{Widget: "test-widget", MaxEvents: 3, CalendarOnly: true}
+
+// oneDay is a widget that draws a single day, today or one after it.
+var oneDay = daygrid.Spec{Widget: "test-widget", WeatherOnly: true, OneDay: true}
+
 // topLevel is the dashboard's top-level weather settings.
 var topLevel = weather.NewProvider(nil, time.Hour, nil, weather.Settings{
 	Location: weather.Location{Latitude: 43.25, Longitude: -79.87},
@@ -187,6 +193,32 @@ func TestParseConfig_Accepts(t *testing.T) {
 			},
 		},
 		{
+			// A widget placed for one day draws today unless told which.
+			label: "a one-day widget draws today by default", spec: oneDay, raw: nil, inherit: topLevel,
+			check: func(t *testing.T, c daygrid.Config) {
+				if c.Day != 0 {
+					t.Errorf("Day = %d, want 0", c.Day)
+				}
+			},
+		},
+		{
+			label: "a one-day widget's day", spec: oneDay, raw: map[string]any{"day": 6}, inherit: topLevel,
+			check: func(t *testing.T, c daygrid.Config) {
+				if c.Day != 6 {
+					t.Errorf("Day = %d, want 6", c.Day)
+				}
+			},
+		},
+		{
+			// An event list reads no forecast, so it has no weather to set.
+			label: "a calendar-only widget", spec: calendarOnly, raw: feedsAnd("max_events", 2), inherit: topLevel,
+			check: func(t *testing.T, c daygrid.Config) {
+				if len(c.Feeds) != 1 || c.MaxEvents != 2 {
+					t.Errorf("Feeds, MaxEvents = %+v, %d", c.Feeds, c.MaxEvents)
+				}
+			},
+		},
+		{
 			// The example config's bold-five screen.
 			label: "an existing bold-five config", spec: daygrid.Spec{Widget: "bold-five", MaxEvents: 4}, inherit: topLevel,
 			raw: map[string]any{
@@ -283,6 +315,23 @@ func TestParseConfig_Rejects(t *testing.T) {
 			`unsupported setting "latitde" (accepted: latitude, longitude, temp_unit, weather_model)`,
 		},
 		{"a weather setting on a weather-only widget is still checked", weatherOnly, map[string]any{"temp_unit": "K"}, "invalid temp_unit"},
+		// A widget placed for one day takes a day from today to a week
+		// out; a widget drawing several days has no single day to set.
+		{"day not an int", oneDay, map[string]any{"day": "monday"}, "day must be an integer, got string"},
+		{"day before today", oneDay, map[string]any{"day": -1}, "day must be in [0, 6], got -1"},
+		{"day past a week out", oneDay, map[string]any{"day": 7}, "day must be in [0, 6], got 7"},
+		{
+			"day on a widget that draws several days", weatherOnly, map[string]any{"day": 1},
+			`unsupported setting "day" (accepted: latitude, longitude, temp_unit, weather_model)`,
+		},
+		// A calendar-only widget reads no forecast, so a weather key
+		// pasted from another widget's config says why it is wrong.
+		{"latitude on a calendar-only widget", calendarOnly, feedsAnd("latitude", 43.0), "latitude is not supported: test-widget shows only events, so it reads no forecast"},
+		{"weather_model on a calendar-only widget", calendarOnly, feedsAnd("weather_model", "gem"), "weather_model is not supported: test-widget shows only events"},
+		{
+			"a typo on a calendar-only widget", calendarOnly, feedsAnd("feed", feedA),
+			`unsupported setting "feed" (accepted: feeds, max_events, refresh, show_location)`,
+		},
 		{
 			"max_events on a widget that doesn't list a fixed number", noMaxEvents, feedsAnd("max_events", 3),
 			`unsupported setting "max_events" (accepted: feeds, latitude, longitude, refresh, show_location, temp_unit, weather_model)`,
