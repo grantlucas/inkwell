@@ -217,12 +217,12 @@ func TestTimeLineAndTitle(t *testing.T) {
 	}
 }
 
-// A day the forecast never covered draws no badge: a zero
-// DailyForecast is indistinguishable from a real 0°/0° reading.
+// A day the forecast never covered draws no badge: drawing a zero
+// would state a 0°/0° reading nobody forecast.
 func TestRenderBadge_MissingForecast(t *testing.T) {
 	frame := newTestFrame(800, 480)
 	renderBadge(frame, busyRow(0).Badge,
-		weather.DailyForecast{}, "C", true, true, 14, weatherview.TempRange{Min: 0, Max: 25})
+		nil, "C", true, true, 14, weatherview.TempRange{Min: 0, Max: 25})
 	if got := countIndexIn(frame, frame.Bounds(), widget.PaperBlack); got != 0 {
 		t.Errorf("drew %d px for a day with no forecast", got)
 	}
@@ -236,12 +236,12 @@ func TestRenderBadge_CombinedChart(t *testing.T) {
 	chart := image.Rect(badge.Min.X+chartDX, badge.Min.Y, badge.Min.X+chartDX+chartW, badge.Max.Y)
 	rng := weatherview.TempRange{Min: -10, Max: 30}
 
-	dryDay := func(temp float64) weather.DailyForecast {
+	dryDay := func(temp float64) *weather.DailyForecast {
 		var hourly []weather.HourlyPoint
 		for h := range 24 {
 			hourly = append(hourly, weather.HourlyPoint{Hour: h, Temperature: temp})
 		}
-		return weather.DailyForecast{
+		return &weather.DailyForecast{
 			Date: time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC),
 			High: temp, Low: temp, Hourly: hourly,
 		}
@@ -325,7 +325,7 @@ func TestRenderBadge_TemperatureNeverReachesTheChart(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			frame := newTestFrame(800, 480)
-			renderBadge(frame, badge, weather.DailyForecast{
+			renderBadge(frame, badge, &weather.DailyForecast{
 				Date: time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC),
 				High: tt.hi, Low: tt.lo, Hourly: hourly,
 			}, tt.unit, true, true, 8, weatherview.TempRange{Min: -30, Max: 40})
