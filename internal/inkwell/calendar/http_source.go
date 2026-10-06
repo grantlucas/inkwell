@@ -21,10 +21,13 @@ type HTTPClient interface {
 var newRequestWithContext = http.NewRequestWithContext
 
 // HTTPSource fetches and parses iCal feeds from a list of Feeds.
-// It merges events from all feeds and deduplicates by UID. Each feed's
-// rules are applied to its own events as they are parsed, so everything
-// downstream — dedup, caching, rendering — only ever sees cleaned-up
-// events.
+// It merges events from all feeds. Each feed's rules are applied to its
+// own events as they are parsed, so everything downstream — caching,
+// expansion, rendering — only ever sees cleaned-up events.
+//
+// It keeps every event, including several sharing a UID: a series and
+// the overrides that edit single instances of it all carry the series'
+// UID.
 //
 // It does not window. A recurring event comes back as its series, and
 // only expanding the series says which of its occurrences fall in a
@@ -41,14 +44,13 @@ func NewHTTPSource(feeds []Feed, client HTTPClient) *HTTPSource {
 	return &HTTPSource{feeds: feeds, client: client}
 }
 
-// Fetch fetches all feeds, merges and deduplicates them, and returns
-// every event and series. ctx bounds each fetch.
+// Fetch fetches all feeds, merges them, and returns every event and
+// series. ctx bounds each fetch.
 func (s *HTTPSource) Fetch(ctx context.Context) ([]Event, error) {
-	seen := make(map[string]bool)
 	var all []Event
 
 	for _, feed := range s.feeds {
-		if err := s.fetchFeed(ctx, feed, seen, &all); err != nil {
+		if err := s.fetchFeed(ctx, feed, &all); err != nil {
 			return nil, err
 		}
 	}
@@ -60,7 +62,7 @@ func (s *HTTPSource) Fetch(ctx context.Context) ([]Event, error) {
 // is closed at the end of each iteration rather than lingering until
 // Fetch returns. Close errors are surfaced when no other error
 // preceded them.
-func (s *HTTPSource) fetchFeed(ctx context.Context, feed Feed, seen map[string]bool, all *[]Event) (retErr error) {
+func (s *HTTPSource) fetchFeed(ctx context.Context, feed Feed, all *[]Event) (retErr error) {
 	url := feed.URL
 	req, err := newRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -86,14 +88,16 @@ func (s *HTTPSource) fetchFeed(ctx context.Context, feed Feed, seen map[string]b
 	}
 
 	for _, e := range events {
-		if seen[e.UID] {
-			continue
-		}
 		e, keep := applyRules(e, feed.Rules)
 		if !keep {
-			continue
+			if !e.IsOverride() {
+				continue
+			}
+			// An excluded override still stands in for its occurrence;
+			// dropping it would bring that occurrence back at its usual
+			// time. Cancelling it removes both.
+			e.Cancelled = true
 		}
-		seen[e.UID] = true
 		*all = append(*all, e)
 	}
 	return nil

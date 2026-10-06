@@ -250,56 +250,40 @@ END:VCALENDAR
 	}
 }
 
-func TestParse_InvalidDTSTART(t *testing.T) {
-	input := `BEGIN:VCALENDAR
-BEGIN:VEVENT
-UID:bad
-DTSTART:not-a-date
-SUMMARY:Bad
-END:VEVENT
-END:VCALENDAR
-`
-	_, err := Parse(strings.NewReader(input))
-	if err == nil {
-		t.Fatal("expected error for invalid DTSTART")
+// A property whose value can't be parsed fails the whole feed, and the
+// error names the property so a broken feed points at its bad line.
+func TestParse_InvalidPropertyValue(t *testing.T) {
+	cases := []struct {
+		label    string
+		property string
+	}{
+		{label: "DTSTART", property: "DTSTART:not-a-date"},
+		{label: "DTEND", property: "DTEND:not-a-date"},
+		{label: "DURATION", property: "DURATION:not-a-duration"},
+		{label: "RECURRENCE-ID", property: "RECURRENCE-ID:not-a-date"},
 	}
-	if !strings.Contains(err.Error(), "DTSTART") {
-		t.Errorf("error = %q, want mention of DTSTART", err.Error())
-	}
-}
 
-func TestParse_InvalidDTEND(t *testing.T) {
-	input := `BEGIN:VCALENDAR
-BEGIN:VEVENT
-UID:bad
-DTSTART:20260425T090000Z
-DTEND:not-a-date
-SUMMARY:Bad
-END:VEVENT
-END:VCALENDAR
-`
-	_, err := Parse(strings.NewReader(input))
-	if err == nil {
-		t.Fatal("expected error for invalid DTEND")
-	}
-	if !strings.Contains(err.Error(), "DTEND") {
-		t.Errorf("error = %q, want mention of DTEND", err.Error())
-	}
-}
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			// A valid DTSTART comes first, so the bad DTSTART row
+			// fails on its own line rather than on a missing start.
+			input := "BEGIN:VCALENDAR\r\n" +
+				"BEGIN:VEVENT\r\n" +
+				"UID:bad\r\n" +
+				"DTSTART:20260425T090000Z\r\n" +
+				tc.property + "\r\n" +
+				"SUMMARY:Bad\r\n" +
+				"END:VEVENT\r\n" +
+				"END:VCALENDAR\r\n"
 
-func TestParse_InvalidDuration(t *testing.T) {
-	input := `BEGIN:VCALENDAR
-BEGIN:VEVENT
-UID:bad
-DTSTART:20260425T090000Z
-DURATION:not-a-duration
-SUMMARY:Bad
-END:VEVENT
-END:VCALENDAR
-`
-	_, err := Parse(strings.NewReader(input))
-	if err == nil {
-		t.Fatal("expected error for invalid DURATION")
+			_, err := Parse(strings.NewReader(input))
+			if err == nil {
+				t.Fatalf("expected an error for invalid %s", tc.label)
+			}
+			if !strings.Contains(err.Error(), tc.label) {
+				t.Errorf("error = %q, want mention of %s", err.Error(), tc.label)
+			}
+		})
 	}
 }
 
@@ -769,5 +753,77 @@ END:VCALENDAR
 	want := time.Date(2026, 9, 19, 10, 45, 0, 0, toronto)
 	if !events[0].Start.Equal(want) {
 		t.Errorf("Start = %v, want %v", events[0].Start, want)
+	}
+}
+
+// An override is the VEVENT that edits one instance of a series: it
+// carries the series' UID and a RECURRENCE-ID naming the instance. A
+// cancelled override survives the parse, marked, because removing its
+// instance is its whole job; a cancelled event that edits nothing is
+// still dropped (TestParse_StatusFiltering).
+func TestParse_Overrides(t *testing.T) {
+	toronto, err := time.LoadLocation("America/Toronto")
+	if err != nil {
+		t.Fatalf("LoadLocation: %v", err)
+	}
+
+	cases := []struct {
+		label         string
+		recurrenceID  string
+		status        string
+		wantID        time.Time
+		wantCancelled bool
+	}{
+		{
+			label:        "UTC instance",
+			recurrenceID: "RECURRENCE-ID:20261005T090000Z",
+			wantID:       utc(2026, 10, 5, 9, 0),
+		},
+		{
+			label:        "zoned instance",
+			recurrenceID: "RECURRENCE-ID;TZID=America/Toronto:20261005T090000",
+			wantID:       time.Date(2026, 10, 5, 9, 0, 0, 0, toronto),
+		},
+		{
+			label:        "all-day instance",
+			recurrenceID: "RECURRENCE-ID;VALUE=DATE:20261005",
+			wantID:       utc(2026, 10, 5, 0, 0),
+		},
+		{
+			label:         "cancelled instance is kept and marked",
+			recurrenceID:  "RECURRENCE-ID:20261005T090000Z",
+			status:        "STATUS:CANCELLED\r\n",
+			wantID:        utc(2026, 10, 5, 9, 0),
+			wantCancelled: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			feed := "BEGIN:VCALENDAR\r\n" +
+				"BEGIN:VEVENT\r\n" +
+				"UID:weekly@example.com\r\n" +
+				tc.recurrenceID + "\r\n" +
+				"DTSTART:20261006T150000Z\r\n" +
+				"DTEND:20261006T153000Z\r\n" +
+				tc.status +
+				"SUMMARY:Weekly Sync\r\n" +
+				"END:VEVENT\r\n" +
+				"END:VCALENDAR\r\n"
+
+			events, err := Parse(strings.NewReader(feed))
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if len(events) != 1 {
+				t.Fatalf("got %d events, want 1", len(events))
+			}
+			if got := events[0].RecurrenceID; !got.Equal(tc.wantID) {
+				t.Errorf("RecurrenceID = %v, want %v", got, tc.wantID)
+			}
+			if got := events[0].Cancelled; got != tc.wantCancelled {
+				t.Errorf("Cancelled = %v, want %v", got, tc.wantCancelled)
+			}
+		})
 	}
 }
