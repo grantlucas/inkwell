@@ -49,9 +49,6 @@ const (
 
 	// widestHigh is the widest high there is, in either unit.
 	widestHigh = "-00°C"
-
-	// noForecast is what the widget says when no forecast reaches today.
-	noForecast = "NO FORECAST"
 )
 
 var (
@@ -94,7 +91,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	day := w.Days.Days(w.Now(), 1).Days[0].Forecast
 	if day == nil {
 		drawkit.DrawTextCentered(frame, b.Min.X, b.Max.X, b.Min.Y+(b.Dy()+drawkit.BodyAscent())/2,
-			noForecast, drawkit.BodyFace, widget.PaperBlack)
+			daydata.NoForecast, drawkit.BodyFace, widget.PaperBlack)
 		return nil
 	}
 	renderForecast(frame, b, *day, w.Config.Weather.TempUnit)

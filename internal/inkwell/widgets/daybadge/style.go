@@ -45,22 +45,25 @@ var StyleNames = daydata.Names[Style]{"column", "row", "compact", "hero"}
 // String is the style's config name.
 func (s Style) String() string { return StyleNames.Name(s) }
 
+// shape is what a style is: the room it is drawn in and how it draws.
+type shape struct {
+	size image.Point
+	draw func(frame *image.Paletted, r image.Rectangle, day daydata.Day, now time.Time, unit string)
+}
+
+// shapes are the styles' shapes, in Style order.
+var shapes = [...]shape{
+	Column:  {image.Pt(columnW, columnH), drawColumn},
+	Row:     {image.Pt(rowW, rowH), drawRow},
+	Compact: {image.Pt(compactW, compactH), drawCompact},
+	Hero:    {image.Pt(heroW, heroH), drawHero},
+}
+
 // Size is the room the style is drawn in: what the full-screen widget it
 // comes from gives it. Every element sits at a fixed offset from the
 // rect's top-left corner (or, for a right-aligned reading, its right
 // edge), so a badge given less room than this would run past its rect.
-func (s Style) Size() image.Point {
-	switch s {
-	case Column:
-		return image.Pt(columnW, columnH)
-	case Row:
-		return image.Pt(rowW, rowH)
-	case Compact:
-		return image.Pt(compactW, compactH)
-	default:
-		return image.Pt(heroW, heroH)
-	}
-}
+func (s Style) Size() image.Point { return shapes[s].size }
 
 // Draw draws day's badge into r. now is the dashboard's clock, already in
 // the display zone: the compact badge tags tomorrow by it, and the hero
@@ -71,14 +74,5 @@ func (s Style) Size() image.Point {
 // weather: a zero would state a temperature nobody forecast. Nothing is
 // highlighted on today, which is shown by position (CLAUDE.md).
 func (s Style) Draw(frame *image.Paletted, r image.Rectangle, day daydata.Day, now time.Time, unit string) {
-	switch s {
-	case Column:
-		drawColumn(frame, r, day, unit)
-	case Row:
-		drawRow(frame, r, day, unit)
-	case Compact:
-		drawCompact(frame, r, day, now, unit)
-	default:
-		drawHero(frame, r, day, now, unit)
-	}
+	shapes[s].draw(frame, r, day, now, unit)
 }

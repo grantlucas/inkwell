@@ -51,9 +51,6 @@ const (
 	widestCondition = "P.CLOUDY"
 	widestHigh      = "-00°C"
 	widestLow       = "-00°"
-
-	// noForecast is what a row says when the forecast doesn't reach it.
-	noForecast = "NO FORECAST"
 )
 
 var (
@@ -152,7 +149,7 @@ func renderRow(frame *image.Paletted, r image.Rectangle, d daydata.Day, unit str
 		strings.ToUpper(d.Start.Format("Monday 2")), drawkit.BodyBoldFace, widget.PaperBlack)
 
 	if d.Forecast == nil {
-		drawkit.DrawText(frame, x, top+condBaseline, noForecast, drawkit.BodyFace, widget.PaperBlack)
+		drawkit.DrawText(frame, x, top+condBaseline, daydata.NoForecast, drawkit.BodyFace, widget.PaperBlack)
 		return
 	}
 	f := *d.Forecast

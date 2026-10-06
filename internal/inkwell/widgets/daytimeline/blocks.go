@@ -66,8 +66,8 @@ const stripLines = 2
 
 // allDayList is how the strip lists its events: one line each, the event
 // list's ALL DAY then the title.
-func allDayList(loc *time.Location, showLocation bool) eventlist.Style {
-	return eventlist.Style{Layout: eventlist.Inline, ShowLocation: showLocation, Location: loc}
+func allDayList(loc *time.Location, showLocation bool) eventlist.List {
+	return eventlist.List{Layout: eventlist.Inline, ShowLocation: showLocation, Location: loc}
 }
 
 // drawNote writes a note counting events outside the window, at x in

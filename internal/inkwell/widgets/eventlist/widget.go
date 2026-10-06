@@ -14,12 +14,12 @@ import (
 // load says which widget rejected it.
 const widgetName = "event-list"
 
-// defaultMaxEvents is how many events each preset lists when config
+// defaultMaxEvents is how many events each style lists when config
 // doesn't say: what the full-screen widget it comes from shows.
-var defaultMaxEvents = map[Preset]int{
-	PresetStacked: 4, // bold-five's column
-	PresetLarge:   3, // today-hero's agenda
-	PresetInline:  3, // today-hero's day rows
+var defaultMaxEvents = map[Style]int{
+	StackedStyle: 4, // bold-five's column
+	LargeStyle:   3, // today-hero's agenda
+	InlineStyle:  3, // today-hero's day rows
 }
 
 var _ widget.Widget = (*Widget)(nil)
@@ -28,18 +28,18 @@ var _ widget.Widget = (*Widget)(nil)
 // settings and day every one-day widget shares, and its own.
 type Config struct {
 	daydata.Config
-	// Preset is the shape the events are listed in.
-	Preset Preset
+	// Style is the shape the events are listed in.
+	Style Style
 	// HideFinished drops events that finished before now, for a list of
 	// what is left of today.
 	HideFinished bool
-	// Empty, when set, replaces what the preset says on a day with no
+	// Empty, when set, replaces what the style says on a day with no
 	// events. "" says nothing.
 	Empty *string
 }
 
 // Widget is the event list placed on a screen on its own: one day's
-// events, listed into its bounds in one of the presets the full-screen
+// events, listed into its bounds in one of the styles the full-screen
 // widgets list in.
 type Widget struct {
 	daydata.Base[Config]
@@ -64,32 +64,32 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	if cfg.HideFinished {
 		events = Remaining(events, now)
 	}
-	style := cfg.Preset.Style(cfg.MaxEvents, cfg.ShowLocation, now.Location())
+	list := cfg.Style.List(cfg.MaxEvents, cfg.ShowLocation, now.Location())
 	if cfg.Empty != nil {
-		style.Empty.Text = *cfg.Empty
+		list.Empty.Text = *cfg.Empty
 	}
-	style.Draw(frame, w.Bounds(), events)
+	list.Draw(frame, w.Bounds(), events)
 	return nil
 }
 
 // ownKeys are the widget's own settings, beside the shared ones.
 var ownKeys = []string{"empty", "hide_finished", "style"}
 
-// parseConfig reads the widget's preset first, since the default number
+// parseConfig reads the widget's style first, since the default number
 // of events depends on it, then the shared settings through the shared
 // parser, then the rest of its own. It draws no forecast, so it has no
 // weather settings to inherit.
 func parseConfig(raw map[string]any, _ *weather.Provider) (Config, error) {
-	cfg := Config{Preset: PresetStacked}
+	cfg := Config{Style: StackedStyle}
 	keys := daydata.ReadKeys(widgetName, raw)
-	daydata.Choice(keys, "style", PresetNames, &cfg.Preset)
+	daydata.Choice(keys, "style", StyleNames, &cfg.Style)
 	if err := keys.Err(); err != nil {
 		return cfg, err
 	}
 
 	shared, err := daydata.ParseConfig(daydata.Spec{
 		Widget:    widgetName,
-		MaxEvents: defaultMaxEvents[cfg.Preset],
+		MaxEvents: defaultMaxEvents[cfg.Style],
 		Extra:     ownKeys,
 		Reads:     daydata.CalendarOnly,
 		OneDay:    true,

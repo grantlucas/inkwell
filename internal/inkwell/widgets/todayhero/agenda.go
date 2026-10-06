@@ -22,8 +22,8 @@ const (
 //
 // loc is the zone event clock labels are rendered in. It must never be
 // nil.
-func heroStyle(maxEvents int, showLocation bool, loc *time.Location) eventlist.Style {
-	s := eventlist.PresetLarge.Style(maxEvents, showLocation, loc)
+func heroStyle(maxEvents int, showLocation bool, loc *time.Location) eventlist.List {
+	s := eventlist.LargeStyle.List(maxEvents, showLocation, loc)
 	s.Empty = eventlist.Note{Text: doneText, Scale: doneScale}
 	return s
 }
@@ -35,7 +35,7 @@ func heroStyle(maxEvents int, showLocation bool, loc *time.Location) eventlist.S
 // "Remaining" is the point of this block: an event that finished two
 // hours ago is history, and on the one screen that spends real estate
 // on today it would be spending it on the past.
-func renderHeroAgenda(frame *image.Paletted, bounds image.Rectangle, events []calendar.Event, style eventlist.Style) {
+func renderHeroAgenda(frame *image.Paletted, bounds image.Rectangle, events []calendar.Event, style eventlist.List) {
 	drawkit.DrawHLine(frame, bounds.Min.X+heroPadX, bounds.Max.X-heroPadX, bounds.Min.Y, widget.PaperBlack)
 
 	list := image.Rect(bounds.Min.X+heroPadX, bounds.Min.Y+agendaTopPad, bounds.Max.X-heroPadX, bounds.Max.Y)

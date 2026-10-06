@@ -3,9 +3,10 @@
 // for the events that do not. Widgets that list events through it write
 // them the same way and say how many they hid the same way.
 //
-// The shapes the day screens list in are its presets: bold-five's column
+// The shapes the day screens list in are its styles: bold-five's column
 // (stacked), today-hero's agenda (large) and the rows of row-agenda and
-// today-hero (inline). The event-list widget places one day's list on a
+// today-hero (inline). A Style filled in with a widget's choices is a
+// List, which draws. The event-list widget places one day's list on a
 // screen on its own in any of them. weekly-calendar never lists through
 // it; it is being retired.
 package eventlist
@@ -42,11 +43,11 @@ const (
 	Inline
 )
 
-// Style chooses how a list is laid out and what it shows. The zero value
+// List chooses how a list is laid out and what it shows. The zero value
 // lists every event that fits, stacked: each event's bold time on one
 // line and its title on the line below, at body size, edge to edge with
 // no gap. Location must be set before a timed event is listed.
-type Style struct {
+type List struct {
 	// Layout is stacked (the zero value) or inline.
 	Layout Layout
 	// MaxEvents is the most events listed. Below 1 there is no cap, and
@@ -130,9 +131,9 @@ type placed struct {
 // be drawn whole is left off, since a clock time cut short reads as a
 // different time. A list too narrow to list events still draws the
 // "+N MORE" line, cut to its width, so hidden events are announced
-// whenever any line fits. An empty list draws the style's Empty line, or
+// whenever any line fits. An empty list draws its Empty line, or
 // nothing when there is none.
-func (s Style) Draw(frame *image.Paletted, r image.Rectangle, events []calendar.Event) int {
+func (s List) Draw(frame *image.Paletted, r image.Rectangle, events []calendar.Event) int {
 	blocks, hidden := s.layout(r, events)
 	for i, b := range blocks {
 		if s.Rules && i > 0 && !b.more {
@@ -153,7 +154,7 @@ func (s Style) Draw(frame *image.Paletted, r image.Rectangle, events []calendar.
 // is one row of text, whatever size it is drawn at. A width too narrow
 // to list events needs only the "+N MORE" line, and one without a
 // character of room needs none.
-func (s Style) Lines(events []calendar.Event, width int) int {
+func (s List) Lines(events []calendar.Event, width int) int {
 	if maxChars, ok := s.charsIn(width); !ok {
 		if len(events) > 0 && maxChars >= 1 {
 			return 1
@@ -179,7 +180,7 @@ func (s Style) Lines(events []calendar.Event, width int) int {
 // stacked title is punctuation, and a column of » reads as a fault
 // rather than as content. An inline list needs its time column: below
 // that the times themselves would be cut.
-func (s Style) charsIn(width int) (int, bool) {
+func (s List) charsIn(width int) (int, bool) {
 	maxChars := width / drawkit.BodyAdvance()
 	if s.Layout == Inline {
 		return maxChars, width >= timeColumn()
@@ -188,7 +189,7 @@ func (s Style) charsIn(width int) (int, bool) {
 }
 
 // listed is the events the cap lets through.
-func (s Style) listed(events []calendar.Event) []calendar.Event {
+func (s List) listed(events []calendar.Event) []calendar.Event {
 	if s.MaxEvents > 0 && s.MaxEvents < len(events) {
 		return events[:s.MaxEvents]
 	}
@@ -197,7 +198,7 @@ func (s Style) listed(events []calendar.Event) []calendar.Event {
 
 // layout places as many events as fit in r, then the "+N MORE" line
 // when any are left over, and reports how many were left over.
-func (s Style) layout(r image.Rectangle, events []calendar.Event) ([]placed, int) {
+func (s List) layout(r image.Rectangle, events []calendar.Event) ([]placed, int) {
 	maxChars, ok := s.charsIn(r.Dx())
 
 	// The one fit rule: a block fits when its last line's descent ends
@@ -253,7 +254,7 @@ func (s Style) layout(r image.Rectangle, events []calendar.Event) ([]placed, int
 
 // next is where the block after out starts: the top of r, or a gap
 // below the last block placed.
-func (s Style) next(out []placed, r image.Rectangle) int {
+func (s List) next(out []placed, r image.Rectangle) int {
 	if len(out) == 0 {
 		return r.Min.Y
 	}
@@ -261,8 +262,8 @@ func (s Style) next(out []placed, r image.Rectangle) int {
 	return last.top + last.height + s.Gap
 }
 
-// event resolves one event to the lines the style draws it in.
-func (s Style) event(e calendar.Event, width int) block {
+// event resolves one event to the lines the list draws it in.
+func (s List) event(e calendar.Event, width int) block {
 	if s.Layout == Inline {
 		return s.inline(e, width)
 	}
@@ -273,7 +274,7 @@ func (s Style) event(e calendar.Event, width int) block {
 // past the time column, cut on characters to the room left. A title
 // with less room than minChars is left off and the time stands alone,
 // since a stub of » reads as a fault rather than as a name.
-func (s Style) inline(e calendar.Event, width int) block {
+func (s List) inline(e calendar.Event, width int) block {
 	ascent := drawkit.BodyAscent()
 	col := timeColumn()
 	title := ""
@@ -296,7 +297,7 @@ func (s Style) inline(e calendar.Event, width int) block {
 func timeColumn() int { return drawkit.TextWidth(drawkit.BodyFace, "ALL DAY ") }
 
 // stacked resolves one event to its time line and the title under it.
-func (s Style) stacked(e calendar.Event, width int) block {
+func (s List) stacked(e calendar.Event, width int) block {
 	maxChars := width / drawkit.BodyAdvance()
 	ascent, lineH := drawkit.BodyAscent(), drawkit.BodyLineH()
 	descent := lineH - ascent
@@ -341,7 +342,7 @@ func (s Style) stacked(e calendar.Event, width int) block {
 // timeText is the event's clock label when it fits whole in maxChars,
 // and nothing when it does not: a clock time cut short reads as a
 // different time ("0" for 09:00), which is worse than no time at all.
-func (s Style) timeText(e calendar.Event, maxChars int) string {
+func (s List) timeText(e calendar.Event, maxChars int) string {
 	label := s.timeLabel(e)
 	if runeLen(label) > maxChars {
 		return ""

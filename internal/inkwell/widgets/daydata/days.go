@@ -31,6 +31,10 @@ type Day struct {
 	Forecast *weather.DailyForecast
 }
 
+// NoForecast is what a widget says for a day the forecast doesn't reach,
+// rather than draw numbers nobody forecast.
+const NoForecast = "NO FORECAST"
+
 // End is the local midnight the day runs to, exclusive.
 func (d Day) End() time.Time { return d.Start.AddDate(0, 0, 1) }
 

@@ -599,7 +599,7 @@ func TestWidget_ListsAllDayEventsInAStripAboveTheGrid(t *testing.T) {
 
 			// The strip reads as the event list draws these events.
 			ref := newTestFrame()
-			eventlist.Style{Layout: eventlist.Inline, Location: time.UTC}.Draw(ref, stripText(l), tt.wantList)
+			eventlist.List{Layout: eventlist.Inline, Location: time.UTC}.Draw(ref, stripText(l), tt.wantList)
 			if !sameIn(frame, ref, l.AllDay) {
 				t.Error("strip differs from the event list of its events")
 			}
