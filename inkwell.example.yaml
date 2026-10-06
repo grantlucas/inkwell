@@ -293,3 +293,24 @@ dashboard:
     #                              # refresh cadence above
     #         # Location, model and temp_unit are inherited from the
     #         # top-level weather: block; override per widget if needed.
+
+    # today-weather is a widget rather than a screen: today's forecast as
+    # one block — the condition icon, the high at 3x, the low beside it
+    # and the condition name — to place on any screen beside other
+    # widgets. It reads no calendar, so it takes only the weather keys
+    # every weather widget takes, and all of them are optional; feeds and
+    # the other calendar keys are rejected. Give it at least 254 x 108 px;
+    # a third of the panel's width is comfortably enough. With no forecast
+    # for today it says NO FORECAST rather than drawing a made-up number.
+    # Add it to a screen's widgets list, e.g. the top of a right-hand
+    # column under a header band:
+    #
+    #     - type: today-weather
+    #       bounds: [534, 48, 800, 208]
+    #       refresh: "1h"    # the forecast is cached for hours; hourly
+    #                        # also turns the day over at midnight
+    #       config:
+    #         # Location, model and temp_unit are inherited from the
+    #         # top-level weather: block; override per widget if needed.
+    #         #   temp_unit: F
+    #         #   weather_model: ecmwf

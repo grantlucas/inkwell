@@ -671,6 +671,47 @@ window under six hours stops the dashboard loading with a message
 saying which rule it broke. Suggested panel refresh: `"15m"`, like the
 other calendar screens.
 
+### `today-weather`
+
+Today's forecast as a block you can place anywhere on a screen: the
+condition icon, the high as the headline number, the low beside it and
+the condition name beneath. It is today-hero's weather block at the same
+sizes, so the two read alike. It draws no events and no chart, and has
+its own refresh cadence, separate from the widgets around it.
+
+It needs at least 254 × 108 px, the room for the widest high there is
+("-12°C"). Below that it logs and draws nothing rather than spilling
+onto its neighbours. When the high and low are both wide, the low takes
+its own line under the high. A third of the panel's width, 266 px, is
+comfortably enough.
+
+When no forecast reaches today, because the fetch failed and nothing is
+cached yet or the forecast stops short, the widget says `NO FORECAST`
+instead of drawing a number nobody forecast. A failed fetch after a good
+one keeps showing the last good forecast. Neither stops the rest of the
+screen drawing.
+
+<!-- markdownlint-disable MD013 -->
+| Key | Type | Default | Accepted values | Impact |
+|-----|------|---------|-----------------|--------|
+| `latitude` | number | inherits `weather.latitude` | `[-90, 90]` | Per-widget forecast location override. |
+| `longitude` | number | inherits `weather.longitude` | `[-180, 180]` | Per-widget forecast location override. |
+| `temp_unit` | string | inherits `weather.temp_unit` | `C`, `F` | Per-widget unit override. |
+| `weather_model` | string | inherits `weather.model` | `gfs`, `ecmwf`, `gem` | Per-widget model override. |
+<!-- markdownlint-enable MD013 -->
+
+All four are optional, so a widget with no `config:` at all shows the
+top-level `weather:` location. The calendar settings — `feeds`,
+`refresh`, `show_location`, `max_events` — are rejected with the reason,
+since the widget reads no calendar, and so is `days`, which belongs to
+`weather-ahead`.
+
+```yaml
+- type: today-weather
+  bounds: [534, 48, 800, 208]
+  refresh: "1h"    # the forecast changes slowly
+```
+
 ## Worked examples
 
 ### A quiet dashboard
