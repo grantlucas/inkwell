@@ -22,8 +22,9 @@ import (
 )
 
 // MinChars is a width in body characters with two uses. A stacked list
-// narrower than it draws nothing, and an inline title with less room
-// than it past the time column is left off. A widget that draws its own
+// narrower than it lists no events, only the "+N MORE" line counting
+// them, and an inline title with less room than it past the time column
+// is left off. A widget that draws its own
 // empty-day text beside a stacked list should guard it on the same
 // width, so the list and its empty state give out together; an empty
 // message set as Style.Empty follows the list on its own.
@@ -113,8 +114,10 @@ type placed struct {
 // or not at all. When not every event is drawn, the last visible line
 // is "+N MORE", counting every event not shown. A time without room to
 // be drawn whole is left off, since a clock time cut short reads as a
-// different time. An empty list draws the style's Empty line, or nothing
-// when there is none.
+// different time. A list too narrow to list events still draws the
+// "+N MORE" line, cut to its width, so hidden events are announced
+// whenever any line fits. An empty list draws the style's Empty line, or
+// nothing when there is none.
 func (s Style) Draw(frame *image.Paletted, r image.Rectangle, events []calendar.Event) int {
 	blocks, hidden := s.layout(r, events)
 	for i, b := range blocks {
@@ -134,9 +137,13 @@ func (s Style) Draw(frame *image.Paletted, r image.Rectangle, events []calendar.
 // lines, an inline event's one), and the "+N MORE" line when MaxEvents
 // hides any. An empty list needs its Empty line, if it has one. A line
 // is one row of text, whatever size it is drawn at. A width too narrow
-// to draw into needs none.
+// to list events needs only the "+N MORE" line, and one without a
+// character of room needs none.
 func (s Style) Lines(events []calendar.Event, width int) int {
-	if _, ok := s.charsIn(width); !ok {
+	if maxChars, ok := s.charsIn(width); !ok {
+		if len(events) > 0 && maxChars >= 1 {
+			return 1
+		}
 		return 0
 	}
 	if len(events) == 0 && s.Empty != "" {
@@ -154,7 +161,7 @@ func (s Style) Lines(events []calendar.Event, width int) int {
 }
 
 // charsIn is the character budget of a list width pixels wide, and
-// whether it is wide enough to draw anything. Narrower than MinChars a
+// whether it is wide enough to list events. Narrower than MinChars a
 // stacked title is punctuation, and a column of » reads as a fault
 // rather than as content. An inline list needs its time column: below
 // that the times themselves would be cut.
@@ -178,9 +185,6 @@ func (s Style) listed(events []calendar.Event) []calendar.Event {
 // when any are left over, and reports how many were left over.
 func (s Style) layout(r image.Rectangle, events []calendar.Event) ([]placed, int) {
 	maxChars, ok := s.charsIn(r.Dx())
-	if !ok {
-		return nil, len(events)
-	}
 
 	// The one fit rule: a block fits when its last line's descent ends
 	// inside r. An event is placed whole or not at all, because a time
@@ -188,14 +192,20 @@ func (s Style) layout(r image.Rectangle, events []calendar.Event) ([]placed, int
 	fits := func(b block, top int) bool { return top+b.height <= r.Max.Y }
 
 	if len(events) == 0 {
-		if empty := note(s.Empty, daygrid.BodyFace, maxChars); s.Empty != "" && fits(empty, r.Min.Y) {
+		if empty := note(s.Empty, daygrid.BodyFace, maxChars); ok && s.Empty != "" && fits(empty, r.Min.Y) {
 			return []placed{{block: empty, top: r.Min.Y}}, 0
 		}
 		return nil, 0
 	}
 
+	// Too narrow to list events, every one is hidden, and the overflow
+	// rule below still announces them.
+	listed := s.listed(events)
+	if !ok {
+		listed = nil
+	}
 	var out []placed
-	for _, e := range s.listed(events) {
+	for _, e := range listed {
 		b, top := s.event(e, r.Dx()), s.next(out, r)
 		if !fits(b, top) {
 			break
@@ -209,7 +219,12 @@ func (s Style) layout(r image.Rectangle, events []calendar.Event) ([]placed, int
 	// The one overflow rule: something is hidden, so the last visible
 	// line says how much. An event that would leave no room for that
 	// line gives its place up and is counted with the rest, since a day
-	// that silently drops events reads as a quieter day than it is.
+	// that silently drops events reads as a quieter day than it is. Only
+	// a list without a character of room, or a line of height, hides
+	// them unannounced.
+	if maxChars < 1 {
+		return nil, len(events)
+	}
 	for {
 		more, top := marker(len(events)-len(out), maxChars), s.next(out, r)
 		if fits(more, top) {

@@ -249,7 +249,7 @@ func TestDraw_FitAndOverflow(t *testing.T) {
 		{"inline: a pixel short, the last line does not fit", in(0), width, 3*lineH - 1, 3, 2, inline(1, "+2 MORE")},
 		{"inline: the cap hides events and the line counts them", in(3), width, 400, 5, 2, inline(3, "+2 MORE")},
 		{"inline: room for the line alone", in(0), width, lineH, 4, 4, inline(0, "+4 MORE")},
-		{"inline: too narrow for the time column draws nothing", in(0), timeColumn - 1, 400, 2, 2, nil},
+		{"inline: narrower than the time column, the line still counts them", in(0), timeColumn - 1, 400, 2, 2, inline(0, "+2 MORE")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -298,8 +298,10 @@ func TestDraw_ScaledTimeWithRules(t *testing.T) {
 }
 
 // The edges of the width: every line is cut to the list, and a list too
-// narrow to carry a title draws nothing rather than a column of », which
-// reads as a fault rather than as content.
+// narrow to carry a title lists no events rather than a column of »,
+// which reads as a fault rather than as content. The "+N MORE" line
+// still says they are there while it has a character of room: hidden
+// events are never unannounced.
 func TestDraw_Width(t *testing.T) {
 	adv := daygrid.BodyAdvance()
 	tests := []struct {
@@ -311,7 +313,10 @@ func TestDraw_Width(t *testing.T) {
 		want       []line
 	}{
 		{"no events draws nothing", 20, eventlist.Style{}, nil, 0, nil},
-		{"too narrow for a title draws nothing", 2, eventlist.Style{}, events(1), 1, nil},
+		{"too narrow for a title, the line still counts it", 2, eventlist.Style{}, events(1), 1, []line{
+			{text: "+»", face: bold, baseline: ascent},
+		}},
+		{"no room for a character draws nothing", 0, eventlist.Style{}, events(1), 1, nil},
 		{"the line is cut to a narrow list", 5, eventlist.Style{MaxEvents: 1}, events(13), 12, []line{
 			{text: "09:00", face: bold, baseline: ascent},
 			{text: "A", face: regular, baseline: ascent + lineH},
@@ -379,11 +384,13 @@ func TestLines(t *testing.T) {
 		{"stacked: a blank title takes none", eventlist.Stacked, 20 * adv, eventlist.Style{}, []calendar.Event{timed(" ", 9)}, 1},
 		{"stacked: the cap adds the +N MORE line", eventlist.Stacked, 20 * adv, eventlist.Style{MaxEvents: 2}, events(5), 5},
 		{"stacked: a cap the list is under adds nothing", eventlist.Stacked, 20 * adv, eventlist.Style{MaxEvents: 5}, events(2), 4},
-		{"stacked: too narrow to draw needs none", eventlist.Stacked, 2 * adv, eventlist.Style{}, events(2), 0},
+		{"stacked: too narrow to list events needs the +N MORE line", eventlist.Stacked, 2 * adv, eventlist.Style{}, events(2), 1},
+		{"stacked: too narrow with no events needs none", eventlist.Stacked, 2 * adv, eventlist.Style{}, nil, 0},
+		{"stacked: no room for a character needs none", eventlist.Stacked, adv - 1, eventlist.Style{}, events(2), 0},
 		{"inline: one line an event", eventlist.Inline, inlineWidth, eventlist.Style{}, events(3), 3},
 		{"inline: a long title still takes one", eventlist.Inline, inlineWidth, eventlist.Style{TitleLines: 3}, []calendar.Event{longer, longer}, 2},
 		{"inline: the cap adds the +N MORE line", eventlist.Inline, inlineWidth, eventlist.Style{MaxEvents: 3}, events(5), 4},
-		{"inline: too narrow for the time column needs none", eventlist.Inline, timeColumn - 1, eventlist.Style{}, events(2), 0},
+		{"inline: narrower than the time column needs the +N MORE line", eventlist.Inline, timeColumn - 1, eventlist.Style{}, events(2), 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
