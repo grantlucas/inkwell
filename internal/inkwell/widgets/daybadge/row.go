@@ -19,8 +19,8 @@ const (
 	rowW = rowGutterW + rowChartDX
 	rowH = 76
 
-	// rowGutterW is the date block: numeral plus the stacked weekday and
-	// month abbreviations.
+	// rowGutterW is the badge's date: the numeral plus the stacked
+	// weekday and month abbreviations.
 	rowGutterW = 122
 	rowPadX    = 10
 	rowScale   = 3

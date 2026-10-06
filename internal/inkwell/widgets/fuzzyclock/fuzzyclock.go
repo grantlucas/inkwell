@@ -107,7 +107,7 @@ func (w *Widget) Bounds() image.Rectangle { return w.bounds }
 
 // Render draws the fuzzy time within the bounds using black text on a white
 // background, aligned per the widget's Align (center by default). The phrase is
-// the body face drawn through the daydata helpers at the widget's scale, so it
+// the body face drawn through the drawkit helpers at the widget's scale, so it
 // is a solid 1-bit mask at every size. Left/right alignment insets the text 4px
 // from the matching edge, matching the clock widget.
 func (w *Widget) Render(frame *image.Paletted) error {

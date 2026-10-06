@@ -11,13 +11,14 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 )
 
-// defaultRefresh is how fresh a calendar widget wants its feeds when it
-// doesn't set config.refresh.
+// defaultRefresh is how fresh a widget that reads the calendar wants its
+// feeds when it doesn't set config.refresh.
 const defaultRefresh = 15 * time.Minute
 
-// Config is the configuration every calendar widget shares: its feeds,
-// how fresh it wants them, where its forecast is for, and how its events
-// are listed.
+// Config is the configuration every day widget shares: its feeds, how
+// fresh it wants them, where its forecast is for, and how its events are
+// listed. A widget that draws only the forecast, or only events, leaves
+// the other half at its zero value.
 type Config struct {
 	Feeds []calendar.Feed
 	// Refresh is the calendar cache duration, the nested config.refresh,
@@ -40,7 +41,7 @@ type Config struct {
 // week it sits in.
 const MaxDay = 6
 
-// Spec is what a calendar widget tells the shared parser about itself.
+// Spec is what a day widget tells the shared parser about itself.
 type Spec struct {
 	// Widget names the widget in every error, so a dashboard that fails
 	// to load says which widget rejected it.
@@ -79,11 +80,12 @@ type Spec struct {
 var calendarKeys = []string{"feeds", "refresh", "show_location"}
 
 // weatherKeys are the shared settings that say where and how a widget's
-// forecast is fetched and shown. Every day widget accepts them.
+// forecast is fetched and shown. Every day widget that draws a forecast
+// accepts them.
 var weatherKeys = []string{"latitude", "longitude", "temp_unit", "weather_model"}
 
-// ParseConfig parses the settings every calendar widget shares, the same
-// way for each, and rejects any key neither shared nor the widget's own,
+// ParseConfig parses the settings every day widget shares, the same way
+// for each, and rejects any key neither shared nor the widget's own,
 // so a misspelt setting fails loudly rather than being ignored. Weather
 // settings the widget doesn't set are inherited from the top-level ones
 // inherit carries; inherit may be nil.

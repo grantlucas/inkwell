@@ -26,8 +26,9 @@ const (
 	// eventsPadX is the paper between the rule and the blocks, and
 	// between the blocks and the right edge.
 	eventsPadX = 4
-	// minEventsW is the narrowest event column worth drawing: room for a
-	// label's time, a few characters of title and a continuation mark.
+	// minEventsW is the narrowest the events can be and be worth
+	// drawing: room for a label's time, a few characters of title and a
+	// continuation mark.
 	minEventsW = 120
 
 	// The widget will not draw into less than this. Below it the hour
@@ -118,9 +119,8 @@ func computeLayout(bounds image.Rectangle, s sections) layout {
 	return l
 }
 
-// stripText is where the all-day strip's list goes: under the event
-// column, so it lines up with the blocks and the notes, inside the
-// strip's padding.
+// stripText is where the all-day strip's list goes: over the events, so
+// it lines up with the blocks and the notes, inside the strip's padding.
 func stripText(l layout) image.Rectangle {
 	return image.Rect(l.Events.Min.X, l.AllDay.Min.Y+notePadY, l.Events.Max.X, l.AllDay.Max.Y-notePadY)
 }

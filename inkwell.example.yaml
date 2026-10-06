@@ -120,8 +120,8 @@ dashboard:
                                  # refresh cadence above
             # Location, model and temp_unit are inherited from the
             # top-level weather: block; override per widget if needed.
-        # The rule between the agenda and the weather column, as heavy as
-        # the one under the clock.
+        # The rule between the day-timeline and the weather widgets on
+        # its right, as heavy as the one under the clock.
         - type: separator
           bounds: [532, 48, 534, 480]
           refresh: "static"

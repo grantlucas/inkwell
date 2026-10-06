@@ -340,7 +340,7 @@ func TestWidget_ShortBlocksGetAWholeLine(t *testing.T) {
 	}
 }
 
-// lane is one side of the event column when two events share it.
+// lane is one side of the events when two events share them.
 type lane int
 
 const (
@@ -348,7 +348,7 @@ const (
 	right
 )
 
-// Two events whose blocks would overlap share the event column side by
+// Two events whose blocks would overlap share the events' width side by
 // side, each at its own true start and end, so a partial overlap shows
 // as two blocks of different heights. Overlap is judged on the blocks as
 // drawn: a short event's line-tall block running into the next event
@@ -675,7 +675,7 @@ func sameIn(a, b *image.Paletted, r image.Rectangle) bool {
 }
 
 // Every hour in the window gets a label in the gutter and a rule across
-// the event column, and the window's last edge gets a rule too. The
+// the events, and the window's last edge gets a rule too. The
 // window's opening edge is the widget's top, ruled only when a band sits
 // above it (see TestWidget_TopEdge).
 func TestWidget_DrawsAnHourGrid(t *testing.T) {
@@ -999,7 +999,7 @@ func TestWidget_StaysInsideItsBounds(t *testing.T) {
 
 // Given less room than the grid needs, the widget leaves its bounds
 // blank rather than drawing a grid too cramped to read or spilling onto a
-// neighbour. A blank region is a misconfiguration you can see.
+// neighbour. Blank bounds are a misconfiguration you can see.
 func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 	tests := []struct {
 		label  string
@@ -1096,8 +1096,8 @@ func TestWidget_CountsEventsOutsideTheWindow(t *testing.T) {
 	}
 }
 
-// Nothing outside the window reaches the grid: down the event column's
-// edges there is no ink but the one-pixel hour rules.
+// Nothing outside the window reaches the grid: down the events' edges
+// there is no ink but the one-pixel hour rules.
 func TestWidget_DrawsNoBlockForEventsOutsideTheWindow(t *testing.T) {
 	events := []ical.Event{span("Gym", at(5, 0), at(7, 0)), span("Late call", at(22, 0), at(23, 0))}
 	// Late in the evening, so no now marker crosses the column either.

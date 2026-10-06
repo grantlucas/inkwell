@@ -129,7 +129,7 @@ func TestWidget_StaysInsideItsBounds(t *testing.T) {
 }
 
 // Too small to hold its rows, the widget draws nothing rather than
-// spilling onto its neighbours: a blank region is a misconfiguration an
+// spilling onto its neighbours: blank bounds are a misconfiguration an
 // operator can see, ink on another widget looks like a fault elsewhere.
 func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 	tests := []struct {

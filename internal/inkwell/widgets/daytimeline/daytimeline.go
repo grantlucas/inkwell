@@ -34,9 +34,9 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	drawkit.FillWhite(frame, w.Bounds())
 
 	// Too small to draw into without a grid too cramped to read, or
-	// spilling past the widget's bounds onto its neighbour. A blank
-	// region is a misconfiguration an operator can see; ink on another
-	// widget looks like a fault somewhere else entirely.
+	// spilling past the widget's bounds onto its neighbour. Blank bounds
+	// are a misconfiguration an operator can see; ink on another widget
+	// looks like a fault somewhere else entirely.
 	if w.Bounds().Dx() < minWidth || w.Bounds().Dy() < minHeight {
 		log.Printf("daytimeline: bounds are %dx%d, need at least %dx%d — drawing nothing",
 			w.Bounds().Dx(), w.Bounds().Dy(), minWidth, minHeight)
@@ -51,8 +51,8 @@ func (w *Widget) Render(frame *image.Paletted) error {
 
 	// What is all day and which events are outside the window decide
 	// whether the strip and the note bands take any height, and so where
-	// the grid's rows fall. The strip lists in the event column, which
-	// is as wide whatever the bands take.
+	// the grid's rows fall. The strip lists over the events, which are
+	// as wide whatever the bands take.
 	start, end := w.Window.on(today.Start)
 	p := place(today, start, end)
 	list := allDayList(now.Location(), w.Config.ShowLocation)
