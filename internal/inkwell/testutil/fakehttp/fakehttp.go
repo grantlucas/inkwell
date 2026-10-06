@@ -1,4 +1,4 @@
-// Package fakehttp is the fake HTTP transport the data tests drive the
+// Package fakehttp is the fake HTTP client the data tests drive the
 // calendar and weather modules through. It is the only adapter those
 // tests swap: everything behind the HTTP client runs for real, so
 // fetching, parsing, caching and windowing are tested together the way
@@ -15,7 +15,7 @@ import (
 	"sync"
 )
 
-// Reply is what the transport answers one URL with.
+// Reply is what the client answers one URL with.
 type Reply struct {
 	// Status is the response's status code; zero means 200.
 	Status int
@@ -26,29 +26,29 @@ type Reply struct {
 	CloseErr error
 }
 
-// Transport answers requests from its registered replies. It satisfies
+// Client answers requests from its registered replies. It satisfies
 // the Do-shaped HTTPClient interfaces of both the calendar and weather
 // packages, and is safe for concurrent use.
-type Transport struct {
+type Client struct {
 	mu      sync.Mutex
 	replies map[string]Reply
 	counts  map[string]int
 	total   int
 }
 
-// New returns a Transport with no replies; every URL answers 404 until
+// New returns a Client with no replies; every URL answers 404 until
 // one is registered.
-func New() *Transport {
-	return &Transport{replies: map[string]Reply{}, counts: map[string]int{}}
+func New() *Client {
+	return &Client{replies: map[string]Reply{}, counts: map[string]int{}}
 }
 
 // Serve answers url with a 200 carrying body.
-func (t *Transport) Serve(url, body string) { t.Set(url, Reply{Body: body}) }
+func (t *Client) Serve(url, body string) { t.Set(url, Reply{Body: body}) }
 
 // Set answers url with r, replacing any earlier reply. A url registered
 // without a query string also answers that URL with any query, so a
 // forecast endpoint can be served once whatever parameters are asked.
-func (t *Transport) Set(url string, r Reply) {
+func (t *Client) Set(url string, r Reply) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.replies[url] = r
@@ -57,7 +57,7 @@ func (t *Transport) Set(url string, r Reply) {
 // Do answers req. A request whose context is already done fails with the
 // context's error and is not counted, since it would never have reached
 // upstream.
-func (t *Transport) Do(req *http.Request) (*http.Response, error) {
+func (t *Client) Do(req *http.Request) (*http.Response, error) {
 	if err := req.Context().Err(); err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func (t *Transport) Do(req *http.Request) (*http.Response, error) {
 
 // lookup finds req's reply by its full URL, then by the URL without its
 // query. key is what the request is counted under.
-func (t *Transport) lookup(req *http.Request) (key string, r Reply, ok bool) {
+func (t *Client) lookup(req *http.Request) (key string, r Reply, ok bool) {
 	key = req.URL.String()
 	if r, ok = t.replies[key]; ok {
 		return key, r, true
@@ -101,14 +101,14 @@ func (t *Transport) lookup(req *http.Request) (key string, r Reply, ok bool) {
 
 // Requests reports how many requests were answered for url, as it was
 // registered.
-func (t *Transport) Requests(url string) int {
+func (t *Client) Requests(url string) int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.counts[url]
 }
 
 // Total reports how many requests were answered for any URL.
-func (t *Transport) Total() int {
+func (t *Client) Total() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.total

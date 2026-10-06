@@ -54,7 +54,7 @@ type appOptions struct {
 	interval time.Duration
 	registry *widget.Registry
 	deps     widget.Deps
-	client   calendar.HTTPClient
+	client   HTTPClient
 }
 
 // WithHardware injects a Hardware backend, overriding config-driven selection.
@@ -77,9 +77,16 @@ func WithDeps(d widget.Deps) AppOption {
 	return func(o *appOptions) { o.deps = d }
 }
 
+// HTTPClient is what the app's shared data providers fetch through: the
+// Do-shaped subset of *http.Client. It matches the calendar and weather
+// packages' own HTTPClient interfaces, so one value serves both.
+type HTTPClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 // WithHTTPClient sets the client the shared calendar module and weather
 // provider fetch through, overriding http.DefaultClient.
-func WithHTTPClient(c calendar.HTTPClient) AppOption {
+func WithHTTPClient(c HTTPClient) AppOption {
 	return func(o *appOptions) { o.client = c }
 }
 

@@ -16,7 +16,7 @@ import (
 
 // typedDeps is what the app hands every widget: one calendar module and one
 // weather provider, both fetching through tr.
-func typedDeps(tr *fakehttp.Transport, now func() time.Time) widget.Deps {
+func typedDeps(tr *fakehttp.Client, now func() time.Time) widget.Deps {
 	return widget.Deps{
 		Now:      now,
 		Calendar: calendar.NewProvider(tr, now),

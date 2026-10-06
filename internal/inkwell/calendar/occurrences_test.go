@@ -47,7 +47,7 @@ func occurrencesOf(events []Event) []occurrence {
 }
 
 // TestProvider_Occurrences drives the fetch and the cache together
-// through a fake HTTP transport, the way a widget does. A series is
+// through a fake HTTP client, the way a widget does. A series is
 // expanded before the window is applied, so a weekly meeting that began
 // in January still turns up in October.
 func TestProvider_Occurrences(t *testing.T) {
@@ -156,7 +156,7 @@ func icsCalendar(events ...string) string {
 
 // TestProvider_OverridesAndDuplicates drives single-instance edits
 // and events carried by more than one feed through the fake HTTP
-// transport, the way a widget sees them.
+// client, the way a widget sees them.
 func TestProvider_OverridesAndDuplicates(t *testing.T) {
 	const (
 		urlA = "https://a.example/cal.ics"

@@ -11,7 +11,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil/fakehttp"
 )
 
-func get(t *testing.T, ctx context.Context, tr *fakehttp.Transport, url string) (*http.Response, error) {
+func get(t *testing.T, ctx context.Context, tr *fakehttp.Client, url string) (*http.Response, error) {
 	t.Helper()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -30,14 +30,14 @@ func read(t *testing.T, resp *http.Response) (int, string, error) {
 	return resp.StatusCode, string(body), resp.Body.Close()
 }
 
-func TestTransport_Replies(t *testing.T) {
+func TestClient_Replies(t *testing.T) {
 	const url = "https://cal.example/a.ics"
 	boom := errors.New("boom")
 	closeFail := errors.New("close failed")
 
 	tests := []struct {
 		label      string
-		setup      func(*fakehttp.Transport)
+		setup      func(*fakehttp.Client)
 		ask        string
 		wantErr    error
 		wantStatus int
@@ -46,32 +46,32 @@ func TestTransport_Replies(t *testing.T) {
 	}{
 		{
 			label:      "a served URL answers 200 with its body",
-			setup:      func(tr *fakehttp.Transport) { tr.Serve(url, "BEGIN:VCALENDAR") },
+			setup:      func(tr *fakehttp.Client) { tr.Serve(url, "BEGIN:VCALENDAR") },
 			ask:        url,
 			wantStatus: http.StatusOK,
 			wantBody:   "BEGIN:VCALENDAR",
 		},
 		{
 			label:      "an unknown URL answers 404",
-			setup:      func(*fakehttp.Transport) {},
+			setup:      func(*fakehttp.Client) {},
 			ask:        url,
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			label:      "a reply can set its status",
-			setup:      func(tr *fakehttp.Transport) { tr.Set(url, fakehttp.Reply{Status: http.StatusInternalServerError}) },
+			setup:      func(tr *fakehttp.Client) { tr.Set(url, fakehttp.Reply{Status: http.StatusInternalServerError}) },
 			ask:        url,
 			wantStatus: http.StatusInternalServerError,
 		},
 		{
 			label:   "a reply can fail the request",
-			setup:   func(tr *fakehttp.Transport) { tr.Set(url, fakehttp.Reply{Err: boom}) },
+			setup:   func(tr *fakehttp.Client) { tr.Set(url, fakehttp.Reply{Err: boom}) },
 			ask:     url,
 			wantErr: boom,
 		},
 		{
 			label:      "a reply can fail closing its body",
-			setup:      func(tr *fakehttp.Transport) { tr.Set(url, fakehttp.Reply{Body: "x", CloseErr: closeFail}) },
+			setup:      func(tr *fakehttp.Client) { tr.Set(url, fakehttp.Reply{Body: "x", CloseErr: closeFail}) },
 			ask:        url,
 			wantStatus: http.StatusOK,
 			wantBody:   "x",
@@ -79,7 +79,7 @@ func TestTransport_Replies(t *testing.T) {
 		},
 		{
 			label:      "a URL registered without a query answers any query on it",
-			setup:      func(tr *fakehttp.Transport) { tr.Serve("https://api.example/v1/forecast", "{}") },
+			setup:      func(tr *fakehttp.Client) { tr.Serve("https://api.example/v1/forecast", "{}") },
 			ask:        "https://api.example/v1/forecast?latitude=43.25",
 			wantStatus: http.StatusOK,
 			wantBody:   "{}",
@@ -113,7 +113,7 @@ func TestTransport_Replies(t *testing.T) {
 
 // Requests are counted per registered URL and in total, from any number
 // of goroutines, so a test can say how many times upstream was asked.
-func TestTransport_CountsRequests(t *testing.T) {
+func TestClient_CountsRequests(t *testing.T) {
 	const (
 		a        = "https://cal.example/a.ics"
 		b        = "https://cal.example/b.ics"
@@ -146,9 +146,9 @@ func TestTransport_CountsRequests(t *testing.T) {
 }
 
 // A request whose context is already done never reaches upstream, the way
-// a real transport behaves, so it fails with the context's error and is not
+// a real client behaves, so it fails with the context's error and is not
 // counted.
-func TestTransport_HonoursCancelledContext(t *testing.T) {
+func TestClient_HonoursCancelledContext(t *testing.T) {
 	const url = "https://cal.example/a.ics"
 	tr := fakehttp.New()
 	tr.Serve(url, "")

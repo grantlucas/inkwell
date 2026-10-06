@@ -103,6 +103,12 @@ type feedCache struct {
 // events returns the feed's events, fetching when there is no copy or
 // the copy is not younger than refresh. On a failed fetch the last good
 // copy, if any, comes back with the error.
+//
+// The fetch runs under the first caller's ctx while the lock is held, so
+// a waiter can't give up on its own ctx; it waits for that fetch to
+// finish. That wait is bounded because every caller goes through
+// daygrid.Fetch, which always sets daygrid.FetchTimeout. A caller without
+// a deadline would make the others wait as long as the upstream takes.
 func (c *feedCache) events(ctx context.Context, p *Provider, url string, refresh time.Duration) ([]Event, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
