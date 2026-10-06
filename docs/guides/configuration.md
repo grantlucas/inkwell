@@ -490,8 +490,11 @@ column.
 Today's agenda shows only what is left of the day. An event that
 finished two hours ago is history, and this is the screen that spends
 real estate on today; "DONE FOR TODAY" appears once nothing remains.
-Event times stay precise (16:15, not "quarter past four") — they are
-data, not a clock. Only the clock in the identity block is fuzzy,
+When not every remaining event fits, under the cap or in the height, the
+agenda's last line is `+N MORE`, counting every event it left out — the
+same line every calendar screen ends a crowded day with. Event times
+stay precise (16:15, not "quarter past four") — they are data, not a
+clock. Only the clock in the identity block is fuzzy,
 because a precise one would change every minute against a panel that
 refreshes every fifteen.
 

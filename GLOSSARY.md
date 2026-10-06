@@ -38,6 +38,12 @@ sees them. A day the forecast doesn't reach has no forecast, rather than an
 empty one.
 _Avoid_: Day column, grid day
 
+**Event list**:
+The lines a widget draws for a day's events, ending in "+N MORE" when some are
+hidden. That last line counts every event not shown, and takes the place of an
+event when there is no room for both.
+_Avoid_: Event column, overflow marker
+
 ## Weather charts
 
 **Combined chart**:

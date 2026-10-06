@@ -9,6 +9,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
@@ -60,7 +61,7 @@ type dayRowOptions struct {
 	// TempRange is the screen's shared temperature scale, the same one
 	// today's chart plots against.
 	TempRange weatherview.TempRange
-	Events    eventOptions
+	Events    eventlist.Style
 }
 
 // renderDayRow draws one following day: the date gutter with its
@@ -124,7 +125,7 @@ func rowChart(row image.Rectangle) image.Rectangle {
 
 // renderRowAgenda draws up to three events as a time and a title on one
 // line each, then an overflow marker for the rest.
-func renderRowAgenda(frame *image.Paletted, bounds image.Rectangle, events []calendar.Event, opts eventOptions) {
+func renderRowAgenda(frame *image.Paletted, bounds image.Rectangle, events []calendar.Event, style eventlist.Style) {
 	x := bounds.Min.X + rowAgendaDX
 	if x >= bounds.Max.X-rowPadX {
 		return
@@ -149,8 +150,8 @@ func renderRowAgenda(frame *image.Paletted, bounds image.Rectangle, events []cal
 
 	shown := min(len(events), rowMaxEvents)
 	for _, e := range events[:shown] {
-		daygrid.DrawText(frame, x, y, timeLineFor(e, opts), daygrid.BodyFace, widget.PaperBlack)
-		daygrid.DrawText(frame, titleX, y, truncate(titleFor(e, opts), maxChars), daygrid.BodyFace, widget.PaperBlack)
+		daygrid.DrawText(frame, x, y, style.TimeLabel(e), daygrid.BodyFace, widget.PaperBlack)
+		daygrid.DrawText(frame, titleX, y, eventlist.Truncate(style.Title(e), maxChars), daygrid.BodyFace, widget.PaperBlack)
 		y += lineH
 	}
 
