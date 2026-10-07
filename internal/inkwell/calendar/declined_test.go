@@ -53,6 +53,11 @@ const declinedICS = "BEGIN:VCALENDAR\r\n" +
 	"BEGIN:VEVENT\r\nUID:uninvited@example.com\r\nSUMMARY:Owner not invited\r\n" +
 	"DTSTART:20261005T153000Z\r\nDTEND:20261005T155000Z\r\n" +
 	"ATTENDEE;PARTSTAT=DECLINED:mailto:coworker@example.com\r\nEND:VEVENT\r\n" +
+	// A secondary calendar invited as a guest, with an answer of its own.
+	"BEGIN:VEVENT\r\nUID:team@example.com\r\nSUMMARY:Team calendar declined\r\n" +
+	"DTSTART:20261005T154500Z\r\nDTEND:20261005T155500Z\r\n" +
+	"ATTENDEE;PARTSTAT=ACCEPTED:mailto:avery@example.com\r\n" +
+	"ATTENDEE;PARTSTAT=DECLINED:mailto:team-x@group.calendar.google.com\r\nEND:VEVENT\r\n" +
 	"END:VCALENDAR\r\n"
 
 // On a Google iCal feed the owner is named by the URL, and the events
@@ -61,13 +66,13 @@ const declinedICS = "BEGIN:VCALENDAR\r\n" +
 func TestProvider_DeclinedEvents(t *testing.T) {
 	everything := []string{
 		"Standup", "Sync", "Accepted", "Tentative", "Unanswered", "Declined",
-		"Coworker declined", "No attendees", "Owner not invited", "Retro",
-		"Standup", "Sync", "Retro",
+		"Coworker declined", "No attendees", "Owner not invited",
+		"Team calendar declined", "Retro", "Standup", "Sync", "Retro",
 	}
 	ownerView := []string{
 		"Sync", "Accepted", "Tentative", "Unanswered",
 		"Coworker declined", "No attendees", "Owner not invited",
-		"Retro",
+		"Team calendar declined", "Retro",
 	}
 
 	cases := []struct {
@@ -98,6 +103,16 @@ func TestProvider_DeclinedEvents(t *testing.T) {
 		{
 			label: "Google's path on another host has no owner",
 			url:   "https://calendar.google.com.league.example/calendar/ical/avery%40example.com/private-0123abcd/basic.ics",
+			want:  everything,
+		},
+		{
+			label: "Google secondary calendar names no person",
+			url:   "https://calendar.google.com/calendar/ical/team-x%40group.calendar.google.com/private-0123abcd/basic.ics",
+			want:  everything,
+		},
+		{
+			label: "Google holiday calendar names no person",
+			url:   "https://calendar.google.com/calendar/ical/en.canadian%23holiday%40group.v.calendar.google.com/private-0123abcd/basic.ics",
 			want:  everything,
 		},
 		{

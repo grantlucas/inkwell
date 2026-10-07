@@ -615,6 +615,8 @@ yours. A Google secret address says so: for a primary calendar it has
 the shape
 `https://calendar.google.com/calendar/ical/<your email>/private-…/basic.ics`,
 and the email in it is the feed's owner. Only that exact shape counts.
+A secondary calendar's address carries the calendar's own ID, not a
+person's email, so it names no owner.
 
 Any other feed has no owner, so nothing on it is treated as declined and
 it shows exactly what it carries. An email address elsewhere in a URL,

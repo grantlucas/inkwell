@@ -25,8 +25,13 @@ func (f Feed) owner() string {
 	if !ok || len(parts) != 3 || !strings.HasPrefix(parts[1], "private-") || parts[2] != "basic.ics" {
 		return ""
 	}
-	if id, err := url.PathUnescape(parts[0]); err == nil && strings.Contains(id, "@") {
-		return id
+	// A secondary calendar's ID is an address under calendar.google.com
+	// (group., group.v. for holidays, import.). It names a calendar, not a
+	// person, and can be invited to an event with an answer of its own.
+	id, err := url.PathUnescape(parts[0])
+	_, domain, isAddress := strings.Cut(id, "@")
+	if err != nil || !isAddress || strings.HasSuffix(strings.ToLower(domain), ".calendar.google.com") {
+		return ""
 	}
-	return ""
+	return id
 }
