@@ -33,19 +33,20 @@ before suspecting the driver (ADR 0014).
 
 *When* a change is allowed to push is a further axis. The burn-in/waveform
 cadence is fixed internally (`defaultFullEvery` in `refresh.go`), not user
-config. What the config controls is each widget's
-**required** top-level `refresh:` — a duration (>= 1m) or `"static"` — parsed
-into `WidgetConfig.Refresh`; there is no widget-code cadence interface and no
-default (LoadConfig errors if a widget omits it). A per-screen `refreshSchedule`
-(`refresh_queue.go`) gates the planner — a frame change only pushes when a
-widget is *due* this minute (wall-clock aligned, so equal cadences coalesce;
-static widgets never open the gate). A screen **rotation** is the one thing
-that opens the gate on its own: `Dashboard.Advance` reports when it rotated
-and `App.nextCycle` ORs that into *due*, so a rotation reaches the panel on
-the cycle it happens rather than waiting for the new screen's next due
-widget. That flag is consume-once, so only the render loop may call
-`Advance`; anything else wanting the current screen calls the read-only
-`CurrentScreen`. Don't confuse a widget's top-level
-`refresh` (render cadence) with a calendar widget's nested `config.refresh`
-(data cache TTL). See the
-[architecture decision records](../adrs/), 0008 through 0014.
+config. What the config controls is each widget's **required** top-level
+`refresh:` — a duration (>= 1m) or `"static"` — parsed into
+`WidgetConfig.Refresh`; there is no widget-code cadence interface and no
+default (LoadConfig errors if a widget omits it). A per-screen
+`refreshSchedule` (`refresh_queue.go`) gates content changes: a changed
+frame only pushes when a widget is *due* this minute (wall-clock aligned, so
+equal cadences coalesce; static widgets never open the gate). The planner's
+first-cycle and periodic refreshes ignore the gate and push even when
+nothing is due. A screen **rotation** is the one thing besides a due widget
+that opens the gate: `Dashboard.Advance` reports when it rotated and
+`App.nextCycle` ORs that into *due*, so a rotation reaches the panel on the
+cycle it happens rather than waiting for the new screen's next due widget.
+That flag is consume-once, so only the render loop may call `Advance`;
+anything else wanting the current screen calls the read-only
+`CurrentScreen`. Don't confuse a widget's top-level `refresh` (render
+cadence) with a calendar widget's nested `config.refresh` (data cache TTL).
+See the [architecture decision records](../adrs/), 0008 through 0014.
