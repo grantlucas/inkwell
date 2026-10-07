@@ -31,6 +31,8 @@ Spec #115 added a screen built around today, hour by hour: today's events on an 
 - **#170:** a calendar that can't be reached looks like a free day on the day-timeline (see [Failure states](#failure-states)).
 - **#171:** the same "calendar unavailable" note on bold-five, today-hero, row-agenda and event-list.
 
+**Update, 2026-10-07:** all three have since landed on the integration branch: #127 step 2 in #181 (weekly-calendar and its chart renderer deleted), #170 in #182 and #171 in #184. The rest of this demo is as it was when it was written; [Failure states](#failure-states) has the new calendar-down picture.
+
 ## The day-timeline screen
 
 The option E mockup this was built from. It is drawn at twice the panel's size in a stand-in typeface, so compare layout, not sizes:
@@ -214,6 +216,10 @@ A widget that loses its data draws what it can, and the others are untouched. Th
 
 ![Calendar feed down, bw](day-timeline-screen/dafe3a53-2026-10-07.png)
 
+**Update, 2026-10-07: since #170.** The same screen with the feed unavailable now says CALENDAR UNAVAILABLE in an outlined box above the grid, so it no longer passes for a free day. Rebuilt by the [Proof](#proof) block (it is the one image whose hash now differs from the manifest there, `7feb91b6905b`):
+
+![Calendar unavailable, bw](day-timeline-screen/down-calendar-unavailable-2026-10-07.png)
+
 **Forecast unreachable.** today-weather and each weather-ahead row say NO FORECAST. The day-timeline keeps its events and leaves the lane blank without a note.
 
 ```bash {image}
@@ -224,7 +230,7 @@ A widget that loses its data draws what it can, and the others are untouched. Th
 
 ## The rest of the rotation
 
-The example config now rotates every 15 minutes through `day-timeline`, `bold-five`, `today-hero` and `row-agenda`. weekly-calendar is still registered but no longer in the example. These are drawn from the example config with a few events added on the following days (the example's own feed only has today), `bw` device view.
+The example config now rotates every 15 minutes through `day-timeline`, `bold-five`, `today-hero` and `row-agenda`. weekly-calendar is still registered but no longer in the example (update, 2026-10-07: it has since been deleted, in #181). These are drawn from the example config with a few events added on the following days (the example's own feed only has today), `bw` device view.
 
 **bold-five.** The clock band on top, three events a column then "+N MORE", a combined chart in every column on one shared range.
 

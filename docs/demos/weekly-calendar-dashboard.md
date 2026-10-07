@@ -4,6 +4,9 @@
 *2026-04-29T01:01:38Z by Showboat 0.6.1*
 <!-- showboat-id: d452bf6c-04db-403a-8f30-67ff227488e8 -->
 
+> **Update, 2026-10-07:** the `weekly-calendar` widget was removed in #127;
+> this demo is kept as a record and no longer runs.
+
 The weekly calendar+weather dashboard composes three widgets into a single
 800×480 e-ink screen: a date header, a right-aligned clock, and a rolling
 calendar of up to seven days with weather forecasts. Each widget is
