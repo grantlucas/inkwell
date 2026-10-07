@@ -31,6 +31,14 @@ const declinedICS = "BEGIN:VCALENDAR\r\n" +
 	"BEGIN:VEVENT\r\nUID:retro@example.com\r\nSUMMARY:Retro\r\nRECURRENCE-ID:20261006T160000Z\r\n" +
 	"DTSTART:20261006T160000Z\r\nDTEND:20261006T170000Z\r\n" +
 	"ATTENDEE;PARTSTAT=ACCEPTED:mailto:avery@example.com\r\nEND:VEVENT\r\n" +
+	// A series the owner accepted, with one instance moved two hours
+	// later and declined.
+	"BEGIN:VEVENT\r\nUID:review@example.com\r\nSUMMARY:Review\r\n" +
+	"DTSTART:20261005T170000Z\r\nDTEND:20261005T173000Z\r\nRRULE:FREQ=DAILY;COUNT=2\r\n" +
+	"ATTENDEE;PARTSTAT=ACCEPTED:mailto:avery@example.com\r\nEND:VEVENT\r\n" +
+	"BEGIN:VEVENT\r\nUID:review@example.com\r\nSUMMARY:Review\r\nRECURRENCE-ID:20261006T170000Z\r\n" +
+	"DTSTART:20261006T190000Z\r\nDTEND:20261006T193000Z\r\n" +
+	"ATTENDEE;PARTSTAT=DECLINED:mailto:avery@example.com\r\nEND:VEVENT\r\n" +
 	"BEGIN:VEVENT\r\nUID:accepted@example.com\r\nSUMMARY:Accepted\r\n" +
 	"DTSTART:20261005T100000Z\r\nDTEND:20261005T103000Z\r\n" +
 	"ATTENDEE;PARTSTAT=ACCEPTED:mailto:avery@example.com\r\nEND:VEVENT\r\n" +
@@ -67,12 +75,12 @@ func TestProvider_DeclinedEvents(t *testing.T) {
 	everything := []string{
 		"Standup", "Sync", "Accepted", "Tentative", "Unanswered", "Declined",
 		"Coworker declined", "No attendees", "Owner not invited",
-		"Team calendar declined", "Retro", "Standup", "Sync", "Retro",
+		"Team calendar declined", "Retro", "Review", "Standup", "Sync", "Retro", "Review",
 	}
 	ownerView := []string{
 		"Sync", "Accepted", "Tentative", "Unanswered",
 		"Coworker declined", "No attendees", "Owner not invited",
-		"Team calendar declined", "Retro",
+		"Team calendar declined", "Review", "Retro",
 	}
 
 	cases := []struct {
