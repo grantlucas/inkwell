@@ -50,13 +50,13 @@ type Data struct {
 	// arrival, so a 200 response with no daily data doesn't reflow the
 	// screen for one cycle.
 	ForecastArrived bool
-	// CalendarUnavailable is whether any of the widget's feeds had nothing
-	// to draw from on this render: its fetch failed and there was no
+	// CalendarUnavailable is whether any of the widget's feeds was
+	// unavailable on this render: its fetch failed and there was no
 	// earlier good copy. The days then carry only the other feeds' events,
 	// and a day with none would read as a free day, so a widget says the
-	// calendar is missing (NoCalendar) rather than draw it empty. A feed
-	// that failed while it had a copy cached served that copy, and is not
-	// unavailable.
+	// calendar is unavailable (NoCalendar) rather than draw it empty. A
+	// feed that failed while it had a copy cached served that copy, and is
+	// not unavailable.
 	CalendarUnavailable bool
 }
 

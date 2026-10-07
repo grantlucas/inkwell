@@ -586,10 +586,10 @@ func TestDayData_DayWithNoForecast(t *testing.T) {
 	}
 }
 
-// A widget is told when a feed it shows has nothing to draw from: its fetch
-// failed and there is no earlier good copy. Its days then can't say "a free
-// day", only that the calendar is missing. A feed that fails with a good
-// copy cached is still usable, as the calendar module serves that copy.
+// A widget is told when a feed it shows is unavailable: its fetch failed
+// and there is no earlier good copy. Its days then can't say "a free day",
+// only that the calendar is unavailable. A feed that fails with a good copy
+// cached is still usable, as the calendar module serves that copy.
 func TestDayData_ReportsAnUnavailableCalendar(t *testing.T) {
 	toronto := mustZone(t, "America/Toronto")
 	now := time.Date(2026, 10, 5, 8, 0, 0, 0, toronto)
@@ -605,15 +605,15 @@ func TestDayData_ReportsAnUnavailableCalendar(t *testing.T) {
 		earlier map[string]fakehttp.Reply
 		replies map[string]fakehttp.Reply
 		want    string
-		// wantUnavailable is whether the days report a missing calendar.
+		// wantUnavailable is whether the days report an unavailable feed.
 		wantUnavailable bool
 	}{
 		{label: "every feed up", replies: map[string]fakehttp.Reply{feedA: dentist, feedB: swim}, want: "Dentist,Swim"},
-		{label: "a feed down with nothing cached", replies: map[string]fakehttp.Reply{feedA: down, feedB: swim}, want: "Swim", wantUnavailable: true},
+		{label: "a feed failing with nothing cached", replies: map[string]fakehttp.Reply{feedA: down, feedB: swim}, want: "Swim", wantUnavailable: true},
 		{label: "a feed unreachable with nothing cached", replies: map[string]fakehttp.Reply{feedA: dentist, feedB: unreachable}, want: "Dentist", wantUnavailable: true},
-		{label: "every feed down", replies: map[string]fakehttp.Reply{feedA: down, feedB: unreachable}, wantUnavailable: true},
+		{label: "every feed failing", replies: map[string]fakehttp.Reply{feedA: down, feedB: unreachable}, wantUnavailable: true},
 		{
-			label:   "a feed down with a cached copy",
+			label:   "a feed failing with a cached copy",
 			earlier: map[string]fakehttp.Reply{feedA: dentist, feedB: swim},
 			replies: map[string]fakehttp.Reply{feedA: down, feedB: swim},
 			want:    "Dentist,Swim",

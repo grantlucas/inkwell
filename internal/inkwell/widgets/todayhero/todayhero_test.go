@@ -391,30 +391,28 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 	}
 }
 
-// With a feed down and nothing cached, today's agenda says the calendar
-// is unavailable where it says "DONE FOR TODAY", at that size, and every
-// day row says it where it says "NOTHING SCHEDULED": the event list's
-// note, in each list's style.
+// With an unavailable feed, today's agenda says the calendar is
+// unavailable where it says "DONE FOR TODAY", at that size, and every day
+// row says it where it says "NOTHING SCHEDULED": the event list's note,
+// in each list's style.
 func TestWidget_SaysTheCalendarIsUnavailable(t *testing.T) {
 	bounds := image.Rect(0, 0, 800, 480)
-	w := New(bounds, daydata.InMemory(nil, sampleForecast(), daydata.CalendarDown()), fixedClock(testTime), drawConfig("C", false))
+	w := New(bounds, daydata.Memory{Forecast: sampleForecast(), CalendarUnavailable: true}, fixedClock(testTime), drawConfig("C", false))
 	frame := renderToFrame(t, w)
 
-	hero := computeHero(bounds).Agenda
-	lists := []struct {
+	// placedList is one of the widget's lists, where it draws.
+	type placedList struct {
 		label string
 		style eventlist.List
 		r     image.Rectangle
-	}{
+	}
+	hero := computeHero(bounds).Agenda
+	lists := []placedList{
 		{"today's agenda", heroStyle(defaultMaxEvents, false, time.UTC),
 			image.Rect(hero.Min.X+heroPadX, hero.Min.Y+agendaTopPad, hero.Max.X-heroPadX, hero.Max.Y)},
 	}
 	for i, row := range computeDayRows(bounds) {
-		lists = append(lists, struct {
-			label string
-			style eventlist.List
-			r     image.Rectangle
-		}{fmt.Sprintf("day row %d", i), dayRowStyle(false, time.UTC), rowAgenda(row)})
+		lists = append(lists, placedList{fmt.Sprintf("day row %d", i), dayRowStyle(false, time.UTC), rowAgenda(row)})
 	}
 	for _, l := range lists {
 		t.Run(l.label, func(t *testing.T) {
@@ -439,20 +437,20 @@ func TestWidget_Golden(t *testing.T) {
 		clock    time.Time
 		unit     string
 		location bool
-		// down serves the days with a feed down and nothing cached.
-		down bool
+		// unavailable serves the days with an unavailable feed.
+		unavailable bool
 	}{
 		{
-			label:    "calendar unavailable",
-			forecast: sampleForecast(),
-			down:     true,
+			label:       "calendar unavailable",
+			forecast:    sampleForecast(),
+			unavailable: true,
 		},
 		{
 			// What the other feeds sent is listed under the note.
-			label:    "calendar unavailable with events from another feed",
-			events:   sampleEvents(),
-			forecast: sampleForecast(),
-			down:     true,
+			label:       "calendar unavailable with events from another feed",
+			events:      sampleEvents(),
+			forecast:    sampleForecast(),
+			unavailable: true,
 		},
 		{
 			// Mid-afternoon: today still has events, the chart has its
@@ -508,11 +506,7 @@ func TestWidget_Golden(t *testing.T) {
 			if clock.IsZero() {
 				clock = testTime
 			}
-			var opts []daydata.MemoryOption
-			if tt.down {
-				opts = append(opts, daydata.CalendarDown())
-			}
-			w := New(image.Rect(0, 0, 800, 480), daydata.InMemory(tt.events, tt.forecast, opts...), fixedClock(clock), drawConfig(unit, tt.location))
+			w := New(image.Rect(0, 0, 800, 480), daydata.Memory{Events: tt.events, Forecast: tt.forecast, CalendarUnavailable: tt.unavailable}, fixedClock(clock), drawConfig(unit, tt.location))
 			testutil.AssertGoldenPNG(t, renderToFrame(t, w))
 		})
 	}
