@@ -284,12 +284,12 @@ func TestWidget_EmptyDayStaysInBounds(t *testing.T) {
 	}
 }
 
-// With a feed down and nothing cached, every row says the calendar is
-// unavailable where an empty day says "NOTHING SCHEDULED": the event
-// list's note, one line, in a row planned for that line.
+// With an unavailable feed, every row says the calendar is unavailable
+// where an empty day says "NOTHING SCHEDULED": the event list's note, one
+// line, in a row planned for that line.
 func TestWidget_EveryRowSaysTheCalendarIsUnavailable(t *testing.T) {
 	bounds := image.Rect(0, 0, 800, 480)
-	w := New(bounds, daydata.InMemory(nil, sampleForecast(), daydata.CalendarDown()), fixedClock(testTime), drawConfig("C", false))
+	w := New(bounds, daydata.Memory{Forecast: sampleForecast(), CalendarUnavailable: true}, fixedClock(testTime), drawConfig("C", false))
 	frame := renderToFrame(t, w)
 
 	style := agendaStyle(false, time.UTC)
@@ -314,21 +314,21 @@ func TestWidget_Golden(t *testing.T) {
 		forecast []weather.DailyForecast
 		unit     string
 		location bool
-		// down serves the days with a feed down and nothing cached.
-		down bool
+		// unavailable serves the days with an unavailable feed.
+		unavailable bool
 	}{
 		{
-			label:    "calendar unavailable",
-			forecast: sampleForecast(),
-			down:     true,
+			label:       "calendar unavailable",
+			forecast:    sampleForecast(),
+			unavailable: true,
 		},
 		{
 			// The note takes a line of each row's budget, so the packed
 			// rows give up one more event to "+N MORE".
-			label:    "calendar unavailable in a week that overflows",
-			events:   overflowingEvents(),
-			forecast: sampleForecast(),
-			down:     true,
+			label:       "calendar unavailable in a week that overflows",
+			events:      overflowingEvents(),
+			forecast:    sampleForecast(),
+			unavailable: true,
 		},
 		{
 			// Every event gets a line: today's row and Thursday's grow,
@@ -382,11 +382,7 @@ func TestWidget_Golden(t *testing.T) {
 			if unit == "" {
 				unit = "C"
 			}
-			var opts []daydata.MemoryOption
-			if tt.down {
-				opts = append(opts, daydata.CalendarDown())
-			}
-			w := New(image.Rect(0, 0, 800, 480), daydata.InMemory(tt.events, tt.forecast, opts...), fixedClock(testTime), drawConfig(unit, tt.location))
+			w := New(image.Rect(0, 0, 800, 480), daydata.Memory{Events: tt.events, Forecast: tt.forecast, CalendarUnavailable: tt.unavailable}, fixedClock(testTime), drawConfig(unit, tt.location))
 			testutil.AssertGoldenPNG(t, renderToFrame(t, w))
 		})
 	}

@@ -15,10 +15,10 @@ const (
 
 // spec declares bold-five to the shared calendar-widget parser. It takes
 // only the shared settings. The keys of the old weekly-calendar widget it
-// has no equivalent for are rejected with the reason rather than ignored: silently dropping
-// show_weather: false would draw a weather band the operator explicitly
-// turned off, which looks like a bug in the widget rather than a key that
-// did not carry over.
+// has no equivalent for are rejected with the reason rather than ignored:
+// silently dropping show_weather: false would draw a weather band the
+// operator explicitly turned off, which looks like a bug in the widget
+// rather than a key that did not carry over.
 var spec = daydata.Spec{
 	Widget:    widgetName,
 	MaxEvents: defaultMaxEvents,

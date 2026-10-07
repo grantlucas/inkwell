@@ -89,8 +89,8 @@ func newPrecipLayout(bounds image.Rectangle) (precipLayout, bool) {
 		barMaxH:   barMaxH,
 		step:      step,
 		// One pixel of gutter between bars rather than two: the whole
-		// point of this chart is bars that read at distance, and at a 110 px column width every pixel of bar is
-		// worth having.
+		// point of this chart is bars that read at distance, and at a
+		// 110 px column width every pixel of bar is worth having.
 		barW: max(int(step)-1, 2),
 	}, true
 }

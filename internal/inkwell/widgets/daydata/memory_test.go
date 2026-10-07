@@ -74,20 +74,20 @@ func TestInMemory_ForecastArrived(t *testing.T) {
 
 // A widget test can serve days whose calendar is unavailable. The events
 // it is given are the feeds that did answer, and still land on their days.
-func TestInMemory_CalendarDown(t *testing.T) {
+func TestMemory_CalendarUnavailable(t *testing.T) {
 	now := time.Date(2026, 3, 16, 14, 30, 0, 0, time.UTC)
 	events := []calendar.Event{{Summary: "Standup", Start: now, End: now.Add(time.Hour)}}
 	tests := []struct {
 		label string
-		opts  []daydata.MemoryOption
+		src   daydata.Source
 		want  bool
 	}{
-		{label: "every feed answered", want: false},
-		{label: "a feed down", opts: []daydata.MemoryOption{daydata.CalendarDown()}, want: true},
+		{label: "every feed answered", src: daydata.InMemory(events, nil), want: false},
+		{label: "an unavailable feed", src: daydata.Memory{Events: events, CalendarUnavailable: true}, want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			got := daydata.InMemory(events, nil, tt.opts...).Days(now, 1)
+			got := tt.src.Days(now, 1)
 			if got.CalendarUnavailable != tt.want {
 				t.Errorf("CalendarUnavailable = %v, want %v", got.CalendarUnavailable, tt.want)
 			}

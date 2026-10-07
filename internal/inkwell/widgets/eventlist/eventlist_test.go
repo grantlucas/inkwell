@@ -620,11 +620,15 @@ func below(dy int, ls []line) []line {
 // A list whose calendar is unavailable says so on its first lines, in its
 // Empty note's style, in place of what an empty day says: an empty list
 // would read as a free day. The note wraps on words rather than being
-// cut, since a cut "CALENDAR UNAVAIL»" no longer says what is wrong. The
-// events that did arrive are listed under it, a gap below, by the usual
-// fit and overflow rules, with no hairline between the note and the
-// first event: it is not an event. A list without room for the whole
-// note lists what arrived without it, and never its Empty line.
+// cut where it has the room, since a cut "CALENDAR UNAVAIL»" says less
+// about what is wrong. The events that did arrive are listed under it, a
+// gap below, by the usual fit and overflow rules, with no hairline
+// between the note and the first event: it is not an event. A list
+// without room for the whole note says it in a shorter form, at body
+// size and then on one line cut to the width, so a calendar it could not
+// read never passes for a free day while a line fits. It gives out with
+// the list's width, as the Empty line does, and never says the Empty
+// line instead.
 func TestDraw_Unavailable(t *testing.T) {
 	adv := drawkit.BodyAdvance()
 	const msg, gap = daydata.NoCalendar, 8
@@ -678,16 +682,32 @@ func TestDraw_Unavailable(t *testing.T) {
 			rule: lineH + gap + 2*lineH + gap/2, lines: 5,
 		},
 		{
-			label: "without room for it, an empty list draws nothing rather than its Empty line", style: inlineList,
+			label: "without a line of room, an empty list draws nothing rather than its Empty line", style: inlineList,
 			width: 30 * adv, height: lineH - 1, lines: 1,
 		},
 		{
-			label: "without room for all of it, what arrived is listed in its place", style: inlineList, width: 10 * adv, height: lineH,
-			events: 2, hidden: 2, want: inline(0, "+2 MORE"), lines: 4,
+			label: "without room to wrap, an empty list says it on one line cut to the width", style: eventlist.List{Empty: dash},
+			width: 18 * adv, height: lineH, lines: 2, want: []line{{text: "CALENDAR UNAVAILA»", face: regular, baseline: ascent}},
 		},
 		{
-			label: "too narrow for one character of it, what arrived is listed in its place", style: eventlist.List{Empty: eventlist.Note{Scale: 3}},
-			width: 3 * adv, height: 400, events: 1, want: []line{{text: "A", face: regular, baseline: ascent + lineH}}, lines: 2,
+			label: "without room for it at its Empty line's scale, it is said at body size", style: eventlist.List{Empty: done},
+			width: 30 * adv, height: 2 * lineH, lines: 2, want: []line{said},
+		},
+		{
+			label: "without room for it and what arrived, it is said and what arrived is hidden", style: inlineList, width: 10 * adv, height: lineH,
+			events: 2, hidden: 2, want: []line{{text: "CALENDAR »", face: regular, baseline: ascent}}, lines: 4,
+		},
+		{
+			label: "too narrow for one scaled character of it, it is said at body size", style: eventlist.List{Empty: eventlist.Note{Scale: 3}},
+			width: 3 * adv, height: 400, events: 1, lines: 4, want: []line{
+				{text: "CAL", face: regular, baseline: ascent},
+				{text: "EN»", face: regular, baseline: ascent + lineH},
+				{text: "A", face: regular, baseline: ascent + 3*lineH},
+			},
+		},
+		{
+			label: "too narrow to list events, it is not said either", style: inlineList, width: timeColumn - 1, height: 400,
+			events: 1, hidden: 1, want: inline(0, "+1 MORE"), lines: 1,
 		},
 	}
 	for _, tt := range tests {

@@ -106,11 +106,11 @@ func TestWidget_ListsItsDay(t *testing.T) {
 	}
 }
 
-// With a feed down and nothing cached, the day's list says the calendar
-// is unavailable rather than what an empty day says, whatever the config
+// With an unavailable feed, the day's list says the calendar is
+// unavailable rather than what an empty day says, whatever the config
 // sets that to, and lists what the other feeds sent under it. The
 // expected frame is the style drawing those events as unavailable.
-func TestWidget_SaysWhenItsCalendarIsDown(t *testing.T) {
+func TestWidget_SaysWhenItsCalendarIsUnavailable(t *testing.T) {
 	bounds := image.Rect(20, 30, 330, 300)
 	str := func(s string) *string { return &s }
 
@@ -127,7 +127,8 @@ func TestWidget_SaysWhenItsCalendarIsDown(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			w := eventlist.New(bounds, daydata.InMemory(weekEvents, nil, daydata.CalendarDown()), fixedClock(widgetTime), tt.cfg)
+			days := daydata.Memory{Events: weekEvents, CalendarUnavailable: true}
+			w := eventlist.New(bounds, days, fixedClock(widgetTime), tt.cfg)
 			frame := renderList(t, w, image.Rect(0, 0, 400, 400))
 
 			ref := image.NewPaletted(image.Rect(0, 0, 400, 400), widget.PaperPalette)
@@ -195,10 +196,10 @@ func TestWidget_Golden(t *testing.T) {
 	}
 }
 
-// Golden renders with a feed down and nothing cached, at the sizes the
-// full-screen widgets give their lists: the note in each style's empty
-// state, above whatever the other feeds sent.
-func TestWidget_GoldenCalendarDown(t *testing.T) {
+// Golden renders with an unavailable feed, at the sizes the full-screen
+// widgets give their lists: the note in each style's empty state, above
+// whatever the other feeds sent.
+func TestWidget_GoldenCalendarUnavailable(t *testing.T) {
 	tests := []struct {
 		label  string
 		cfg    eventlist.Config
@@ -211,7 +212,7 @@ func TestWidget_GoldenCalendarDown(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			days := daydata.InMemory(weekEvents, nil, daydata.CalendarDown())
+			days := daydata.Memory{Events: weekEvents, CalendarUnavailable: true}
 			testutil.AssertGoldenPNG(t, renderList(t, eventlist.New(tt.bounds, days, fixedClock(widgetTime), tt.cfg), tt.bounds))
 		})
 	}

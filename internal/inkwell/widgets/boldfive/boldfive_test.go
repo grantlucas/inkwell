@@ -133,12 +133,12 @@ func TestWidget_DrawsColumnDividers(t *testing.T) {
 	}
 }
 
-// With a feed down and nothing cached, every column says the calendar is
-// unavailable where an empty day says "--": the event list's note, in
-// the column's list. A "--" would tell the viewer the day is free.
+// With an unavailable feed, every column says the calendar is unavailable
+// where an empty day says "--": the event list's note, in the column's
+// list. A "--" would tell the viewer the day is free.
 func TestWidget_EveryColumnSaysTheCalendarIsUnavailable(t *testing.T) {
 	bounds := image.Rect(0, 0, 800, 480)
-	w := New(bounds, daydata.InMemory(nil, sampleForecast(), daydata.CalendarDown()), fixedClock(testTime), drawConfig(defaultMaxEvents, "C"))
+	w := New(bounds, daydata.Memory{Forecast: sampleForecast(), CalendarUnavailable: true}, fixedClock(testTime), drawConfig(defaultMaxEvents, "C"))
 	frame := renderToFrame(t, w)
 
 	for i, col := range computeColumns(bounds) {
@@ -357,8 +357,8 @@ func TestWidget_Golden(t *testing.T) {
 		cfg      func(*daydata.Config)
 		// bounds defaults to the whole panel.
 		bounds image.Rectangle
-		// down serves the days with a feed down and nothing cached.
-		down bool
+		// unavailable serves the days with an unavailable feed.
+		unavailable bool
 	}{
 		{
 			label:    "full week",
@@ -416,20 +416,20 @@ func TestWidget_Golden(t *testing.T) {
 			cfg:      func(c *daydata.Config) { c.MaxEvents = 3 },
 			bounds:   belowHeader,
 		},
-		// A feed down with nothing cached: every column says so where an
-		// empty day says "--", and lists what the other feeds sent under it.
+		// An unavailable feed: every column says so where an empty day
+		// says "--", and lists what the other feeds sent under it.
 		{
-			label:    "calendar unavailable",
-			forecast: sampleForecast(),
-			down:     true,
+			label:       "calendar unavailable",
+			forecast:    sampleForecast(),
+			unavailable: true,
 		},
 		{
-			label:    "calendar unavailable below header busiest day",
-			events:   append(busiestDay(), sampleEvents()[5:]...),
-			forecast: sampleForecast(),
-			cfg:      func(c *daydata.Config) { c.MaxEvents = 3 },
-			bounds:   belowHeader,
-			down:     true,
+			label:       "calendar unavailable below header busiest day",
+			events:      append(busiestDay(), sampleEvents()[5:]...),
+			forecast:    sampleForecast(),
+			cfg:         func(c *daydata.Config) { c.MaxEvents = 3 },
+			bounds:      belowHeader,
+			unavailable: true,
 		},
 	}
 	for _, tt := range tests {
@@ -442,11 +442,7 @@ func TestWidget_Golden(t *testing.T) {
 			if bounds.Empty() {
 				bounds = image.Rect(0, 0, 800, 480)
 			}
-			var opts []daydata.MemoryOption
-			if tt.down {
-				opts = append(opts, daydata.CalendarDown())
-			}
-			w := New(bounds, daydata.InMemory(tt.events, tt.forecast, opts...), fixedClock(testTime), cfg)
+			w := New(bounds, daydata.Memory{Events: tt.events, Forecast: tt.forecast, CalendarUnavailable: tt.unavailable}, fixedClock(testTime), cfg)
 			testutil.AssertGoldenPNG(t, renderToFrame(t, w))
 		})
 	}

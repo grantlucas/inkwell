@@ -106,13 +106,13 @@ func TestWidget_UnavailableCalendar(t *testing.T) {
 		replies  map[string]fakehttp.Reply
 		wantNote bool
 	}{
-		{label: "feed down with nothing cached", replies: map[string]fakehttp.Reply{workFeed: down}, wantNote: true},
+		{label: "unavailable feed", replies: map[string]fakehttp.Reply{workFeed: down}, wantNote: true},
 		{
-			label:   "feed down with a cached copy",
+			label:   "feed failing with a cached copy",
 			earlier: map[string]fakehttp.Reply{workFeed: work},
 			replies: map[string]fakehttp.Reply{workFeed: down},
 		},
-		{label: "one of two feeds down", replies: map[string]fakehttp.Reply{workFeed: down, familyFeed: family}, wantNote: true},
+		{label: "one of two feeds unavailable", replies: map[string]fakehttp.Reply{workFeed: down, familyFeed: family}, wantNote: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {

@@ -639,12 +639,13 @@ When a feed can't be fetched and there is no earlier copy of it to
 show, `bold-five`, `today-hero`, `row-agenda` and `event-list` say
 "CALENDAR UNAVAILABLE" at the top of each list where an empty day would
 say "--", "DONE FOR TODAY" or "NOTHING SCHEDULED", at the same size, so
-a missing calendar never passes for a free day. In a narrow list, such
-as a `bold-five` column, it wraps to "CALENDAR" over "UNAVAILABLE".
-Events from the feeds that did answer are listed under it. A feed that
-fails while an earlier copy is cached shows that copy, with no note, as
-though it had answered. `day-timeline` says the same in its own way,
-described below.
+an unavailable feed never passes for a free day. In a narrow list, such
+as a `bold-five` column, it wraps to "CALENDAR" over "UNAVAILABLE". A
+list too short for that says it at body size, and then on one line cut
+to the width, so it is said whenever a line fits. Events from the feeds
+that did answer are listed under it. A feed that fails while an earlier
+copy is cached shows that copy, with no note, as though it had
+answered. `day-timeline` says the same in its own way, described below.
 
 ### `day-timeline`
 
@@ -691,7 +692,7 @@ when there is something to count.
 
 When a feed can't be fetched and there is no earlier copy of it to
 show, the widget says "CALENDAR UNAVAILABLE" in an outlined box across
-its top, so a missing calendar never passes for a free day. Events from
+its top, so an unavailable feed never passes for a free day. Events from
 the feeds that did answer still draw beneath it. A feed that fails
 while an earlier copy is cached shows that copy, with no note, as
 though it had answered.
@@ -995,9 +996,10 @@ agenda and the 1h weather land on minutes the 5m clock is already
 refreshing.
 
 A widget whose data does not arrive draws what it can and leaves the
-others alone. With the calendar feed down, the grid is drawn with no
-events while the clock and the weather draw as usual. With the forecast
-down, the weather lane is blank and both weather widgets say
+others alone. With the calendar feed unavailable, the day-timeline says
+"CALENDAR UNAVAILABLE" in an outlined box across its top, over a grid
+with no events, while the clock and the weather draw as usual. With the
+forecast down, the weather lane is blank and both weather widgets say
 `NO FORECAST`, while the agenda and the clock draw as usual. The screen
 is tested in both cases, along with a golden of the whole screen, by
 loading this entry from the example config.
