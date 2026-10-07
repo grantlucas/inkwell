@@ -1,6 +1,10 @@
 package daytimeline
 
 import (
+	"image"
+	"maps"
+	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -34,10 +38,16 @@ func vevent(uid, summary string, from, to time.Time) string {
 		"\r\nSUMMARY:" + summary + "\r\nEND:VEVENT\r\n"
 }
 
-// fromFeeds renders the widget built by Factory, its feeds served by tr.
+// fromFeeds is the widget built by Factory, its feeds served by tr.
 func fromFeeds(t *testing.T, tr *fakehttp.Client, feeds ...any) *Widget {
 	t.Helper()
-	clock := fixedClock(testTime)
+	return fromFeedsAt(t, tr, fixedClock(testTime), feeds...)
+}
+
+// fromFeedsAt is fromFeeds on the dashboard clock clock, which a test can
+// move on between renders.
+func fromFeedsAt(t *testing.T, tr *fakehttp.Client, clock func() time.Time, feeds ...any) *Widget {
+	t.Helper()
 	deps := widget.Deps{
 		Now:      clock,
 		Calendar: calendar.NewProvider(tr, clock),
@@ -74,4 +84,80 @@ func TestWidget_DuplicatesFromTwoFeedsAreOneBlock(t *testing.T) {
 		}
 	}
 	testutil.AssertGoldenPNG(t, frame)
+}
+
+// A feed with nothing to draw from, its fetch failed with no earlier good
+// copy, is said on the panel: an empty grid would read as a free day. The
+// feeds that did answer still draw. A feed that fails with a good copy
+// cached draws that copy, exactly as if it had answered, and says nothing.
+func TestWidget_UnavailableCalendar(t *testing.T) {
+	work := fakehttp.Reply{Body: vcalendar(
+		vevent("work-1", "Standup", at(9, 0), at(9, 30)),
+		vevent("work-2", "Design review", at(15, 0), at(16, 0)),
+	)}
+	family := fakehttp.Reply{Body: vcalendar(vevent("family-1", "Swim lessons", at(18, 30), at(19, 15)))}
+	down := fakehttp.Reply{Status: http.StatusInternalServerError}
+
+	tests := []struct {
+		label string
+		// earlier is what the feeds served on a render an hour before,
+		// past the refresh setting; nil for no earlier render.
+		earlier  map[string]fakehttp.Reply
+		replies  map[string]fakehttp.Reply
+		wantNote bool
+	}{
+		{label: "feed down with nothing cached", replies: map[string]fakehttp.Reply{workFeed: down}, wantNote: true},
+		{
+			label:   "feed down with a cached copy",
+			earlier: map[string]fakehttp.Reply{workFeed: work},
+			replies: map[string]fakehttp.Reply{workFeed: down},
+		},
+		{label: "one of two feeds down", replies: map[string]fakehttp.Reply{workFeed: down, familyFeed: family}, wantNote: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			feeds := slices.Sorted(maps.Keys(tt.replies))
+			healthy := fakehttp.New()
+			for _, url := range feeds {
+				healthy.Set(url, map[string]fakehttp.Reply{workFeed: work, familyFeed: family}[url])
+			}
+
+			tr := fakehttp.New()
+			now := testTime
+			w := fromFeedsAt(t, tr, func() time.Time { return now }, toAny(feeds)...)
+			if tt.earlier != nil {
+				now = testTime.Add(-time.Hour)
+				for url, r := range tt.earlier {
+					tr.Set(url, r)
+				}
+				renderToFrame(t, w)
+				now = testTime
+			}
+			for url, r := range tt.replies {
+				tr.Set(url, r)
+			}
+			frame := renderToFrame(t, w)
+
+			// The top of the events column, where an ordinary day with
+			// nothing early draws nothing.
+			l, _ := gridOf(testBounds, defaultConfig().Window)
+			band := image.Rect(l.Events.Min.X, testBounds.Min.Y, l.Events.Max.X, testBounds.Min.Y+noteH())
+			if got := testutil.Inked(frame, band); got != tt.wantNote {
+				t.Errorf("note band inked = %v, want %v", got, tt.wantNote)
+			}
+			if !tt.wantNote && !testutil.SameIn(frame, renderToFrame(t, fromFeeds(t, healthy, toAny(feeds)...)), testBounds) {
+				t.Error("drew differently from every feed answering, want the cached copy drawn as if it had")
+			}
+			testutil.AssertGoldenPNG(t, frame)
+		})
+	}
+}
+
+// toAny is urls as the feeds a widget's config lists.
+func toAny(urls []string) []any {
+	out := make([]any, len(urls))
+	for i, u := range urls {
+		out[i] = u
+	}
+	return out
 }

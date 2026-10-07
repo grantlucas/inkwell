@@ -670,8 +670,15 @@ window are not drawn; a "+N EARLIER" note above the grid or a
 "+N LATER" note below it counts them, and each note takes height only
 when there is something to count.
 
-The grid's top edge is ruled only when the all-day strip or the
-"+N EARLIER" note sits above it. Otherwise the grid starts at the
+When a feed can't be fetched and there is no earlier copy of it to
+show, the widget says "CALENDAR UNAVAILABLE" in an outlined box across
+its top, so a missing calendar never passes for a free day. Events from
+the feeds that did answer still draw beneath it. A feed that fails
+while an earlier copy is cached shows that copy, with no note, as
+though it had answered.
+
+The grid's top edge is ruled only when that note, the all-day strip or
+the "+N EARLIER" note sits above it. Otherwise the grid starts at the
 widget's top with no rule, so a separator placed above the widget, as
 under the clock band on the day-timeline screen, is the only line there.
 
