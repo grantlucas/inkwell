@@ -1,8 +1,9 @@
 name: CI
 
 on:
+  # Every PR, whatever its base: ticket PRs merge into integration
+  # branches before the integration PR reaches main.
   pull_request:
-    branches: [main]
   push:
     branches: [main]
 
