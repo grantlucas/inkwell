@@ -12,7 +12,8 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil/fakehttp"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 // testTime is a Monday mid-afternoon: today's agenda still has events
@@ -24,7 +25,7 @@ func fixedClock(t time.Time) func() time.Time { return func() time.Time { return
 
 func newTestFrame(w, h int) *image.Paletted {
 	frame := image.NewPaletted(image.Rect(0, 0, w, h), widget.PaperPalette)
-	daygrid.FillWhite(frame, frame.Bounds())
+	drawkit.FillWhite(frame, frame.Bounds())
 	return frame
 }
 
@@ -123,12 +124,12 @@ func sampleEvents() []ical.Event {
 }
 
 // drawConfig is a config with the knobs today-hero draws with.
-func drawConfig(unit string, showLocation bool) daygrid.Config {
-	return daygrid.Config{MaxEvents: defaultMaxEvents, ShowLocation: showLocation, Weather: daygrid.WeatherConfig{TempUnit: unit}}
+func drawConfig(unit string, showLocation bool) daydata.Config {
+	return daydata.Config{MaxEvents: defaultMaxEvents, ShowLocation: showLocation, Weather: daydata.WeatherConfig{TempUnit: unit}}
 }
 
 func newWidget(events []ical.Event, forecast []weather.DailyForecast, clock time.Time) *Widget {
-	return New(image.Rect(0, 0, 800, 480), daygrid.InMemory(events, forecast), fixedClock(clock), drawConfig("C", false))
+	return New(image.Rect(0, 0, 800, 480), daydata.InMemory(events, forecast), fixedClock(clock), drawConfig("C", false))
 }
 
 func renderToFrame(t *testing.T, w *Widget) *image.Paletted {
@@ -152,7 +153,8 @@ func TestWidget_Bounds(t *testing.T) {
 // today is already obvious from being the left column.
 func TestWidget_IdentityIsTextAboveARule(t *testing.T) {
 	frame := renderToFrame(t, newWidget(nil, sampleForecast(), testTime))
-	band := computeHero(image.Rect(0, 0, 800, 480)).Identity
+	// The identity band is the top 116 px of the hero column's day badge.
+	band := image.Rect(0, 0, split, 116)
 
 	black := countIndexIn(frame, band, widget.PaperBlack)
 	white := countIndexIn(frame, band, widget.PaperWhite)
@@ -166,7 +168,7 @@ func TestWidget_IdentityIsTextAboveARule(t *testing.T) {
 
 	// The rule runs across the band's padded width, under the text.
 	ruled := false
-	for y := band.Max.Y - 1; y >= band.Max.Y-identityRuleW-2 && !ruled; y-- {
+	for y := band.Max.Y - 1; y >= band.Max.Y-2-2 && !ruled; y-- {
 		row := image.Rect(band.Min.X+heroPadX, y, band.Max.X-heroPadX, y+1)
 		ruled = countIndexIn(frame, row, widget.PaperBlack) == row.Dx()
 	}
@@ -182,18 +184,6 @@ func withTemps(f []weather.DailyForecast, i int, temp func(hour int) float64) []
 		f[i].Hourly[h].Temperature = temp(f[i].Hourly[h].Hour)
 	}
 	return f
-}
-
-// sameIn reports whether two frames agree on every pixel in r.
-func sameIn(a, b *image.Paletted, r image.Rectangle) bool {
-	for y := r.Min.Y; y < r.Max.Y; y++ {
-		for x := r.Min.X; x < r.Max.X; x++ {
-			if a.ColorIndexAt(x, y) != b.ColorIndexAt(x, y) {
-				return false
-			}
-		}
-	}
-	return true
 }
 
 func renderForecast(t *testing.T, f []weather.DailyForecast) *image.Paletted {
@@ -229,7 +219,7 @@ func TestWidget_ChartsCarryTheTemperatureLine(t *testing.T) {
 			after := renderForecast(t, withTemps(tt.base(), tt.day, func(h int) float64 {
 				return 8 + float64(tt.day) + 2*math.Abs(float64(h-12))/6
 			}))
-			if sameIn(before, after, tt.chart) {
+			if testutil.SameIn(before, after, tt.chart) {
 				t.Error("reshaping the day's temperatures did not change its chart — no temperature line")
 			}
 		})
@@ -244,37 +234,9 @@ func TestWidget_ChartsShareOneTemperatureRange(t *testing.T) {
 	chart := computeHero(image.Rect(0, 0, 800, 480)).Chart
 	before := renderForecast(t, dryForecast())
 	after := renderForecast(t, withTemps(dryForecast(), dayRows, func(int) float64 { return 35 }))
-	if sameIn(before, after, chart) {
+	if testutil.SameIn(before, after, chart) {
 		t.Error("a hot day four rows down did not move today's line — the charts are not on one range")
 	}
-}
-
-// hasSolidSquare reports whether frame holds a side x side square that
-// is entirely PaperBlack.
-func hasSolidSquare(frame *image.Paletted, side int) bool {
-	b := frame.Bounds()
-	// run[x] is how many PaperBlack pixels end at (x, y) going up.
-	run := make([]int, b.Dx())
-	for y := b.Min.Y; y < b.Max.Y; y++ {
-		wide := 0
-		for x := b.Min.X; x < b.Max.X; x++ {
-			i := x - b.Min.X
-			if frame.ColorIndexAt(x, y) == widget.PaperBlack {
-				run[i]++
-			} else {
-				run[i] = 0
-			}
-			if run[i] >= side {
-				wide++
-			} else {
-				wide = 0
-			}
-			if wide >= side {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // No large filled area may sit in a fixed position: a black block that
@@ -295,26 +257,10 @@ func TestWidget_NoLargeFixedFill(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			frame := renderToFrame(t, newWidget(sampleEvents(), tt.f(), tt.clock))
-			if hasSolidSquare(frame, 20) {
+			if testutil.HasSolidSquare(frame, 20) {
 				t.Error("found a solid black 20x20 block — a fixed fill is a burn-in risk")
 			}
 		})
-	}
-}
-
-// The guard has to be able to fail: a block of the size the old
-// identity band drew is caught.
-func TestHasSolidSquare(t *testing.T) {
-	frame := newTestFrame(100, 100)
-	if hasSolidSquare(frame, 20) {
-		t.Fatal("blank paper reported a solid square")
-	}
-	daygrid.FillRect(frame, image.Rect(30, 40, 50, 60), widget.PaperBlack)
-	if !hasSolidSquare(frame, 20) {
-		t.Error("missed a 20x20 black square")
-	}
-	if hasSolidSquare(frame, 21) {
-		t.Error("reported a 21x21 square inside a 20x20 one")
 	}
 }
 
@@ -355,20 +301,20 @@ func TestWidget_DayRowListsThreeAndSaysHowManyMore(t *testing.T) {
 	cfg := drawConfig("C", false)
 	cfg.MaxEvents = 6
 	panel := image.Rect(0, 0, 800, 480)
-	frame := renderToFrame(t, New(panel, daygrid.InMemory(events, nil), fixedClock(testTime), cfg))
+	frame := renderToFrame(t, New(panel, daydata.InMemory(events, nil), fixedClock(testTime), cfg))
 
 	// Tuesday is tomorrow, the first row.
 	row := computeDayRows(panel)[0]
 	x := row.Min.X + rowAgendaDX
-	titleX := x + daygrid.TextWidth(daygrid.BodyFace, "ALL DAY ")
-	baseline := func(i int) int { return row.Min.Y + rowPadX + i*daygrid.BodyLineH() + daygrid.BodyAscent() }
+	titleX := x + drawkit.TextWidth(drawkit.BodyFace, "ALL DAY ")
+	baseline := func(i int) int { return row.Min.Y + rowPadX + i*drawkit.BodyLineH() + drawkit.BodyAscent() }
 
 	want := newTestFrame(800, 480)
 	for i := range 3 {
-		daygrid.DrawText(want, x, baseline(i), events[i].Start.Format("15:04"), daygrid.BodyFace, widget.PaperBlack)
-		daygrid.DrawText(want, titleX, baseline(i), "Event", daygrid.BodyFace, widget.PaperBlack)
+		drawkit.DrawText(want, x, baseline(i), events[i].Start.Format("15:04"), drawkit.BodyFace, widget.PaperBlack)
+		drawkit.DrawText(want, titleX, baseline(i), "Event", drawkit.BodyFace, widget.PaperBlack)
 	}
-	daygrid.DrawText(want, x, baseline(3), "+2 MORE", daygrid.BodyBoldFace, widget.PaperBlack)
+	drawkit.DrawText(want, x, baseline(3), "+2 MORE", drawkit.BodyBoldFace, widget.PaperBlack)
 
 	// The agenda column, above the rule under the row.
 	agenda := image.Rect(x, row.Min.Y, row.Max.X, row.Max.Y-1)
@@ -417,7 +363,7 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			frame := image.NewPaletted(image.Rect(0, 0, 800, 480), widget.PaperPalette)
-			daygrid.FillRect(frame, image.Rect(0, 0, 800, 480), widget.PaperWhite)
+			drawkit.FillRect(frame, image.Rect(0, 0, 800, 480), widget.PaperWhite)
 
 			// A neighbour already on the shared frame, in the space
 			// this widget would spill into. The draw helpers clip to
@@ -427,9 +373,9 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 			if neighbour.Empty() {
 				neighbour = image.Rect(0, tt.bounds.Max.Y, 800, 480)
 			}
-			daygrid.FillRect(frame, neighbour, widget.PaperGray70)
+			drawkit.FillRect(frame, neighbour, widget.PaperGray70)
 
-			w := New(tt.bounds, daygrid.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), drawConfig("C", false))
+			w := New(tt.bounds, daydata.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), drawConfig("C", false))
 			if err := w.Render(frame); err != nil {
 				t.Fatalf("Render: %v", err)
 			}
@@ -506,13 +452,13 @@ func TestWidget_Golden(t *testing.T) {
 			if clock.IsZero() {
 				clock = testTime
 			}
-			w := New(image.Rect(0, 0, 800, 480), daygrid.InMemory(tt.events, tt.forecast), fixedClock(clock), drawConfig(unit, tt.location))
+			w := New(image.Rect(0, 0, 800, 480), daydata.InMemory(tt.events, tt.forecast), fixedClock(clock), drawConfig(unit, tt.location))
 			testutil.AssertGoldenPNG(t, renderToFrame(t, w))
 		})
 	}
 }
 
-// Factory is the shared day-widget factory, tested in daygrid: parsing
+// Factory is the shared day-widget factory, tested in daydata: parsing
 // the shared settings, building the day data and taking the clock. What is
 // today-hero's own is its default event cap, that it takes the example config, and the reasons it gives for settings it has no use for.
 func TestFactory(t *testing.T) {

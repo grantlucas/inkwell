@@ -7,7 +7,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 // How events are written, fitted and counted is the event list's, tested
@@ -44,7 +44,7 @@ func TestRenderEvents_TooNarrowToList(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			frame := newTestFrame(160, 480)
-			narrow := image.Rect(0, 216, 2*eventsPadX+2*daygrid.BodyAdvance(), 480)
+			narrow := image.Rect(0, 216, 2*eventsPadX+2*drawkit.BodyAdvance(), 480)
 			renderEvents(frame, narrow, tt.events, agendaStyle(defaultMaxEvents, false, time.UTC))
 			if got := countIndex(frame, widget.PaperBlack); (got > narrow.Dx()) != tt.wantBeyond {
 				t.Errorf("%d px inked against the %d px rule; want ink beyond it: %v", got, narrow.Dx(), tt.wantBeyond)
@@ -73,8 +73,8 @@ func TestRenderEvents_DrawsTopRule(t *testing.T) {
 // divider to the next day.
 func moreLineAt(frame *image.Paletted, bounds image.Rectangle, y int, want string) bool {
 	ref := newTestFrame(frame.Bounds().Dx(), frame.Bounds().Dy())
-	daygrid.DrawText(ref, bounds.Min.X+eventsPadX, y, want, daygrid.BodyBoldFace, widget.PaperBlack)
-	rows := image.Rect(bounds.Min.X, y-daygrid.BodyAscent(), bounds.Max.X-1, y+daygrid.BodyLineH()-daygrid.BodyAscent())
+	drawkit.DrawText(ref, bounds.Min.X+eventsPadX, y, want, drawkit.BodyBoldFace, widget.PaperBlack)
+	rows := image.Rect(bounds.Min.X, y-drawkit.BodyAscent(), bounds.Max.X-1, y+drawkit.BodyLineH()-drawkit.BodyAscent())
 	for yy := rows.Min.Y; yy < rows.Max.Y; yy++ {
 		for x := rows.Min.X; x < rows.Max.X; x++ {
 			if frame.ColorIndexAt(x, yy) != ref.ColorIndexAt(x, yy) {

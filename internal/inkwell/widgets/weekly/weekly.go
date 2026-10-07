@@ -6,7 +6,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
@@ -21,7 +21,7 @@ const defaultDays = 7
 // Widget renders a rolling multi-day calendar+weather dashboard.
 type Widget struct {
 	bounds image.Rectangle
-	days   daygrid.Source
+	days   daydata.Source
 	now    func() time.Time
 	config Config
 }
@@ -30,7 +30,7 @@ type Widget struct {
 // was never set falls back to the full week, so a hand-built Config (rather
 // than one through parseConfig, which defaults it) still renders columns
 // instead of none.
-func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg Config) *Widget {
+func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg Config) *Widget {
 	if cfg.Days < 1 {
 		cfg.Days = defaultDays
 	}
@@ -111,19 +111,20 @@ func (w *Widget) Render(frame *image.Paletted) error {
 }
 
 // Factory creates a weekly-calendar Widget from config and dependencies.
-// It doesn't use daygrid.Factory: its settings extend the shared ones, and
-// whether it fetches weather at all depends on one of its own.
+// It doesn't use daydata.Factory, which builds every widget's day data
+// with the same options: whether this one fetches weather at all depends
+// on one of its own settings.
 func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
 	cfg, err := parseConfig(config, deps.Weather)
 	if err != nil {
 		return nil, err
 	}
 	// A screen that hides its weather fetches none to throw away.
-	var opts []daygrid.Option
+	var opts []daydata.Option
 	if !cfg.ShowWeather {
-		opts = append(opts, daygrid.WithoutWeather())
+		opts = append(opts, daydata.WithoutWeather())
 	}
-	days, err := daygrid.New(widgetName, cfg.Config, deps, opts...)
+	days, err := daydata.New(widgetName, cfg.Config, deps, opts...)
 	if err != nil {
 		return nil, err
 	}

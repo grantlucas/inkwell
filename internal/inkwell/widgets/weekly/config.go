@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 )
 
 // widgetName prefixes every config error so a dashboard that fails to
@@ -17,7 +17,7 @@ const widgetName = "weekly-calendar"
 // spec declares weekly-calendar to the shared calendar-widget parser: the
 // shared settings, a default of five events a column, and the keys only
 // this widget takes, which parseConfig reads itself.
-var spec = daygrid.Spec{
+var spec = daydata.Spec{
 	Widget:    widgetName,
 	MaxEvents: 5,
 	Extra:     slices.Sorted(maps.Keys(ownKeys)),
@@ -26,7 +26,7 @@ var spec = daygrid.Spec{
 // Config holds parsed weekly-calendar configuration: the settings every
 // calendar widget shares, and this widget's own.
 type Config struct {
-	daygrid.Config
+	daydata.Config
 
 	WeekStart        time.Weekday
 	Days             int
@@ -99,7 +99,7 @@ var ownKeys = map[string]func(*Config, any) error{
 // then this widget's own keys, in sorted order so the first error named
 // is the same on every run.
 func parseConfig(config map[string]any, inherit *weather.Provider) (Config, error) {
-	shared, err := daygrid.ParseConfig(spec, config, inherit)
+	shared, err := daydata.ParseConfig(spec, config, inherit)
 	cfg := Config{
 		Config:           shared,
 		WeekStart:        time.Monday,

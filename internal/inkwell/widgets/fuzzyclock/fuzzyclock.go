@@ -23,7 +23,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 // Compile-time interface check.
@@ -107,13 +107,13 @@ func (w *Widget) Bounds() image.Rectangle { return w.bounds }
 
 // Render draws the fuzzy time within the bounds using black text on a white
 // background, aligned per the widget's Align (center by default). The phrase is
-// the body face drawn through the daygrid helpers at the widget's scale, so it
+// the body face drawn through the drawkit helpers at the widget's scale, so it
 // is a solid 1-bit mask at every size. Left/right alignment insets the text 4px
 // from the matching edge, matching the clock widget.
 func (w *Widget) Render(frame *image.Paletted) error {
-	daygrid.FillWhite(frame, w.bounds)
+	drawkit.FillWhite(frame, w.bounds)
 
-	drawer := daygrid.Scaled(fuzzyFace, w.scale, widget.PaperBlack)
+	drawer := drawkit.Scaled(fuzzyFace, w.scale, widget.PaperBlack)
 	text := Phrase(w.now(), w.opts)
 	textW := drawer.Measure(text)
 	metrics := fuzzyFace.Metrics()
@@ -142,7 +142,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 // Ink is wider than the advance by the dilation radius on each side, and an
 // edge-aligned phrase also gives up its inset, so both count against the room.
 func (w *Widget) fitError() error {
-	drawer := daygrid.Scaled(fuzzyFace, w.scale, widget.PaperBlack)
+	drawer := drawkit.Scaled(fuzzyFace, w.scale, widget.PaperBlack)
 	grow := drawer.Grow
 
 	longest := ""

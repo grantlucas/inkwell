@@ -13,7 +13,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil/fakehttp"
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
 )
 
@@ -74,9 +74,9 @@ func sampleForecast() []weather.DailyForecast {
 // shown with its label, Celsius.
 func drawConfig() Config {
 	return Config{
-		Config: daygrid.Config{
+		Config: daydata.Config{
 			MaxEvents: 5,
-			Weather:   daygrid.WeatherConfig{TempUnit: "C", Latitude: 45.4, Longitude: -75.7},
+			Weather:   daydata.WeatherConfig{TempUnit: "C", Latitude: 45.4, Longitude: -75.7},
 		},
 		WeekStart:        time.Monday,
 		Days:             defaultDays,
@@ -97,7 +97,7 @@ func render(t *testing.T, w *Widget) *image.Paletted {
 
 func TestWidget_Bounds(t *testing.T) {
 	bounds := image.Rect(0, 52, 800, 480)
-	w := New(bounds, daygrid.InMemory(nil, nil), fixedClock(testTime), drawConfig())
+	w := New(bounds, daydata.InMemory(nil, nil), fixedClock(testTime), drawConfig())
 	if got := w.Bounds(); got != bounds {
 		t.Errorf("Bounds() = %v, want %v", got, bounds)
 	}
@@ -112,7 +112,7 @@ func TestWidget_BandFollowsWhetherAForecastArrived(t *testing.T) {
 	bounds := image.Rect(0, 52, 800, 480)
 	hidden := drawConfig()
 	hidden.ShowWeather = false
-	weatherOff := render(t, New(bounds, daygrid.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), hidden))
+	weatherOff := render(t, New(bounds, daydata.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), hidden))
 
 	nextYear := sampleForecast()
 	for i := range nextYear {
@@ -131,7 +131,7 @@ func TestWidget_BandFollowsWhetherAForecastArrived(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			frame := render(t, New(bounds, daygrid.InMemory(sampleEvents(), tt.forecast), fixedClock(testTime), drawConfig()))
+			frame := render(t, New(bounds, daydata.InMemory(sampleEvents(), tt.forecast), fixedClock(testTime), drawConfig()))
 			if gotBand := !slices.Equal(frame.Pix, weatherOff.Pix); gotBand != tt.wantBand {
 				t.Errorf("weather band drawn = %v, want %v", gotBand, tt.wantBand)
 			}
@@ -153,7 +153,7 @@ func TestWidget_RendersOtherSettings(t *testing.T) {
 			cfg := drawConfig()
 			tt.cfg(&cfg)
 			frame := render(t, New(image.Rect(0, 0, 800, 480),
-				daygrid.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), cfg))
+				daydata.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), cfg))
 			if !slices.ContainsFunc(frame.Pix, func(px uint8) bool { return px != 0 }) {
 				t.Error("render produced a blank frame")
 			}
@@ -377,7 +377,7 @@ func TestWidget_HighlightHourUsesDisplayZone(t *testing.T) {
 
 	renderIn := func(loc *time.Location) *image.Paletted {
 		t.Helper()
-		w := New(image.Rect(0, 0, 800, 480), daygrid.InMemory(nil, sampleForecast()),
+		w := New(image.Rect(0, 0, 800, 480), daydata.InMemory(nil, sampleForecast()),
 			fixedClock(now.In(loc)), drawConfig())
 		return render(t, w)
 	}
@@ -391,7 +391,7 @@ func TestWidget_DaysNarrowsTheGrid(t *testing.T) {
 	cfg := drawConfig()
 	cfg.Days = 5
 	frame := render(t, New(image.Rect(0, 52, 800, 480),
-		daygrid.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), cfg))
+		daydata.InMemory(sampleEvents(), sampleForecast()), fixedClock(testTime), cfg))
 
 	// Five columns tile 800 px, so the four dividers land at the 160 px
 	// boundaries and nothing is drawn at the 7-day boundary of x=113.
@@ -411,7 +411,7 @@ func TestWidget_UnsetDaysRendersFullWeek(t *testing.T) {
 	cfg := drawConfig()
 	cfg.Days = 0
 	frame := render(t, New(image.Rect(0, 52, 800, 480),
-		daygrid.InMemory(sampleEvents(), nil), fixedClock(testTime), cfg))
+		daydata.InMemory(sampleEvents(), nil), fixedClock(testTime), cfg))
 
 	if frame.ColorIndexAt(113, 300) != widget.PaperBlack {
 		t.Error("no divider at x=113 — not laying out 7 columns")
@@ -420,11 +420,11 @@ func TestWidget_UnsetDaysRendersFullWeek(t *testing.T) {
 
 // rangeOver serves src's days on a fixed temperature range.
 type rangeOver struct {
-	daygrid.Source
+	daydata.Source
 	rng weatherview.TempRange
 }
 
-func (r rangeOver) Days(now time.Time, n int) daygrid.Data {
+func (r rangeOver) Days(now time.Time, n int) daydata.Data {
 	d := r.Source.Days(now, n)
 	d.TempRange = r.rng
 	return d
@@ -513,7 +513,7 @@ func TestWidget_Golden(t *testing.T) {
 			if clock.IsZero() {
 				clock = testTime
 			}
-			days := daygrid.InMemory(tt.events, tt.forecast)
+			days := daydata.InMemory(tt.events, tt.forecast)
 			if tt.weekRange {
 				days = rangeOver{Source: days, rng: weatherview.GlobalTempRange(tt.forecast)}
 			}

@@ -255,7 +255,7 @@ same mark (two `"5m"` widgets both refresh on `:00/:05/:10`) instead of each
 flashing the panel independently — important on `gray4`, where every refresh
 flickers. This controls **when the screen is allowed to refresh** for this
 widget, distinct from any data-refresh setting a widget exposes under `config`
-(e.g. the weekly-calendar's `config.refresh` cache TTL).
+(e.g. a calendar widget's `config.refresh` cache TTL).
 
 ### Planning your layout
 
@@ -292,18 +292,22 @@ dashboard:
           refresh: "1m"
           config:
             format: "15:04"
-        - type: weekly-calendar
+        - type: bold-five
           bounds: [0, 50, 800, 480]
           refresh: "15m"
           config:
             feeds:
               - "https://example.com/calendar.ics"
-            show_weather: true
+            max_events: 3
 ```
 
 > The built-in widget types are `clock`, `date`, `fuzzy_clock`,
-> `separator`, and `weekly-calendar` (calendar agenda + weather in one
-> widget). The `label` widget above is the one you build in
+> `separator`, the calendar-and-weather screens `bold-five`,
+> `today-hero`, `row-agenda` and `day-timeline`, and the weather-only
+> `today-weather` and `weather-ahead`. `weekly-calendar` is still
+> registered but deprecated and due for removal. The
+> [configuration reference](configuration.md#widget-reference) covers
+> each one. The `label` widget above is the one you build in
 > [Creating a Widget](#creating-a-widget); register it before using it.
 > "weather" and "calendar" as standalone types are illustrative only —
 > they are not registered out of the box.

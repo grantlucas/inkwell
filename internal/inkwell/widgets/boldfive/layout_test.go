@@ -18,17 +18,23 @@ func TestComputeColumns(t *testing.T) {
 	}
 
 	for i, c := range cols {
-		if got := c.Header.Dy(); got != headerH {
-			t.Errorf("column %d: header height = %d, want %d", i, got, headerH)
+		if got := c.Badge.Dy(); got != 156 {
+			t.Errorf("column %d: badge height = %d, want 156", i, got)
 		}
-		if got := c.Weather.Dy(); got != weatherH {
-			t.Errorf("column %d: weather height = %d, want %d", i, got, weatherH)
+		if got := c.Chart.Dy(); got != chartH {
+			t.Errorf("column %d: chart height = %d, want %d", i, got, chartH)
 		}
-		if c.Header.Max.Y != c.Weather.Min.Y {
-			t.Errorf("column %d: gap between header and weather", i)
+		if c.Badge.Max.Y != c.Chart.Min.Y {
+			t.Errorf("column %d: gap between badge and chart", i)
 		}
-		if c.Weather.Max.Y != c.Events.Min.Y {
-			t.Errorf("column %d: gap between weather and events", i)
+		if c.Chart.Max.Y != c.Events.Min.Y {
+			t.Errorf("column %d: gap between chart and events", i)
+		}
+		if c.Badge.Min.X != c.Bounds.Min.X || c.Badge.Max.X != c.Bounds.Max.X {
+			t.Errorf("column %d: badge %v does not span the column %v", i, c.Badge, c.Bounds)
+		}
+		if c.Chart.Min.X != c.Bounds.Min.X+chartPadX || c.Chart.Max.X != c.Bounds.Max.X-chartPadX {
+			t.Errorf("column %d: chart %v is not inset %d px from the column %v", i, c.Chart, chartPadX, c.Bounds)
 		}
 		if c.Events.Max.Y != bounds.Max.Y {
 			t.Errorf("column %d: events do not reach the bottom", i)
@@ -73,11 +79,11 @@ func TestComputeColumns_RemainderGoesToTheLastColumn(t *testing.T) {
 func TestComputeColumns_ShortBounds(t *testing.T) {
 	bounds := image.Rect(0, 0, 800, 60)
 	for i, c := range computeColumns(bounds) {
-		if c.Header.Max.Y > bounds.Max.Y {
-			t.Errorf("column %d: header runs past the bounds", i)
+		if c.Badge.Max.Y > bounds.Max.Y {
+			t.Errorf("column %d: badge runs past the bounds", i)
 		}
-		if c.Weather.Max.Y > bounds.Max.Y {
-			t.Errorf("column %d: weather runs past the bounds", i)
+		if c.Chart.Max.Y > bounds.Max.Y {
+			t.Errorf("column %d: chart runs past the bounds", i)
 		}
 		if c.Events.Min.Y > bounds.Max.Y {
 			t.Errorf("column %d: events start past the bounds", i)
@@ -94,10 +100,10 @@ func TestComputeColumns_RespectsOrigin(t *testing.T) {
 	if cols[0].Bounds.Min.X != 20 {
 		t.Errorf("first column x = %d, want 20", cols[0].Bounds.Min.X)
 	}
-	if cols[0].Header.Min.Y != 30 {
-		t.Errorf("header top = %d, want 30", cols[0].Header.Min.Y)
+	if cols[0].Badge.Min.Y != 30 {
+		t.Errorf("badge top = %d, want 30", cols[0].Badge.Min.Y)
 	}
-	if cols[0].Header.Max.Y != 30+headerH {
-		t.Errorf("header bottom = %d, want %d", cols[0].Header.Max.Y, 30+headerH)
+	if cols[0].Badge.Max.Y != 30+156 {
+		t.Errorf("badge bottom = %d, want %d", cols[0].Badge.Max.Y, 30+156)
 	}
 }

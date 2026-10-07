@@ -1,6 +1,6 @@
 package rowagenda
 
-import "github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+import "github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 
 // widgetName prefixes every config error so a dashboard that fails to
 // load says which widget rejected it.
@@ -18,7 +18,7 @@ const widgetName = "row-agenda"
 // show_weather: false would draw a weather badge the operator explicitly
 // turned off, which looks like a bug in the widget rather than a key that
 // did not carry over.
-var spec = daygrid.Spec{
+var spec = daydata.Spec{
 	Widget: widgetName,
 	Rejected: map[string]string{
 		"days":               "row-agenda is always five rows, so the screen shows the same span of days however full the week is",

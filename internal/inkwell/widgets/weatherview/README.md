@@ -57,7 +57,7 @@ keeps `RenderHourlyChart` exactly as it is.
   renderer serves a 312 px hero cell and a 106 px row badge.
 - **One range per screen, and it is required.** The caller hands every chart
   the same `TempRange` (°C), so a cold day sits lower than a warm one. The day
-  data module (`daygrid`) works it out across the days that have a forecast.
+  data module (`daydata`) works it out across the days that have a forecast.
   The warmest value in the range touches the top of the plot and the coldest
   the row above the baseline; temperatures outside it clamp to the edge, and a
   collapsed range widens to one degree.
@@ -116,8 +116,13 @@ widget are the user-facing controls for this component.
 - `RenderHourlyChart(frame, bounds, hourly, chartOpts)` — just the chart.
 - `RenderCombinedChart(frame, bounds, hourly, rng, combinedOpts)` — bars with
   the temperature line over them (see above).
-- `DrawContrastLine(frame, points)` — a 2 px line, black over paper and white
-  over anything drawn.
+- `DrawContrastLine(frame, points, run)` — a 2 px line, black over paper and
+  white over anything drawn, thickened downward for a line that `RunsAcross`
+  and to the right for one that `RunsDown`.
+- `TempRange.X(temp, left, width)` — where a line running down a plot sits
+  across it, coldest on the left. The day-timeline's weather lane uses it.
+- `BarLength(prob, room)` and `Dry(points)` — the bar-length and dry-day
+  rules, shared with the weather lane so its sideways bars read the same.
 - `DrawIcon(frame, x, y, size, condition)` — just the condition glyph.
 - `NewHighLow(day, unit)` — the day's high and low as text.
 - `GlobalTempRange(days)` — the shared `TempRange` across days, for chart normalization.

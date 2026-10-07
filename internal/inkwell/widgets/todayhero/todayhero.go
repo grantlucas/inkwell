@@ -2,39 +2,37 @@ package todayhero
 
 import (
 	"image"
-	"log"
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daybadge"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
 
 var _ widget.Widget = (*Widget)(nil)
 
 // Widget renders the today-hero screen.
 type Widget struct {
-	daygrid.Base
+	daydata.Base[daydata.Config]
 }
 
 // New creates a today-hero Widget drawing the days from days. Of cfg it
 // reads only how events are listed and the temperature unit; where the
 // days come from is the day data module's business.
-func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg daygrid.Config) *Widget {
-	return &Widget{daygrid.NewBase(bounds, days, now, cfg)}
+func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg daydata.Config) *Widget {
+	return &Widget{daydata.NewBase(bounds, days, now, cfg)}
 }
 
 // Render draws today down the left and the next four days as rows down
 // the right.
 func (w *Widget) Render(frame *image.Paletted) error {
-	daygrid.FillWhite(frame, w.Bounds())
+	drawkit.FillWhite(frame, w.Bounds())
 
 	// Too small to draw into without spilling past the widget's bounds
-	// and over its neighbour on the shared frame. A blank region is a
-	// misconfiguration an operator can see; ink on another widget looks
-	// like a fault somewhere else entirely.
-	if w.Bounds().Dy() < minHeight || w.Bounds().Dx() < minWidth {
-		log.Printf("todayhero: bounds are %dx%d, need at least %dx%d — drawing nothing",
-			w.Bounds().Dx(), w.Bounds().Dy(), minWidth, minHeight)
+	// and over its neighbour on the shared frame.
+	if !daydata.Fits(widgetName, w.Bounds(), image.Pt(minWidth, minHeight), "") {
 		return nil
 	}
 
@@ -53,26 +51,25 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	// the module takes across the days shown.
 	today := data.Days[0]
 	hero := computeHero(w.Bounds())
-	renderIdentity(frame, hero.Identity, now)
-	renderHeroWeather(frame, hero.Weather, today.Forecast, unit)
+	daybadge.Hero.Draw(frame, hero.Badge, today, now, unit)
 	renderHeroChart(frame, hero.Chart, today.Forecast, now.Hour(), data.TempRange)
-	renderHeroAgenda(frame, hero.Agenda, remainingToday(today.Events, now), agenda)
+	renderHeroAgenda(frame, hero.Agenda, eventlist.Remaining(today.Events, now), agenda)
 
 	// The divider separates two different kinds of content, so it is
 	// heavier than a column rule and runs the full height.
 	for i := range dividerW {
-		daygrid.DrawVLine(frame, w.Bounds().Min.X+split+i, w.Bounds().Min.Y, w.Bounds().Max.Y, widget.PaperBlack)
+		drawkit.DrawVLine(frame, w.Bounds().Min.X+split+i, w.Bounds().Min.Y, w.Bounds().Max.Y, widget.PaperBlack)
 	}
 
 	for i, row := range computeDayRows(w.Bounds()) {
 		renderDayRow(frame, row, data.Days[i+1], dayRowOptions{
-			IsTomorrow: i == 0,
-			TempUnit:   unit,
-			TempRange:  data.TempRange,
-			Agenda:     rowStyle,
+			Now:       now,
+			TempUnit:  unit,
+			TempRange: data.TempRange,
+			Agenda:    rowStyle,
 		})
 		if i < dayRows-1 {
-			daygrid.DrawHLine(frame, row.Min.X, row.Max.X, row.Max.Y-1, widget.PaperBlack)
+			drawkit.DrawHLine(frame, row.Min.X, row.Max.X, row.Max.Y-1, widget.PaperBlack)
 		}
 	}
 
@@ -82,4 +79,4 @@ func (w *Widget) Render(frame *image.Paletted) error {
 // Factory creates a today-hero Widget from config and dependencies. Its
 // settings are the ones every calendar widget shares, so a screen can be
 // swapped between calendar widgets without rewriting its config.
-var Factory = daygrid.Factory(spec, New)
+var Factory = daydata.Factory(widgetName, daydata.Parser(spec), New)

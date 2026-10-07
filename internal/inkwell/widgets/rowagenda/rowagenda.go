@@ -2,38 +2,35 @@ package rowagenda
 
 import (
 	"image"
-	"log"
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daybadge"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 )
 
 var _ widget.Widget = (*Widget)(nil)
 
 // Widget renders the row-agenda screen.
 type Widget struct {
-	daygrid.Base
+	daydata.Base[daydata.Config]
 }
 
 // New creates a row-agenda Widget drawing the days from days. Of cfg it
 // reads only whether locations are shown and the temperature unit; where
 // the days come from is the day data module's business.
-func New(bounds image.Rectangle, days daygrid.Source, now func() time.Time, cfg daygrid.Config) *Widget {
-	return &Widget{daygrid.NewBase(bounds, days, now, cfg)}
+func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg daydata.Config) *Widget {
+	return &Widget{daydata.NewBase(bounds, days, now, cfg)}
 }
 
 // Render draws five day rows, today first.
 func (w *Widget) Render(frame *image.Paletted) error {
-	daygrid.FillWhite(frame, w.Bounds())
+	drawkit.FillWhite(frame, w.Bounds())
 
 	// Too small to draw into without spilling past the widget's bounds
-	// and over its neighbour on the shared frame. A blank region is a
-	// misconfiguration an operator can see; ink on another widget looks
-	// like a fault somewhere else entirely.
-	if w.Bounds().Dy() < minHeight || w.Bounds().Dx() < minWidth {
-		log.Printf("rowagenda: bounds are %dx%d, need at least %dx%d — drawing nothing",
-			w.Bounds().Dx(), w.Bounds().Dy(), minWidth, minHeight)
+	// and over its neighbour on the shared frame.
+	if !daydata.Fits(widgetName, w.Bounds(), image.Pt(minWidth, minHeight), "") {
 		return nil
 	}
 
@@ -56,21 +53,20 @@ func (w *Widget) Render(frame *image.Paletted) error {
 
 	for i, row := range planRows(w.Bounds(), counts) {
 		day := data.Days[i]
-		renderGutter(frame, row.Gutter, day)
+		daybadge.Row.Draw(frame, row.Badge, day, now, w.Config.Weather.TempUnit)
 		// One temperature range across the five rows, so every chart is
 		// plotted on the same scale and a cold day sits lower than a
 		// warm one.
-		renderBadge(frame, row.Badge, day.Forecast,
-			w.Config.Weather.TempUnit, day.IsToday, true, now.Hour(), data.TempRange)
+		renderChart(frame, row.Chart, day.Forecast, day.IsToday, now.Hour(), data.TempRange)
 
 		// A hairline between the badge and the agenda, so the two read
 		// as separate columns rather than as one run of text.
-		daygrid.DrawVLine(frame, row.Agenda.Min.X-ruleInset, row.Bounds.Min.Y, row.Bounds.Max.Y, widget.PaperBlack)
+		drawkit.DrawVLine(frame, row.Agenda.Min.X-ruleInset, row.Bounds.Min.Y, row.Bounds.Max.Y, widget.PaperBlack)
 
 		agenda.Draw(frame, agendaList(row), day.Events)
 
 		if !row.IsLast {
-			daygrid.DrawHLine(frame, row.Bounds.Min.X, row.Bounds.Max.X, row.Bounds.Max.Y-1, widget.PaperBlack)
+			drawkit.DrawHLine(frame, row.Bounds.Min.X, row.Bounds.Max.X, row.Bounds.Max.Y-1, widget.PaperBlack)
 		}
 	}
 
@@ -80,4 +76,4 @@ func (w *Widget) Render(frame *image.Paletted) error {
 // Factory creates a row-agenda Widget from config and dependencies. Its
 // settings are the ones every calendar widget shares, so a screen can be
 // swapped between calendar widgets without rewriting its config.
-var Factory = daygrid.Factory(spec, New)
+var Factory = daydata.Factory(widgetName, daydata.Parser(spec), New)

@@ -1,0 +1,115 @@
+// Package combinedchart is the combined-chart widget: one day's combined
+// chart (precipitation bars with the temperature line over them) placed
+// on a screen on its own, filling its bounds.
+//
+// A screen that shows several days wants every chart on one shared
+// temperature range, so a cold day sits visibly lower than a warm one.
+// Placed charts don't know about each other, so the range comes from the
+// day data module instead: each chart asks it for the same span of days
+// (range_days, from today), and the module computes the range across that
+// span from the forecast every widget shares. Charts with the same span
+// and the same weather settings therefore plot on the same scale, whichever
+// day each one draws. See ADR 0015.
+package combinedchart
+
+import (
+	"fmt"
+	"image"
+	"time"
+
+	"github.com/grantlucas/inkwell/internal/inkwell/weather"
+	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherview"
+)
+
+// widgetName prefixes every config error so a dashboard that fails to
+// load says which widget rejected it.
+const widgetName = "combined-chart"
+
+// defaultRangeDays is the span the shared range covers when config
+// doesn't say: the five days bold-five, today-hero and row-agenda show.
+const defaultRangeDays = 5
+
+// maxRangeDays is a week from today, the furthest a chart can be placed.
+const maxRangeDays = daydata.MaxDay + 1
+
+var _ widget.Widget = (*Widget)(nil)
+
+// Config is the combined-chart widget's parsed configuration: the weather
+// settings and day every one-day widget shares, and the span its
+// temperature range covers.
+type Config struct {
+	daydata.Config
+	// RangeDays is how many days from today the shared temperature range
+	// spans. It always reaches Day.
+	RangeDays int
+}
+
+// Widget is one day's combined chart placed on a screen on its own.
+type Widget struct {
+	daydata.Base[Config]
+}
+
+// New creates a combined-chart Widget drawing cfg.Day's chart from days.
+func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg Config) *Widget {
+	return &Widget{daydata.NewBase(bounds, days, now, cfg)}
+}
+
+// Render draws the day's combined chart into the widget's bounds, on the
+// temperature range across the first RangeDays days, with the now marker
+// on today's chart only. A day the forecast doesn't reach draws nothing.
+// The chart keeps to its bounds and draws nothing into a cell too small
+// to carry it, so there is no size guard here. A failed fetch is logged
+// by the day data module and never returned.
+func (w *Widget) Render(frame *image.Paletted) error {
+	drawkit.FillWhite(frame, w.Bounds())
+
+	now := w.Now()
+	data := w.Days.Days(now, w.Config.RangeDays)
+	day := data.Days[w.Config.Day]
+	if day.Forecast == nil {
+		return nil
+	}
+	weatherview.RenderCombinedChart(frame, w.Bounds(), day.Forecast.Hourly, data.TempRange, weatherview.CombinedOptions{
+		NowHour: now.Hour(),
+		// "Now" is a point on today's axis and no other day's.
+		ShowNowMarker: day.IsToday,
+	})
+	return nil
+}
+
+// spec declares combined-chart to the shared parser: the weather settings,
+// day, and its own range_days.
+var spec = daydata.Spec{
+	Widget: widgetName,
+	Reads:  daydata.WeatherOnly,
+	OneDay: true,
+	Extra:  []string{"range_days"},
+}
+
+// parseConfig reads the shared settings through the shared parser,
+// inheriting weather settings from inherit, then range_days, which must
+// reach the chart's own day.
+func parseConfig(raw map[string]any, inherit *weather.Provider) (Config, error) {
+	shared, err := daydata.ParseConfig(spec, raw, inherit)
+	cfg := Config{Config: shared, RangeDays: defaultRangeDays}
+	if err != nil {
+		return cfg, err
+	}
+	keys := daydata.ReadKeys(widgetName, raw)
+	keys.Int("range_days", 1, maxRangeDays, &cfg.RangeDays)
+	if err := keys.Err(); err != nil {
+		return cfg, err
+	}
+	if cfg.RangeDays <= cfg.Day {
+		return cfg, fmt.Errorf("%s: range_days must be at least %d to reach day %d, got %d",
+			widgetName, cfg.Day+1, cfg.Day, cfg.RangeDays)
+	}
+	return cfg, nil
+}
+
+// Factory creates a combined-chart Widget from config and dependencies.
+// Its day data reads the forecast only.
+var Factory = daydata.Factory(widgetName, parseConfig, New)

@@ -8,7 +8,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar/ical"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daygrid"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 )
 
 // inkBands counts the number of vertically separated horizontal bands that
@@ -633,7 +633,7 @@ func TestColumnAndLabelAgreeAcrossZones(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
-			dayEvents := daygrid.InMemory(tc.events, nil).Days(tc.day, 1).Days[0].Events
+			dayEvents := daydata.InMemory(tc.events, nil).Days(tc.day, 1).Days[0].Events
 			plan := planEvents(dayEvents, 40, 20, eventOptions{MaxEvents: 10, Location: tc.loc})
 
 			var got []string
