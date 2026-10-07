@@ -47,8 +47,8 @@ type Data struct {
 	// ForecastArrived is whether a forecast came back at all, even one
 	// that reaches none of the days. Whether a day has weather is its own
 	// Forecast; this is for a layout that sizes itself on the forecast's
-	// arrival, as weekly-calendar's band does, so a 200 response with no
-	// daily data doesn't reflow the screen for one cycle.
+	// arrival, so a 200 response with no daily data doesn't reflow the
+	// screen for one cycle.
 	ForecastArrived bool
 }
 
@@ -75,9 +75,8 @@ func New(widgetName string, cfg Config, deps widget.Deps, opts ...Option) (Sourc
 type Option func(*module)
 
 // WithoutWeather leaves the forecast unfetched, so every day's Forecast is
-// nil and ForecastArrived is false. weekly-calendar passes it for
-// show_weather: false, so a screen that hides its weather doesn't fetch a
-// forecast to throw away.
+// nil and ForecastArrived is false. event-list passes it, so a widget that
+// draws no weather doesn't fetch a forecast to throw away.
 func WithoutWeather() Option {
 	return func(m *module) { m.weather = nil }
 }

@@ -208,7 +208,7 @@ func swapHostLookups(t *testing.T, env map[string]string, link func(string) (str
 // The cache outlives midnight, so a forecast fetched late in the evening is
 // still being served the next morning. It answers from the new Today, not
 // from the day it was fetched on, and still covers the whole span — even
-// weekly-calendar's longest, seven days.
+// a full week of seven days.
 func TestProvider_CachedForecastStartsAtTodayAfterMidnight(t *testing.T) {
 	toronto := mustZone(t, "America/Toronto")
 	evening := time.Date(2026, 10, 5, 23, 0, 0, 0, toronto)

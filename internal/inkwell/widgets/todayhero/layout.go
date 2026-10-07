@@ -7,9 +7,6 @@
 // it. That is why the panel is spent unevenly — today gets 42% of the
 // width at a size that reads across a room, and four more days share
 // the remainder.
-//
-// It is a separate widget type rather than a mode of weekly-calendar,
-// so the current view stays available as a control in the rotation.
 package todayhero
 
 import (

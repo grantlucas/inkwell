@@ -382,7 +382,7 @@ func TestFactory(t *testing.T) {
 			wantErr: "row-agenda: max_events is not supported: each row grows to fit its events, and when the week is too full the busiest rows give up lines first",
 		},
 		{
-			label:   "explains a weekly-calendar key",
+			label:   "explains a retired calendar key",
 			config:  map[string]any{"feeds": []any{"https://example.com/a.ics"}, "show_weather": false},
 			wantErr: "row-agenda: show_weather is not supported: the weather badge is part of the layout; a day with no forecast already draws nothing",
 		},

@@ -63,7 +63,7 @@ func (p *Provider) Defaults() Settings { return p.defaults }
 
 // ForecastHorizon is how many days the Provider fetches for every location,
 // whatever span a widget asks for. It must exceed the longest span any widget
-// can be configured for (weekly-calendar's seven columns) by a day: the cache
+// can be configured for by a day: the cache
 // outlives midnight, and once the first fetched day has ended a request is
 // answered from the days that remain.
 const ForecastHorizon = 8
