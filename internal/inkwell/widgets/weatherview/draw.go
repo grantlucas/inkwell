@@ -25,11 +25,6 @@ func mustLoadDefaultFace() font.Face {
 	return f
 }
 
-const (
-	charWidth  = 7
-	lineHeight = 15
-)
-
 func textWidth(f font.Face, text string) int {
 	return font.MeasureString(f, text).Ceil()
 }
@@ -56,10 +51,6 @@ func fillRect(frame *image.Paletted, r image.Rectangle, idx uint8) {
 	draw.Draw(frame, r, image.NewUniform(widget.PaperPalette[idx]), image.Point{}, draw.Src)
 }
 
-func drawText(frame *image.Paletted, x, y int, text string) {
-	drawTextWithFace(frame, x, y, text, defaultFace)
-}
-
 func drawTextWithFace(frame *image.Paletted, x, y int, text string, f font.Face) {
 	d := &font.Drawer{
 		Dst:  frame,
@@ -68,37 +59,6 @@ func drawTextWithFace(frame *image.Paletted, x, y int, text string, f font.Face)
 		Dot:  fixed.P(x, y),
 	}
 	d.DrawString(text)
-}
-
-// drawTextGrayWithFace draws text using a given gray palette index. The
-// font.Drawer's alpha mask is blended against the supplied solid color, so
-// coverage values between 0 and 255 land on the nearest available palette
-// entry — which gives free anti-aliased grays around glyph edges.
-func drawTextGrayWithFace(frame *image.Paletted, x, y int, text string, f font.Face, idx uint8) {
-	d := &font.Drawer{
-		Dst:  frame,
-		Src:  image.NewUniform(widget.PaperPalette[idx]),
-		Face: f,
-		Dot:  fixed.P(x, y),
-	}
-	d.DrawString(text)
-}
-
-func drawTextCentered(frame *image.Paletted, x1, x2, y int, text string) {
-	tw := textWidth(defaultFace, text)
-	x := x1 + (x2-x1-tw)/2
-	drawText(frame, x, y, text)
-}
-
-func drawTextCenteredGray(frame *image.Paletted, x1, x2, y int, text string, idx uint8) {
-	tw := textWidth(defaultFace, text)
-	x := x1 + (x2-x1-tw)/2
-	drawTextGrayWithFace(frame, x, y, text, defaultFace, idx)
-}
-
-// drawLine draws a line from (x1,y1) to (x2,y2) using Bresenham's algorithm.
-func drawLine(frame *image.Paletted, x1, y1, x2, y2 int, idx uint8) {
-	walkLine(x1, y1, x2, y2, func(x, y int) { setPixel(frame, x, y, idx) })
 }
 
 // walkLine visits every pixel of the Bresenham line from (x1,y1) to
@@ -139,21 +99,6 @@ func abs(x int) int {
 		return -x
 	}
 	return x
-}
-
-// truncateText shortens text to at most maxChars runes, appending an
-// ellipsis when truncation occurs. Operating on runes (rather than
-// bytes) avoids slicing through the middle of a multi-byte UTF-8
-// sequence and producing invalid output.
-func truncateText(text string, maxChars int) string {
-	runes := []rune(text)
-	if len(runes) <= maxChars {
-		return text
-	}
-	if maxChars <= 3 {
-		return string(runes[:maxChars])
-	}
-	return string(runes[:maxChars-3]) + "..."
 }
 
 // drawTextCenteredWithFace centers text between x1 and x2 using the given

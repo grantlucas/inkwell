@@ -36,7 +36,7 @@ func TestDefaultRegistry_CalendarWidgetsShareOneFetchPerFeed(t *testing.T) {
 	feeds := map[string]any{"feeds": []any{url}}
 
 	r := widgets.NewDefaultRegistry()
-	for _, typeName := range []string{"bold-five", "day-timeline", "event-list", "row-agenda", "today-hero", "weekly-calendar"} {
+	for _, typeName := range []string{"bold-five", "day-timeline", "event-list", "row-agenda", "today-hero"} {
 		bounds := image.Rect(0, 0, 800, 480)
 		w, err := r.Create(typeName, bounds, feeds, deps)
 		if err != nil {
@@ -78,7 +78,6 @@ func TestDefaultRegistry_BuildsEveryWidgetFromTypedDeps(t *testing.T) {
 		{typeName: "today-hero", bounds: image.Rect(0, 0, 800, 480), config: feeds},
 		{typeName: "today-weather", bounds: image.Rect(534, 48, 800, 208)},
 		{typeName: "weather-ahead", bounds: image.Rect(534, 208, 800, 480)},
-		{typeName: "weekly-calendar", bounds: image.Rect(0, 52, 800, 480), config: feeds},
 	}
 
 	r := widgets.NewDefaultRegistry()

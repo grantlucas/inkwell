@@ -2,6 +2,7 @@ package weatherview
 
 import (
 	"image"
+	"slices"
 	"strings"
 	"testing"
 
@@ -90,138 +91,28 @@ func TestFillRect_Gray(t *testing.T) {
 	}
 }
 
-func TestDrawLine_Horizontal(t *testing.T) {
-	frame := newTestFrame(20, 10)
-	drawLine(frame, 2, 5, 8, 5, widget.PaperBlack)
-	for x := 2; x <= 8; x++ {
-		if frame.ColorIndexAt(x, 5) != widget.PaperBlack {
-			t.Errorf("pixel at (%d, 5) not set", x)
-		}
-	}
-}
-
-func TestDrawLine_Vertical(t *testing.T) {
-	frame := newTestFrame(10, 20)
-	drawLine(frame, 5, 2, 5, 8, widget.PaperBlack)
-	for y := 2; y <= 8; y++ {
-		if frame.ColorIndexAt(5, y) != widget.PaperBlack {
-			t.Errorf("pixel at (5, %d) not set", y)
-		}
-	}
-}
-
-func TestDrawLine_Diagonal(t *testing.T) {
-	frame := newTestFrame(20, 20)
-	drawLine(frame, 0, 0, 9, 9, widget.PaperBlack)
-	if frame.ColorIndexAt(0, 0) != widget.PaperBlack {
-		t.Error("start pixel not set")
-	}
-	if frame.ColorIndexAt(9, 9) != widget.PaperBlack {
-		t.Error("end pixel not set")
-	}
-}
-
-func TestDrawLine_Reverse(t *testing.T) {
-	frame := newTestFrame(20, 20)
-	drawLine(frame, 9, 9, 0, 0, widget.PaperBlack)
-	if frame.ColorIndexAt(0, 0) != widget.PaperBlack {
-		t.Error("start pixel not set")
-	}
-	if frame.ColorIndexAt(9, 9) != widget.PaperBlack {
-		t.Error("end pixel not set")
-	}
-}
-
-func TestDrawLine_Gray(t *testing.T) {
-	frame := newTestFrame(20, 20)
-	drawLine(frame, 0, 0, 5, 5, widget.PaperGray70)
-	if got := frame.ColorIndexAt(0, 0); got != widget.PaperGray70 {
-		t.Errorf("(0,0) = %d, want %d (PaperGray70)", got, widget.PaperGray70)
-	}
-	if got := frame.ColorIndexAt(5, 5); got != widget.PaperGray70 {
-		t.Errorf("(5,5) = %d, want %d (PaperGray70)", got, widget.PaperGray70)
-	}
-}
-
-func TestDrawText(t *testing.T) {
-	frame := newTestFrame(100, 20)
-	drawText(frame, 0, 13, "Hi")
-	if !anyNonWhite(frame) {
-		t.Error("drawText produced no pixels")
-	}
-}
-
-func TestDrawTextCentered(t *testing.T) {
-	frame := newTestFrame(100, 20)
-	drawTextCentered(frame, 0, 100, 13, "OK")
-	if !anyNonWhite(frame) {
-		t.Error("drawTextCentered produced no pixels")
-	}
-}
-
-func anyNonWhite(frame *image.Paletted) bool {
-	for _, px := range frame.Pix {
-		if px != widget.PaperWhite {
-			return true
-		}
-	}
-	return false
-}
-
-func TestDrawTextCenteredGray(t *testing.T) {
-	frame := newTestFrame(100, 20)
-	drawTextCenteredGray(frame, 0, 100, 13, "OK", widget.PaperGray70)
-	sawAny := false
-	for _, px := range frame.Pix {
-		if px != widget.PaperWhite {
-			sawAny = true
-			break
-		}
-	}
-	if !sawAny {
-		t.Error("drawTextCenteredGray produced no pixels")
-	}
-}
-
-func TestDrawTextGrayWithFace(t *testing.T) {
-	frame := newTestFrame(100, 20)
-	drawTextGrayWithFace(frame, 0, 13, "Hi", defaultFace, widget.PaperGray50)
-	sawAny := false
-	for _, px := range frame.Pix {
-		if px != widget.PaperWhite {
-			sawAny = true
-			break
-		}
-	}
-	if !sawAny {
-		t.Error("drawTextGrayWithFace produced no pixels")
-	}
-}
-
-func TestTruncateText(t *testing.T) {
+// walkLine visits the Bresenham line from one end to the other, both ends
+// included, in whichever direction it is asked to walk.
+func TestWalkLine(t *testing.T) {
 	tests := []struct {
-		text     string
-		max      int
-		expected string
+		label          string
+		x1, y1, x2, y2 int
+		want           []image.Point
 	}{
-		{"hello", 10, "hello"},
-		{"hello world", 5, "he..."},
-		{"hi", 2, "hi"},
-		{"hello", 3, "hel"},
-		{"hello", 4, "h..."},
-		// Multi-byte characters were previously sliced mid-sequence
-		// because truncation worked on bytes. The Japanese label below
-		// is 3 runes / 9 bytes — slicing at maxChars=2 must give the
-		// first two runes, not the first two bytes of "あ" (which would
-		// be invalid UTF-8).
-		{"あいう", 2, "あい"},
-		{"あいうえお", 4, "あ..."},
+		{label: "horizontal", x1: 2, y1: 5, x2: 5, y2: 5, want: []image.Point{{2, 5}, {3, 5}, {4, 5}, {5, 5}}},
+		{label: "vertical", x1: 5, y1: 2, x2: 5, y2: 4, want: []image.Point{{5, 2}, {5, 3}, {5, 4}}},
+		{label: "diagonal", x1: 0, y1: 0, x2: 2, y2: 2, want: []image.Point{{0, 0}, {1, 1}, {2, 2}}},
+		{label: "reversed", x1: 2, y1: 2, x2: 0, y2: 0, want: []image.Point{{2, 2}, {1, 1}, {0, 0}}},
+		{label: "shallow", x1: 0, y1: 0, x2: 4, y2: 2, want: []image.Point{{0, 0}, {1, 0}, {2, 1}, {3, 1}, {4, 2}}},
 	}
 	for _, tt := range tests {
-		got := truncateText(tt.text, tt.max)
-		if got != tt.expected {
-			t.Errorf("truncateText(%q, %d) = %q, want %q", tt.text, tt.max, got, tt.expected)
-		}
+		t.Run(tt.label, func(t *testing.T) {
+			var got []image.Point
+			walkLine(tt.x1, tt.y1, tt.x2, tt.y2, func(x, y int) { got = append(got, image.Pt(x, y)) })
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("walkLine visited %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -254,24 +145,4 @@ func TestMustLoadDefaultFace_PanicsOnFontError(t *testing.T) {
 		}
 	}()
 	_ = mustLoadDefaultFace()
-}
-
-// mustLoadFace covers the per-face panic branch used by the
-// weatherview.go init. The role label must appear in the panic
-// message so it's easy to tell which face failed.
-func TestMustLoadFace_PanicsOnFontError(t *testing.T) {
-	restore := fonts.SwapDataForTest([]byte("bad"), []byte("bad"))
-	defer restore()
-
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Fatal("expected panic from mustLoadFace")
-		}
-		msg, ok := r.(string)
-		if !ok || !strings.Contains(msg, "weatherview: load smoke font") {
-			t.Errorf("panic = %v, want a string mentioning 'weatherview: load smoke font'", r)
-		}
-	}()
-	_ = mustLoadFace(fonts.Regular, 10, "smoke")
 }
