@@ -330,7 +330,7 @@ func TestRenderCombinedChart_TraceHourDrawsAStub(t *testing.T) {
 	}
 }
 
-// The axis carries three 24-hour marks — 6, 12 and 18. The live chart's
+// The axis carries three 24-hour marks — 6, 12 and 18. A 12-hour
 // "6 9 12 3 8" mixes morning and afternoon on one axis and has to be
 // worked out; these match the 15:04 format the rest of the panel is set
 // in, and each sits under its own hour slot, below the ticks and inside

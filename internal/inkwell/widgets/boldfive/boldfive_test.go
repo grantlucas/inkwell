@@ -424,7 +424,7 @@ func TestFactory(t *testing.T) {
 	}{
 		{label: "caps events at its default", config: map[string]any{"feeds": []any{"https://example.com/a.ics"}}},
 		{
-			label:   "explains a weekly-calendar key",
+			label:   "explains a retired calendar key",
 			config:  map[string]any{"feeds": []any{"https://example.com/a.ics"}, "show_weather": false},
 			wantErr: "bold-five: show_weather is not supported: the weather band is part of the layout; a day with no forecast already draws nothing",
 		},

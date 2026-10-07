@@ -7,8 +7,7 @@
 // (stacked), today-hero's agenda (large) and the rows of row-agenda and
 // today-hero (inline). A Style filled in with a widget's choices is a
 // List, which draws. The event-list widget places one day's list on a
-// screen on its own in any of them. weekly-calendar never lists through
-// it; it is being retired.
+// screen on its own in any of them.
 package eventlist
 
 import (
