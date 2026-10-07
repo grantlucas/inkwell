@@ -1,6 +1,9 @@
 package ical
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Event represents a single calendar event parsed from an iCal feed.
 // Recurring events carry a Recurrence value that describes how the
@@ -12,6 +15,10 @@ import "time"
 // occurrence of the series sharing its UID that would have started at
 // RecurrenceID, wherever the override itself now starts. A Cancelled
 // override removes that occurrence and is never shown itself.
+//
+// Declined holds the addresses of the attendees who have said no to
+// the event. Declining leaves the event's STATUS alone, since the event
+// still happens for everyone else, so it is recorded per attendee.
 type Event struct {
 	UID          string
 	Summary      string
@@ -22,6 +29,7 @@ type Event struct {
 	Recurrence   *Recurrence
 	RecurrenceID time.Time
 	Cancelled    bool
+	Declined     []string
 }
 
 // Frequency is the FREQ= value of an RRULE. Only the three the issue
@@ -52,6 +60,17 @@ type Recurrence struct {
 	Until    time.Time
 	ByDay    []time.Weekday
 	ExDates  []time.Time
+}
+
+// DeclinedBy reports whether the attendee at addr has declined e. An
+// email address is matched without regard to case.
+func (e Event) DeclinedBy(addr string) bool {
+	for _, d := range e.Declined {
+		if strings.EqualFold(d, addr) {
+			return true
+		}
+	}
+	return false
 }
 
 // IsOverride reports whether e edits one instance of a series rather
