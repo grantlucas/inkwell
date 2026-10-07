@@ -42,6 +42,10 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	data := w.Days.Days(now, rows)
 
 	agenda := agendaStyle(w.Config.ShowLocation, now.Location())
+	// A feed with nothing to draw from leaves every day short, so every
+	// row says so rather than read as free. The note is one of the lines
+	// the row counts, so the rows are planned with room for it.
+	agenda.Unavailable = data.CalendarUnavailable
 
 	// The row heights depend on every day's line count, not just the
 	// row's own, so the counts are taken before anything is drawn.
