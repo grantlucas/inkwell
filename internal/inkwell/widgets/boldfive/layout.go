@@ -1,10 +1,6 @@
-// Package boldfive implements the bold-five screen: the same five-column
-// calendar + weather shape as weekly-calendar, with every element sized to
-// be read from across the room rather than from arm's length.
-//
-// It is a separate widget type rather than a mode of weekly-calendar so the
-// current view stays available as a control while this one is evaluated in
-// the rotation.
+// Package boldfive implements the bold-five screen: five days of calendar
+// and weather as columns, with every element sized to be read from across
+// the room rather than from arm's length.
 package boldfive
 
 import (

@@ -21,9 +21,8 @@ const (
 	dryThreshold = 0.15
 
 	// precipTickH is the band reserved below the baseline for the base
-	// ticks. The live chart can put its ticks on the base row because its
-	// axis rule sits at the top of the bar gutter; here the baseline is
-	// under the bars, so the ticks have to drop below it to be seen.
+	// ticks. The baseline is under the bars, so the ticks have to drop
+	// below it to be seen.
 	precipTickH = 2
 
 	// precipMinW/H are the smallest bounds worth drawing into. Below
@@ -54,9 +53,9 @@ var precipLabelH = func() int {
 }()
 
 // precipLabelHours are the marks on the hour axis. Three 24-hour labels
-// rather than the live chart's "6 9 12 3 8", which mixes morning and
-// afternoon on one axis and has to be worked out at exactly the moment
-// you are trying not to.
+// rather than a 12-hour "6 9 12 3 8", which mixes morning and afternoon
+// on one axis and has to be worked out at exactly the moment you are
+// trying not to.
 var precipLabelHours = []int{6, 12, 18}
 
 // precipLayout is the resolved geometry of one chart cell: everything the
@@ -89,9 +88,8 @@ func newPrecipLayout(bounds image.Rectangle) (precipLayout, bool) {
 		baselineY: baselineY,
 		barMaxH:   barMaxH,
 		step:      step,
-		// One pixel of gutter between bars rather than the live chart's
-		// two: the whole point of this mode is bars that read at
-		// distance, and at a 110 px column width every pixel of bar is
+		// One pixel of gutter between bars rather than two: the whole
+		// point of this chart is bars that read at distance, and at a 110 px column width every pixel of bar is
 		// worth having.
 		barW: max(int(step)-1, 2),
 	}, true
