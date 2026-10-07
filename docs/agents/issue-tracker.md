@@ -70,9 +70,10 @@ A spec built by several agents at once lands on one integration branch
 release notes are built from merged PRs.
 
 - A ticket PR targets the integration branch and is merged with
-  `gh pr merge --merge`. Write "Resolves #N; the issue closes when the
-  integration branch merges to main" without a closing keyword: GitHub only
-  closes issues from PRs into the default branch.
+  `gh pr merge --merge`. Name its ticket with neutral wording, such as
+  "Ticket: #N, which closes when the integration branch merges to main".
+  Leave out `Closes`, `Fixes` and `Resolves`: GitHub ignores closing keywords
+  on PRs into a non-default branch.
 - The integration PR into `main` carries the `Closes #N` lines for every
   ticket it finishes, and is opened as a draft after the first ticket lands.
 - A ticket done only in part (a step deliberately left for later) gets
