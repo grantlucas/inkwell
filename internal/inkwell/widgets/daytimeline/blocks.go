@@ -77,6 +77,18 @@ func drawNote(frame *image.Paletted, band image.Rectangle, x int, text string) {
 		text, drawkit.BodyBoldFace, widget.PaperBlack)
 }
 
+// drawUnavailable says the calendar is unavailable, centred across band in
+// an outlined box like a tag's, so it reads as the widget's state rather
+// than as one more note about the day. It is an outline, never a fill: the
+// band sits in the same place every render it shows.
+func drawUnavailable(frame *image.Paletted, band image.Rectangle) {
+	t := newTag(daydata.NoCalendar, 0, 0)
+	at := image.Pt(band.Min.X+(band.Dx()-t.Rect.Dx())/2, band.Min.Y+(band.Dy()-t.Rect.Dy())/2)
+	t.Rect = t.Rect.Add(at.Sub(t.Rect.Min))
+	clip, _ := frame.SubImage(band).(*image.Paletted)
+	drawTag(clip, t)
+}
+
 // blockRect is where e's block goes: from the row its start falls on to
 // the row before its end, leaving one row of paper so back-to-back
 // events stay apart.

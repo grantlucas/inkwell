@@ -67,6 +67,13 @@ An event the feed owner has said no to. It still happens for everyone else, but
 is never shown. Each occurrence of a repeating event is declined on its own.
 _Avoid_: Rejected event, hidden event
 
+**Unavailable feed**:
+A feed with nothing to show: its fetch failed and there is no earlier good copy
+of it. A widget says the calendar is unavailable rather than draw the day as
+free. A feed that fails while a copy is cached shows that copy and is not
+unavailable.
+_Avoid_: Calendar down, offline feed, missing calendar
+
 ## Weather charts
 
 **Combined chart**:

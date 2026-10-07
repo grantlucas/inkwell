@@ -1,6 +1,7 @@
 package daydata_test
 
 import (
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
@@ -60,20 +61,19 @@ func newSeam(t *testing.T, now time.Time) *seam {
 	t.Helper()
 	tr := fakehttp.New()
 	tr.Handle(gemURL, fakehttp.OpenMeteo{Now: now, Site: mustZone(t, "America/Toronto")}.Reply)
-	clock := func() time.Time { return now }
-	return &seam{
-		tr:  tr,
-		now: now,
-		deps: widget.Deps{
-			Now:      clock,
-			Calendar: calendar.NewProvider(tr, clock),
-			Weather: weather.NewProvider(tr, time.Hour, clock, weather.Settings{
-				Location: weather.Location{Latitude: 43.25, Longitude: -79.87},
-				TempUnit: "C",
-				Model:    weather.ModelGEM,
-			}),
-		},
+	s := &seam{tr: tr, now: now}
+	// The clock reads s.now, so a test can move it on between renders.
+	clock := func() time.Time { return s.now }
+	s.deps = widget.Deps{
+		Now:      clock,
+		Calendar: calendar.NewProvider(tr, clock),
+		Weather: weather.NewProvider(tr, time.Hour, clock, weather.Settings{
+			Location: weather.Location{Latitude: 43.25, Longitude: -79.87},
+			TempUnit: "C",
+			Model:    weather.ModelGEM,
+		}),
 	}
+	return s
 }
 
 // source builds a widget's day data from cfg.
@@ -581,6 +581,73 @@ func TestDayData_DayWithNoForecast(t *testing.T) {
 			}
 			if got.TempRange != tt.wantRange {
 				t.Errorf("TempRange = %+v, want %+v", got.TempRange, tt.wantRange)
+			}
+		})
+	}
+}
+
+// A widget is told when a feed it shows has nothing to draw from: its fetch
+// failed and there is no earlier good copy. Its days then can't say "a free
+// day", only that the calendar is missing. A feed that fails with a good
+// copy cached is still usable, as the calendar module serves that copy.
+func TestDayData_ReportsAnUnavailableCalendar(t *testing.T) {
+	toronto := mustZone(t, "America/Toronto")
+	now := time.Date(2026, 10, 5, 8, 0, 0, 0, toronto)
+	dentist := fakehttp.Reply{Body: ics(oneOff("dentist", "Dentist", "20261005T140000Z", "20261005T150000Z"))}
+	swim := fakehttp.Reply{Body: ics(oneOff("swim", "Swim", "20261005T220000Z", "20261005T230000Z"))}
+	down := fakehttp.Reply{Status: http.StatusServiceUnavailable}
+	unreachable := fakehttp.Reply{Err: errors.New("network is unreachable")}
+
+	tests := []struct {
+		label string
+		// earlier is what each feed served on a render before this one,
+		// longer ago than the refresh setting; nil for no earlier render.
+		earlier map[string]fakehttp.Reply
+		replies map[string]fakehttp.Reply
+		want    string
+		// wantUnavailable is whether the days report a missing calendar.
+		wantUnavailable bool
+	}{
+		{label: "every feed up", replies: map[string]fakehttp.Reply{feedA: dentist, feedB: swim}, want: "Dentist,Swim"},
+		{label: "a feed down with nothing cached", replies: map[string]fakehttp.Reply{feedA: down, feedB: swim}, want: "Swim", wantUnavailable: true},
+		{label: "a feed unreachable with nothing cached", replies: map[string]fakehttp.Reply{feedA: dentist, feedB: unreachable}, want: "Dentist", wantUnavailable: true},
+		{label: "every feed down", replies: map[string]fakehttp.Reply{feedA: down, feedB: unreachable}, wantUnavailable: true},
+		{
+			label:   "a feed down with a cached copy",
+			earlier: map[string]fakehttp.Reply{feedA: dentist, feedB: swim},
+			replies: map[string]fakehttp.Reply{feedA: down, feedB: swim},
+			want:    "Dentist,Swim",
+		},
+		{
+			label:           "a feed that has never answered beside one with a cached copy",
+			earlier:         map[string]fakehttp.Reply{feedA: down, feedB: swim},
+			replies:         map[string]fakehttp.Reply{feedA: down, feedB: down},
+			want:            "Swim",
+			wantUnavailable: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			s := newSeam(t, now)
+			src := s.source(t, gemConfig(calendar.Feed{URL: feedA}, calendar.Feed{URL: feedB}))
+			if tt.earlier != nil {
+				for url, r := range tt.earlier {
+					s.tr.Set(url, r)
+				}
+				src.Days(s.now, 1)
+				s.now = s.now.Add(time.Hour)
+			}
+			for url, r := range tt.replies {
+				s.tr.Set(url, r)
+			}
+
+			got := src.Days(s.now, 1)
+
+			if g := dayEvents(got)[0]; g != tt.want {
+				t.Errorf("Today lists %q, want %q", g, tt.want)
+			}
+			if got.CalendarUnavailable != tt.wantUnavailable {
+				t.Errorf("CalendarUnavailable = %v, want %v", got.CalendarUnavailable, tt.wantUnavailable)
 			}
 		})
 	}

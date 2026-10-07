@@ -14,15 +14,28 @@ import (
 //
 // events are bucketed into whichever days are asked for; ones outside them
 // are dropped. A nil forecast is a forecast that never arrived.
-func InMemory(events []calendar.Event, forecast []weather.DailyForecast) Source {
-	return memory{events: events, forecast: forecast}
+func InMemory(events []calendar.Event, forecast []weather.DailyForecast, opts ...MemoryOption) Source {
+	m := memory{fetched: fetched{events: events, forecast: forecast, arrived: forecast != nil}}
+	for _, opt := range opts {
+		opt(&m)
+	}
+	return m
+}
+
+// MemoryOption adjusts what the in-memory adapter serves.
+type MemoryOption func(*memory)
+
+// CalendarDown serves the days as if a feed had nothing to draw from, so
+// every render reports CalendarUnavailable. events are still served: they
+// are the feeds that did answer.
+func CalendarDown() MemoryOption {
+	return func(m *memory) { m.calendarUnavailable = true }
 }
 
 type memory struct {
-	events   []calendar.Event
-	forecast []weather.DailyForecast
+	fetched
 }
 
 func (m memory) Days(now time.Time, n int) Data {
-	return assemble(daysFrom(now, n), m.events, m.forecast, m.forecast != nil)
+	return assemble(daysFrom(now, n), m.fetched)
 }

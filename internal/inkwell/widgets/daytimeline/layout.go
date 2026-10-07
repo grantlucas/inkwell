@@ -55,6 +55,8 @@ func stripH(lines int) int { return lines*drawkit.BodyLineH() + 2*notePadY }
 // take height only when they have something to say, so an ordinary day
 // gives the grid the whole height.
 type sections struct {
+	// Unavailable is whether the calendar note heads the widget.
+	Unavailable bool
 	// AllDay is how many lines the all-day strip lists, 0 for no strip.
 	AllDay  int
 	Earlier bool
@@ -64,7 +66,10 @@ type sections struct {
 // layout is where each part of the widget goes. Across the grid, left to
 // right: the hour labels, the weather lane, a rule, then the events.
 type layout struct {
-	// AllDay is the all-day strip across the top, empty when today has
+	// Unavailable is the band across the very top saying the calendar
+	// is unavailable, empty when every feed had something to draw from.
+	Unavailable image.Rectangle
+	// AllDay is the all-day strip under it, empty when today has
 	// nothing all day.
 	AllDay image.Rectangle
 	// Earlier and Later are the note bands above and below the grid,
@@ -80,26 +85,31 @@ type layout struct {
 	// Events is the column the blocks are drawn in.
 	Events image.Rectangle
 	// TopRule is whether the window's opening edge gets a solid rule: only
-	// when the all-day strip or the earlier note sits above the grid and
-	// needs closing off. Otherwise the grid starts at the widget's top
+	// when the calendar note, the all-day strip or the earlier note sits
+	// above the grid and needs closing off. Otherwise the grid starts at the widget's top
 	// edge with no rule, because what sits above the widget (a screen's
 	// separator, or the panel's edge) already closes it, and a second
 	// rule just under a separator reads as a double line.
 	TopRule bool
 }
 
-// computeLayout splits the widget's bounds. The all-day strip comes off
-// the top, and everything below is laid out inside whatever is left.
+// computeLayout splits the widget's bounds. The calendar note and then the
+// all-day strip come off the top, and everything below is laid out inside
+// whatever is left.
 func computeLayout(bounds image.Rectangle, s sections) layout {
 	agenda := bounds
 
 	var l layout
+	if s.Unavailable {
+		l.Unavailable = image.Rect(bounds.Min.X, agenda.Min.Y, bounds.Max.X, agenda.Min.Y+noteH())
+		agenda.Min.Y = l.Unavailable.Max.Y
+	}
 	if s.AllDay > 0 {
-		l.AllDay = image.Rect(bounds.Min.X, bounds.Min.Y, bounds.Max.X, bounds.Min.Y+stripH(s.AllDay))
+		l.AllDay = image.Rect(bounds.Min.X, agenda.Min.Y, bounds.Max.X, agenda.Min.Y+stripH(s.AllDay))
 		agenda.Min.Y = l.AllDay.Max.Y
 	}
 	top, bottom := agenda.Min.Y, agenda.Max.Y-gridPadY
-	if s.AllDay > 0 {
+	if s.Unavailable || s.AllDay > 0 {
 		top += gridPadY
 		l.TopRule = true
 	}

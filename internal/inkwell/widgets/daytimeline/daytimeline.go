@@ -51,12 +51,18 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	list := allDayList(now.Location(), w.Config.ShowLocation)
 	width := computeLayout(w.Bounds(), sections{}).Events.Dx()
 	l := computeLayout(w.Bounds(), sections{
-		AllDay:  min(list.Lines(p.AllDay, width), stripLines),
-		Earlier: p.Earlier > 0,
-		Later:   p.Later > 0,
+		Unavailable: data.CalendarUnavailable,
+		AllDay:      min(list.Lines(p.AllDay, width), stripLines),
+		Earlier:     p.Earlier > 0,
+		Later:       p.Later > 0,
 	})
 	tl := newTimeline(today.Start, w.Config.Window, l.Grid)
 
+	// A feed with nothing to draw from would leave its events' hours
+	// looking free, so the widget says so over whatever did arrive.
+	if data.CalendarUnavailable {
+		drawUnavailable(frame, l.Unavailable)
+	}
 	if len(p.AllDay) > 0 {
 		list.Draw(frame, stripText(l), p.AllDay)
 	}

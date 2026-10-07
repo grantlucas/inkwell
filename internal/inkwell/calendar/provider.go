@@ -3,6 +3,7 @@ package calendar
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -45,7 +46,8 @@ func NewProvider(client HTTPClient, now func() time.Time) *Provider {
 // refresh, the requesting widget's own setting, so one widget's setting
 // never makes another's data staler than it asked for. A feed that fails
 // to fetch serves its last good copy, if it has one, and its error is
-// returned alongside whatever the feeds produced.
+// returned alongside whatever the feeds produced. A failed feed with no
+// copy to serve wraps its error in ErrUnavailable.
 func (p *Provider) Occurrences(ctx context.Context, feeds []Feed, start, end time.Time, refresh time.Duration) ([]Event, error) {
 	var (
 		out  []Event
@@ -61,6 +63,14 @@ func (p *Provider) Occurrences(ctx context.Context, feeds []Feed, start, end tim
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Start.Before(out[j].Start) })
 	return collapse(out), errors.Join(errs...)
 }
+
+// ErrUnavailable marks a feed with nothing to show: its fetch failed and
+// there is no earlier good copy to serve in its place. A feed that fails
+// with a copy cached serves that copy and its error does not carry this,
+// so a widget can tell "the calendar is missing" from "the calendar is
+// stale", which looks the same as a working one. Test for it with
+// errors.Is on whatever Occurrences or a Source returns.
+var ErrUnavailable = errors.New("calendar feed unavailable")
 
 // Source binds a widget's feeds and refresh setting to the Provider, so
 // the widget can depend on the small Source interface while sharing the
@@ -118,6 +128,9 @@ func (c *feedCache) events(ctx context.Context, p *Provider, url string, refresh
 	}
 	parsed, err := fetchFeed(ctx, p.client, url)
 	if err != nil {
+		if !c.have {
+			return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
+		}
 		return c.parsed, err
 	}
 	c.have, c.parsed, c.fetched = true, parsed, p.now()
