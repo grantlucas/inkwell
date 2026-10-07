@@ -86,10 +86,10 @@ type layout struct {
 	Events image.Rectangle
 	// TopRule is whether the window's opening edge gets a solid rule: only
 	// when the calendar note, the all-day strip or the earlier note sits
-	// above the grid and needs closing off. Otherwise the grid starts at the widget's top
-	// edge with no rule, because what sits above the widget (a screen's
-	// separator, or the panel's edge) already closes it, and a second
-	// rule just under a separator reads as a double line.
+	// above the grid and needs closing off. Otherwise the grid starts at
+	// the widget's top edge with no rule, because what sits above the
+	// widget (a screen's separator, or the panel's edge) already closes
+	// it, and a second rule just under a separator reads as a double line.
 	TopRule bool
 }
 

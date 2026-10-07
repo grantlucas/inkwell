@@ -62,10 +62,13 @@ func NewProvider(client HTTPClient, ttl time.Duration, now func() time.Time, def
 func (p *Provider) Defaults() Settings { return p.defaults }
 
 // ForecastHorizon is how many days the Provider fetches for every location,
-// whatever span a widget asks for. It must exceed the longest span any widget
-// can be configured for by a day: the cache
-// outlives midnight, and once the first fetched day has ended a request is
-// answered from the days that remain.
+// whatever span a widget asks for. Every day a widget can show has to fall
+// inside it: weather-ahead lists up to seven days after today, eight days in
+// all, and a one-day widget sits at most daydata.MaxDay (six) days out. It is
+// meant to exceed the longest span by a day, because the cache outlives
+// midnight, and once the first fetched day has ended a request is answered
+// from the days that remain. Weather-ahead at its longest span uses all
+// eight, so after midnight its last day can be missing until the next fetch.
 const ForecastHorizon = 8
 
 // Forecast returns the first days of a forecast for loc from the given model.
