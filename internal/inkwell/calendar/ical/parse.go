@@ -212,8 +212,9 @@ func declinedAttendee(line string) (string, bool) {
 	for _, part := range splitParams(params)[1:] {
 		name, v, _ := strings.Cut(part, "=")
 		if strings.EqualFold(name, "PARTSTAT") && strings.EqualFold(strings.Trim(v, `"`), "DECLINED") {
-			if len(value) >= len("mailto:") && strings.EqualFold(value[:len("mailto:")], "mailto:") {
-				value = value[len("mailto:"):]
+			const scheme = "mailto:"
+			if len(value) >= len(scheme) && strings.EqualFold(value[:len(scheme)], scheme) {
+				value = value[len(scheme):]
 			}
 			return value, true
 		}
