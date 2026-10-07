@@ -6,12 +6,13 @@ import (
 	"strings"
 )
 
-// Feed is one subscribed calendar URL together with the rules that clean
-// up the events it returns. Feeds are configured per URL rather than
-// globally because the boilerplate worth stripping is a property of the
-// system that generated the feed: a league's team calendar prefixes
-// every summary with the player and team, while a personal calendar
-// needs no rewriting at all.
+// Feed is one subscribed calendar URL together with the cleanup its
+// events need before they are shown: the events its owner declined are
+// removed (see owner), and its rules rewrite or drop the rest. Rules are
+// configured per URL rather than globally because the boilerplate worth
+// stripping is a property of the system that generated the feed: a
+// league's team calendar prefixes every summary with the player and
+// team, while a personal calendar needs no rewriting at all.
 type Feed struct {
 	URL string
 

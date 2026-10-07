@@ -40,9 +40,32 @@ _Avoid_: Day column, grid day
 
 **Event list**:
 The lines a widget draws for a day's events, ending in "+N MORE" when some are
-hidden. That last line counts every event not shown, and takes the place of an
-event when there is no room for both.
+hidden. That last line counts every event left out for lack of room, and takes
+the place of an event when there is no room for both. Cancelled and declined
+events are never counted.
 _Avoid_: Event column, overflow marker
+
+## Calendar
+
+**Feed**:
+One subscribed calendar, together with the cleanup its events need before they
+are shown.
+_Avoid_: Calendar, subscription, source
+
+**Feed owner**:
+The person whose calendar a feed is. A feed has at most one; a feed with none
+has no declined events.
+_Avoid_: Self, user, me
+
+**Cancelled event**:
+An event its organizer has called off. It is off for everyone and is never
+shown.
+_Avoid_: Deleted event, removed event
+
+**Declined event**:
+An event the feed owner has said no to. It still happens for everyone else, but
+is never shown. Each occurrence of a repeating event is declined on its own.
+_Avoid_: Rejected event, hidden event
 
 ## Weather charts
 

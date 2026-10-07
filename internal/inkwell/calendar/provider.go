@@ -12,8 +12,9 @@ import (
 
 // Provider is the calendar module: given a widget's feeds, a window and
 // how fresh that widget wants its data, it returns the occurrences that
-// overlap the window. Fetching, parsing, rules, recurrence expansion,
-// windowing, collapsing duplicates and caching all happen behind it.
+// overlap the window. Fetching, parsing, dropping declined events, rules,
+// recurrence expansion, windowing, collapsing duplicates and caching all
+// happen behind it.
 //
 // It holds one cache per feed URL, shared by every widget in the process
 // across every screen, so a feed is fetched once however many widgets
@@ -55,7 +56,7 @@ func (p *Provider) Occurrences(ctx context.Context, feeds []Feed, start, end tim
 		if err != nil {
 			errs = append(errs, err)
 		}
-		out = append(out, ical.Occurrences(withRules(events, f.Rules), start, end)...)
+		out = append(out, ical.Occurrences(f.cleanUp(events), start, end)...)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Start.Before(out[j].Start) })
 	return collapse(out), errors.Join(errs...)
@@ -123,15 +124,20 @@ func (c *feedCache) events(ctx context.Context, p *Provider, url string, refresh
 	return c.parsed, nil
 }
 
-// withRules returns events with rules applied, in a new slice so the
-// shared cached copy is never edited. An excluded override is kept as a
-// cancellation: it still stands in for its occurrence, and dropping it
-// would bring that occurrence back at its usual time.
-func withRules(events []Event, rules []Rule) []Event {
+// cleanUp returns events as f's widgets may show them: without those
+// the feed owner declined, and with f's rules applied. It builds a new
+// slice so the shared cached copy is never edited.
+//
+// A removed override is kept as a cancellation: it still stands in for
+// its occurrence, and dropping it would bring that occurrence back at its
+// usual time. That is how declining one instance of a series hides only
+// that instance.
+func (f Feed) cleanUp(events []Event) []Event {
+	owner := f.owner()
 	out := make([]Event, 0, len(events))
 	for _, e := range events {
-		e, keep := applyRules(e, rules)
-		if !keep {
+		e, keep := applyRules(e, f.Rules)
+		if !keep || (owner != "" && e.DeclinedBy(owner)) {
 			if !e.IsOverride() {
 				continue
 			}

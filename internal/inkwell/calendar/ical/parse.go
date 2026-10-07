@@ -83,6 +83,10 @@ func Parse(r io.Reader) ([]Event, error) {
 				cur.Summary = unescapeText(value)
 			case "LOCATION":
 				cur.Location = unescapeText(value)
+			case "ATTENDEE":
+				if addr, ok := declinedAttendee(line); ok {
+					cur.Declined = append(cur.Declined, addr)
+				}
 			case "STATUS":
 				// RFC 5545 3.8.1.11: a CANCELLED VEVENT has been
 				// called off, so it must never reach the screen —
@@ -197,6 +201,25 @@ func unescapeText(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// declinedAttendee returns the address on an ATTENDEE line whose
+// PARTSTAT is DECLINED (RFC 5545 3.2.12). The address is the value's
+// mailto: URI with the scheme taken off; the CN parameter is a display
+// name anyone can share, so it never identifies who answered.
+func declinedAttendee(line string) (string, bool) {
+	params, value, _ := cutProperty(line)
+	for _, part := range splitParams(params)[1:] {
+		name, v, _ := strings.Cut(part, "=")
+		if strings.EqualFold(name, "PARTSTAT") && strings.EqualFold(strings.Trim(v, `"`), "DECLINED") {
+			const scheme = "mailto:"
+			if len(value) >= len(scheme) && strings.EqualFold(value[:len(scheme)], scheme) {
+				value = value[len(scheme):]
+			}
+			return value, true
+		}
+	}
+	return "", false
 }
 
 // cutProperty splits a content line into its "NAME;params" prefix and

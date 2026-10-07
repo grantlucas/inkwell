@@ -827,3 +827,99 @@ func TestParse_Overrides(t *testing.T) {
 		})
 	}
 }
+
+// Who has declined an event lives only on their own ATTENDEE line, as
+// PARTSTAT=DECLINED; the event's STATUS is untouched. The address is the
+// mailto: value, matched without regard to case, and the display name
+// (CN) plays no part. Google folds attendee lines at 75 octets, so the
+// address usually lands on a continuation line.
+func TestParse_DeclinedBy(t *testing.T) {
+	const owner = "avery@example.com"
+
+	cases := []struct {
+		label     string
+		attendees string
+		want      bool
+	}{
+		{
+			label:     "owner declined",
+			attendees: "ATTENDEE;PARTSTAT=DECLINED:mailto:avery@example.com\r\n",
+			want:      true,
+		},
+		{
+			label: "owner declined on a folded line, as Google writes it",
+			attendees: "ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=DECLINED;CN=Av\r\n" +
+				" ery Quinn;X-NUM-GUESTS=0:mailto:avery@example.com\r\n",
+			want: true,
+		},
+		{
+			label:     "address and mailto differ in case",
+			attendees: "ATTENDEE;PARTSTAT=DECLINED:MAILTO:Avery@Example.COM\r\n",
+			want:      true,
+		},
+		{
+			label:     "lowercase partstat",
+			attendees: "ATTENDEE;PARTSTAT=declined:mailto:avery@example.com\r\n",
+			want:      true,
+		},
+		{
+			label:     "quoted partstat and a CN holding a colon",
+			attendees: "ATTENDEE;CN=\"Quinn, Avery: Eng\";PARTSTAT=\"DECLINED\":mailto:avery@example.com\r\n",
+			want:      true,
+		},
+		{
+			label:     "owner accepted",
+			attendees: "ATTENDEE;PARTSTAT=ACCEPTED:mailto:avery@example.com\r\n",
+		},
+		{
+			label:     "owner tentative",
+			attendees: "ATTENDEE;PARTSTAT=TENTATIVE:mailto:avery@example.com\r\n",
+		},
+		{
+			label:     "owner has not answered",
+			attendees: "ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:avery@example.com\r\n",
+		},
+		{
+			label:     "no partstat",
+			attendees: "ATTENDEE:mailto:avery@example.com\r\n",
+		},
+		{
+			label: "another attendee declined",
+			attendees: "ATTENDEE;PARTSTAT=ACCEPTED:mailto:avery@example.com\r\n" +
+				"ATTENDEE;PARTSTAT=DECLINED:mailto:coworker@example.com\r\n",
+		},
+		{
+			label:     "declined attendee only shares the owner's name",
+			attendees: "ATTENDEE;PARTSTAT=DECLINED;CN=avery@example.com:mailto:other@example.com\r\n",
+		},
+		{
+			label:     "no attendees",
+			attendees: "",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.label, func(t *testing.T) {
+			feed := "BEGIN:VCALENDAR\r\n" +
+				"BEGIN:VEVENT\r\n" +
+				"UID:sync@example.com\r\n" +
+				"DTSTART:20261006T150000Z\r\n" +
+				"DTEND:20261006T153000Z\r\n" +
+				"SUMMARY:Weekly Sync\r\n" +
+				tc.attendees +
+				"END:VEVENT\r\n" +
+				"END:VCALENDAR\r\n"
+
+			events, err := Parse(strings.NewReader(feed))
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if len(events) != 1 {
+				t.Fatalf("got %d events, want 1", len(events))
+			}
+			if got := events[0].DeclinedBy(owner); got != tc.want {
+				t.Errorf("DeclinedBy(%q) = %v, want %v", owner, got, tc.want)
+			}
+		})
+	}
+}

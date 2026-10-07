@@ -600,6 +600,31 @@ than each line — summaries often contain real newlines, so use `(?m)`
 for per-line anchoring. An invalid regex fails at startup, naming the
 feed and rule index.
 
+#### Declined events
+
+On a Google Calendar feed, meetings you have declined are hidden
+automatically. There is nothing to configure. They are removed before
+anything else looks at the feed, so they never count towards an event
+list's "+N MORE" either. Declining a whole repeating series hides every
+occurrence; declining one occurrence hides only that one.
+
+Declining doesn't cancel an event, because it still happens for everyone
+else. Your answer is recorded only on your own attendee entry, and every
+invitee is listed on the event, so Inkwell has to know which entry is
+yours. A Google secret address says so: for a primary calendar it has
+the shape
+`https://calendar.google.com/calendar/ical/<your email>/private-…/basic.ics`,
+and the email in it is the feed's owner. Only that exact shape counts.
+A secondary calendar's address carries the calendar's own ID, not a
+person's email, so it names no owner.
+
+Any other feed has no owner, so nothing on it is treated as declined and
+it shows exactly what it carries. An email address elsewhere in a URL,
+such as a coach's address in a league feed's query string, is never
+taken as the owner, since hiding events by someone else's answers would
+be worse than showing a declined one. Cancelled events, which the
+organizer has called off for everyone, are hidden on every feed.
+
 ### `day-timeline`
 
 Today only, on an hourly grid. Each event is a block from its real

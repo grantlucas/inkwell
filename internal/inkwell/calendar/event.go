@@ -1,8 +1,9 @@
 // Package calendar is the calendar module every calendar widget reads
 // through: given a widget's feeds, a window and a refresh setting, its
 // Provider returns the occurrences that overlap the window, with
-// recurrences expanded, overrides honoured, rules applied and duplicates
-// collapsed, from one cache per feed shared across widgets and screens.
+// recurrences expanded, overrides honoured, declined events removed,
+// rules applied and duplicates collapsed, from one cache per feed shared
+// across widgets and screens.
 package calendar
 
 import (
