@@ -2,6 +2,7 @@ package daydata
 
 import (
 	"context"
+	"errors"
 	"log"
 	"sync"
 	"time"
@@ -49,6 +50,7 @@ func fetch(ctx context.Context, widgetName string, cal calendar.Source, ws weath
 		// Kept even alongside an error: a partial result is still
 		// worth drawing, and the sources return what they managed.
 		out.events = got
+		out.calendarUnavailable = errors.Is(err, calendar.ErrUnavailable)
 	})
 
 	if ws != nil {
@@ -67,13 +69,14 @@ func fetch(ctx context.Context, widgetName string, cal calendar.Source, ws weath
 	return out
 }
 
-// fetched is what one render's fetch produced: the events, the
-// forecast's days, and whether a forecast arrived at all. A 200 response
-// with no daily data arrived, carrying no days.
+// fetched is what one render's fetch produced: the events, whether a feed
+// had none to give, the forecast's days, and whether a forecast arrived at
+// all. A 200 response with no daily data arrived, carrying no days.
 type fetched struct {
-	events   []calendar.Event
-	forecast []weather.DailyForecast
-	arrived  bool
+	events              []calendar.Event
+	calendarUnavailable bool
+	forecast            []weather.DailyForecast
+	arrived             bool
 }
 
 // fetchContext returns the render-scope context the screens share, and

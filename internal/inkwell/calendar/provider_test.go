@@ -2,6 +2,7 @@ package calendar
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"slices"
 	"sync"
@@ -46,14 +47,17 @@ func TestProvider_FailedFetch(t *testing.T) {
 	up := fakehttp.Reply{Body: teamICS}
 
 	steps := []struct {
-		label        string
-		at           time.Duration
-		team         fakehttp.Reply
-		want         []string
-		wantErr      bool
-		wantRequests int // upstream requests for the team feed so far
+		label   string
+		at      time.Duration
+		team    fakehttp.Reply
+		want    []string
+		wantErr bool
+		// wantUnavailable is whether the error says a feed had nothing
+		// to serve, which only a failure with no good copy does.
+		wantUnavailable bool
+		wantRequests    int // upstream requests for the team feed so far
 	}{
-		{label: "failing before any good copy serves only the other feed", team: down, want: []string{`Jane Doe\nDentist`}, wantErr: true, wantRequests: 1},
+		{label: "failing before any good copy serves only the other feed", team: down, want: []string{`Jane Doe\nDentist`}, wantErr: true, wantUnavailable: true, wantRequests: 1},
 		{label: "the next request retries", team: up, want: []string{"Jane Doe\nRavens\nPractice\nEast Rink", `Jane Doe\nDentist`}, wantRequests: 2},
 		{label: "failing after a good copy serves that copy", at: time.Hour, team: down, want: []string{"Jane Doe\nRavens\nPractice\nEast Rink", `Jane Doe\nDentist`}, wantErr: true, wantRequests: 3},
 		{label: "and keeps retrying", at: time.Hour, team: down, want: []string{"Jane Doe\nRavens\nPractice\nEast Rink", `Jane Doe\nDentist`}, wantErr: true, wantRequests: 4},
@@ -70,6 +74,9 @@ func TestProvider_FailedFetch(t *testing.T) {
 		got, err := src.Events(context.Background(), day, day.AddDate(0, 0, 1))
 		if (err != nil) != s.wantErr {
 			t.Errorf("%s: err = %v, want error %v", s.label, err, s.wantErr)
+		}
+		if got := errors.Is(err, ErrUnavailable); got != s.wantUnavailable {
+			t.Errorf("%s: err = %v, unavailable %v, want %v", s.label, err, got, s.wantUnavailable)
 		}
 		if got := summaries(got); !slices.Equal(got, s.want) {
 			t.Errorf("%s: got %q, want %q", s.label, got, s.want)
