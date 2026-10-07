@@ -608,7 +608,7 @@ anything else looks at the feed, so they never count towards an event
 list's "+N MORE" either. Declining a whole repeating series hides every
 occurrence; declining one occurrence hides only that one, even if it was
 moved to another time. Each occurrence follows your own answer, so
-accepting one occurrence of a series you declined shows just that one.
+accepting a single occurrence of a series you declined shows it alone.
 
 Declining doesn't cancel an event, because it still happens for everyone
 else. Your answer is recorded only on your own attendee entry, and every
