@@ -54,13 +54,15 @@ func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg 
 // to the rectangle it is given, fitting whole events and announcing the
 // rest, so there is no size too small to draw into: a short list hides
 // more and says so. A failed fetch is logged by the day data module and
-// never returned, so it lists what arrived.
+// never returned, so it lists what arrived, under a note saying the
+// calendar is unavailable when a feed had no copy to fall back on.
 func (w *Widget) Render(frame *image.Paletted) error {
 	drawkit.FillWhite(frame, w.Bounds())
 
 	now := w.Now()
 	cfg := w.Config
-	events := w.Days.Days(now, cfg.Day+1).Days[cfg.Day].Events
+	data := w.Days.Days(now, cfg.Day+1)
+	events := data.Days[cfg.Day].Events
 	if cfg.HideFinished {
 		events = Remaining(events, now)
 	}
@@ -68,6 +70,7 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	if cfg.Empty != nil {
 		list.Empty.Text = *cfg.Empty
 	}
+	list.Unavailable = data.CalendarUnavailable
 	list.Draw(frame, w.Bounds(), events)
 	return nil
 }

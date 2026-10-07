@@ -19,6 +19,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/fonts"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"golang.org/x/image/font"
 )
@@ -29,6 +30,11 @@ import (
 // is left off. An empty list's Note gives out at the same width, so the
 // list and its empty state give out together.
 const minChars = 3
+
+// noteLines is how many lines the unavailable-calendar note may wrap to:
+// one a word, so a bold-five column says "CALENDAR" over "UNAVAILABLE"
+// rather than cut it short.
+const noteLines = 2
 
 // Layout is how an event's time and title sit relative to each other.
 type Layout int
@@ -71,6 +77,12 @@ type List struct {
 	// Empty is what a list with no events says, on its first line. The
 	// zero Note says nothing.
 	Empty Note
+	// Unavailable is set when a calendar the events come from could not
+	// be read, so the list may be missing some. The list then says so
+	// (daydata.NoCalendar) on its first lines, in the Empty note's style,
+	// and lists what did arrive under it. It never says Empty: a day it
+	// could not read is not a free one.
+	Unavailable bool
 	// ShowLocation writes " @ " and the location after a title.
 	ShowLocation bool
 	// Location is the zone clock times are written in.
@@ -114,6 +126,8 @@ type block struct {
 	height int
 	// more is set on the "+N MORE" line.
 	more bool
+	// note is set on the unavailable-calendar note.
+	note bool
 }
 
 // placed is a block at its top edge.
@@ -135,8 +149,9 @@ type placed struct {
 func (s List) Draw(frame *image.Paletted, r image.Rectangle, events []calendar.Event) int {
 	blocks, hidden := s.layout(r, events)
 	for i, b := range blocks {
-		if s.Rules && i > 0 && !b.more {
-			// Across the middle of the gap above this event.
+		if s.Rules && i > 0 && !b.more && !blocks[i-1].note {
+			// Across the middle of the gap between this event and the
+			// one above it.
 			drawkit.DrawHLine(frame, r.Min.X, r.Max.X, b.top-s.Gap+s.Gap/2, widget.PaperBlack)
 		}
 		for _, l := range b.lines {
@@ -149,7 +164,8 @@ func (s List) Draw(frame *image.Paletted, r image.Rectangle, events []calendar.E
 // Lines reports how many lines events need to be drawn in full at width
 // pixels: every listed event's lines (a stacked event's time and title
 // lines, an inline event's one), and the "+N MORE" line when MaxEvents
-// hides any. An empty list needs its Empty line, if it has one. A line
+// hides any. An empty list needs its Empty line, if it has one. An
+// Unavailable list needs its note's lines instead, ahead of its events'. A line
 // is one row of text, whatever size it is drawn at. A width too narrow
 // to list events needs only the "+N MORE" line, and one without a
 // character of room needs none.
@@ -160,11 +176,14 @@ func (s List) Lines(events []calendar.Event, width int) int {
 		}
 		return 0
 	}
+	n := 0
+	if s.Unavailable {
+		n, s.Empty = s.unavailable().block(width, noteLines).rows, Note{}
+	}
 	if len(events) == 0 && s.Empty.Text != "" {
 		return 1
 	}
 	listed := s.listed(events)
-	n := 0
 	for _, e := range listed {
 		n += s.event(e, width).rows
 	}
@@ -198,6 +217,35 @@ func (s List) listed(events []calendar.Event) []calendar.Event {
 // layout places as many events as fit in r, then the "+N MORE" line
 // when any are left over, and reports how many were left over.
 func (s List) layout(r image.Rectangle, events []calendar.Event) ([]placed, int) {
+	if !s.Unavailable {
+		return s.list(r, events)
+	}
+
+	// What arrived is listed by the usual rules, under the note when it
+	// fits and in its place when it does not. Never with the Empty line:
+	// a day the list could not read is not a free one.
+	rest := s
+	rest.Unavailable, rest.Empty = false, Note{}
+	note := s.unavailable().block(r.Dx(), noteLines)
+	if _, ok := s.charsIn(r.Dx()); !ok || note.rows == 0 || r.Min.Y+note.height > r.Max.Y {
+		return rest.list(r, events)
+	}
+	note.note = true
+	head := placed{block: note, top: r.Min.Y}
+	r.Min.Y += note.height + s.Gap
+	out, hidden := rest.list(r, events)
+	return append([]placed{head}, out...), hidden
+}
+
+// unavailable is the note the list says when its calendar could not be
+// read, in the style of its Empty note.
+func (s List) unavailable() Note {
+	return Note{Text: daydata.NoCalendar, Scale: s.Empty.Scale, Centred: s.Empty.Centred}
+}
+
+// list places as many events as fit in r, then the "+N MORE" line when
+// any are left over, and reports how many were left over.
+func (s List) list(r image.Rectangle, events []calendar.Event) ([]placed, int) {
 	maxChars, ok := s.charsIn(r.Dx())
 
 	// The one fit rule: a block fits when its last line's descent ends
@@ -206,7 +254,7 @@ func (s List) layout(r image.Rectangle, events []calendar.Event) ([]placed, int)
 	fits := func(b block, top int) bool { return top+b.height <= r.Max.Y }
 
 	if len(events) == 0 {
-		if empty := s.Empty.block(r.Dx()); ok && s.Empty.Text != "" && fits(empty, r.Min.Y) {
+		if empty := s.Empty.block(r.Dx(), 1); ok && s.Empty.Text != "" && fits(empty, r.Min.Y) {
 			return []placed{{block: empty, top: r.Min.Y}}, 0
 		}
 		return nil, 0
@@ -372,26 +420,32 @@ func note(s string, face font.Face, maxChars int) block {
 	}
 }
 
-// block resolves the note to the one line it draws in a list width
-// pixels wide. A scaled note is cut on its own characters, clear of the
-// pixels its dilation spills past its advance, so it stays inside the
-// list.
-func (n Note) block(width int) block {
+// block resolves the note to the lines it draws in a list width pixels
+// wide: one line cut to the width, or up to maxLines wrapped on words.
+// A scaled note is cut on its own characters, clear of the pixels its
+// dilation spills past its advance, so it stays inside the list.
+func (n Note) block(width, maxLines int) block {
 	face, scale := drawkit.BodyFace, 1
 	if n.Scale > 1 {
 		face, scale = drawkit.BodyBoldFace, n.Scale
 	}
 	drawer := drawkit.Scaled(face, scale, widget.PaperBlack)
-	s := truncate(n.Text, (width-drawer.Grow)/(scale*drawkit.BodyAdvance()))
-	dx := 0
-	if n.Centred {
-		dx = (width - drawer.Measure(s)) / 2
+	chars := (width - drawer.Grow) / (scale * drawkit.BodyAdvance())
+	lines := []string{truncate(n.Text, chars)}
+	if maxLines > 1 {
+		lines = Wrap(n.Text, chars, maxLines)
 	}
-	return block{
-		lines:  []text{{s: s, drawer: drawer, dx: dx, baseline: scale * drawkit.BodyAscent()}},
-		rows:   1,
-		height: scale*drawkit.BodyLineH() + drawer.Grow,
+
+	step := scale * drawkit.BodyLineH()
+	b := block{rows: len(lines), height: len(lines)*step + drawer.Grow}
+	for i, s := range lines {
+		dx := 0
+		if n.Centred {
+			dx = (width - drawer.Measure(s)) / 2
+		}
+		b.lines = append(b.lines, text{s: s, drawer: drawer, dx: dx, baseline: scale*drawkit.BodyAscent() + i*step})
 	}
+	return b
 }
 
 // body draws in face at body size.
