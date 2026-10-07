@@ -47,6 +47,38 @@ the `gh pr` equivalents:
 GitHub shares one number space across issues and PRs, so a bare `#42` may be
 either — resolve with `gh pr view 42` and fall back to `gh issue view 42`.
 
+## Design references
+
+Agents can't open private links (a claude.ai artifact, a Figma file shared
+only with the owner). When a spec or ticket rests on a mockup, put the images
+where every agent can read them, and embed them in the issue body or a
+comment:
+
+- Push the images to an orphan branch named `assets/<spec>-design-reference`
+  and embed them by raw URL,
+  `https://raw.githubusercontent.com/grantlucas/inkwell/<branch>/<path>`.
+  `gh` can't attach images to an issue, and the orphan branch keeps them out
+  of `main`.
+- Keep the private link beside them only as a pointer for the owner.
+- Say on the image that mockups are drawn at twice the panel's resolution in
+  a stand-in typeface: agents take structure from them, never pixel sizes.
+
+## Integration branches
+
+A spec built by several agents at once lands on one integration branch
+(`feat/<spec>-<slug>`), and every ticket still gets its own PR, because the
+release notes are built from merged PRs.
+
+- A ticket PR targets the integration branch and is merged with
+  `gh pr merge --merge`. Name its ticket with neutral wording, such as
+  "Ticket: #N, which closes when the integration branch merges to main".
+  Leave out `Closes`, `Fixes` and `Resolves`: GitHub ignores closing keywords
+  on PRs into a non-default branch.
+- The integration PR into `main` carries the `Closes #N` lines for every
+  ticket it finishes, and is opened as a draft after the first ticket lands.
+- A ticket done only in part (a step deliberately left for later) gets
+  "Part of #N" and stays open with a comment listing what remains.
+
 ## When a skill says "publish to the issue tracker"
 
 Create a GitHub issue.
