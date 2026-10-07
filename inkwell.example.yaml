@@ -120,8 +120,8 @@ dashboard:
                                  # refresh cadence above
             # Location, model and temp_unit are inherited from the
             # top-level weather: block; override per widget if needed.
-        # The rule between the agenda and the weather column, as heavy as
-        # the one under the clock.
+        # The rule between the day-timeline and the weather widgets on
+        # its right, as heavy as the one under the clock.
         - type: separator
           bounds: [532, 48, 534, 480]
           refresh: "static"
@@ -131,7 +131,7 @@ dashboard:
         # 3x, the low beside it and the condition name. It reads no
         # calendar, so it takes only the weather keys every weather widget
         # takes, all optional; feeds and the other calendar keys are
-        # rejected. It needs at least 254 x 108 px. With no forecast for
+        # rejected. It needs at least 238 x 108 px. With no forecast for
         # today it says NO FORECAST rather than drawing a made-up number.
         - type: today-weather
           bounds: [534, 48, 800, 168]

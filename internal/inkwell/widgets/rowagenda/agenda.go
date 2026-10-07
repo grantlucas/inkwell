@@ -28,8 +28,8 @@ const (
 // Event.Start is a correct instant but carries whatever zone its feed
 // serialized it with, so formatting it directly leaks that zone onto
 // the panel. It must never be nil.
-func agendaStyle(showLocation bool, loc *time.Location) eventlist.Style {
-	return eventlist.PresetInline.Style(0, showLocation, loc)
+func agendaStyle(showLocation bool, loc *time.Location) eventlist.List {
+	return eventlist.InlineStyle.List(0, showLocation, loc)
 }
 
 // agendaWidth is how wide every row's list is in bounds, which is what

@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	// gridPadY is the paper above and below the grid when no note sits
-	// there, so the edge rules don't touch a neighbour's.
+	// gridPadY is the paper between the grid's solid edge rules and
+	// whatever sits beyond them in the widget's bounds, so a rule doesn't
+	// touch the all-day strip's text or a neighbour's rule.
 	gridPadY = 2
 	// gutterW is the hour-label column: two digits and a little paper on
 	// each side.
@@ -25,8 +26,9 @@ const (
 	// eventsPadX is the paper between the rule and the blocks, and
 	// between the blocks and the right edge.
 	eventsPadX = 4
-	// minEventsW is the narrowest event column worth drawing: room for a
-	// label's time, a few characters of title and a continuation mark.
+	// minEventsW is the narrowest the events can be and be worth
+	// drawing: room for a label's time, a few characters of title and a
+	// continuation mark.
 	minEventsW = 120
 
 	// The widget will not draw into less than this. Below it the hour
@@ -77,6 +79,13 @@ type layout struct {
 	Lane image.Rectangle
 	// Events is the column the blocks are drawn in.
 	Events image.Rectangle
+	// TopRule is whether the window's opening edge gets a solid rule: only
+	// when the all-day strip or the earlier note sits above the grid and
+	// needs closing off. Otherwise the grid starts at the widget's top
+	// edge with no rule, because what sits above the widget (a screen's
+	// separator, or the panel's edge) already closes it, and a second
+	// rule just under a separator reads as a double line.
+	TopRule bool
 }
 
 // computeLayout splits the widget's bounds. The all-day strip comes off
@@ -89,10 +98,15 @@ func computeLayout(bounds image.Rectangle, s sections) layout {
 		l.AllDay = image.Rect(bounds.Min.X, bounds.Min.Y, bounds.Max.X, bounds.Min.Y+stripH(s.AllDay))
 		agenda.Min.Y = l.AllDay.Max.Y
 	}
-	top, bottom := agenda.Min.Y+gridPadY, agenda.Max.Y-gridPadY
+	top, bottom := agenda.Min.Y, agenda.Max.Y-gridPadY
+	if s.AllDay > 0 {
+		top += gridPadY
+		l.TopRule = true
+	}
 	if s.Earlier {
 		l.Earlier = image.Rect(agenda.Min.X, agenda.Min.Y, agenda.Max.X, agenda.Min.Y+noteH())
 		top = l.Earlier.Max.Y
+		l.TopRule = true
 	}
 	if s.Later {
 		l.Later = image.Rect(agenda.Min.X, agenda.Max.Y-noteH(), agenda.Max.X, agenda.Max.Y)
@@ -105,9 +119,8 @@ func computeLayout(bounds image.Rectangle, s sections) layout {
 	return l
 }
 
-// stripText is where the all-day strip's list goes: under the event
-// column, so it lines up with the blocks and the notes, inside the
-// strip's padding.
+// stripText is where the all-day strip's list goes: over the events, so
+// it lines up with the blocks and the notes, inside the strip's padding.
 func stripText(l layout) image.Rectangle {
 	return image.Rect(l.Events.Min.X, l.AllDay.Min.Y+notePadY, l.Events.Max.X, l.AllDay.Max.Y-notePadY)
 }

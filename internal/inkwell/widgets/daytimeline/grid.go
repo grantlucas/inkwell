@@ -19,9 +19,10 @@ const (
 )
 
 // drawGrid draws the hour grid: a two-digit label for each hour in the
-// gutter, a dotted rule across the lane and events at each hour, solid
-// rules at the window's edges, and a rule down the grid between the
-// labels and lane on its left and the events on its right.
+// gutter, a dotted rule across the lane and events at each hour, a solid
+// rule at the window's end and, when a band of the widget's own sits above
+// the grid, at its start, and a rule down the grid between the labels and
+// lane on its left and the events on its right.
 //
 // When the rows are shorter than a line of text, as a whole-day window
 // makes them, every other hour is labelled so the labels don't run into
@@ -34,9 +35,12 @@ func drawGrid(frame *image.Paletted, l layout, tl timeline, win Window) {
 	}
 	for h := 0; h <= hours; h++ {
 		y := tl.y(hourAt(tl.start, h))
-		if h == 0 || h == hours {
+		switch {
+		case h == 0 && !l.TopRule:
+			// Closed off by whatever sits above the widget.
+		case h == 0 || h == hours:
 			drawkit.DrawHLine(frame, l.Grid.Min.X, l.Events.Max.X, y, widget.PaperBlack)
-		} else {
+		default:
 			for x := l.Gutter.Max.X; x < l.Events.Max.X; x += dotEvery {
 				drawkit.DrawHLine(frame, x, x+1, y, widget.PaperBlack)
 			}

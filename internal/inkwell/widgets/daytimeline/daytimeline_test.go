@@ -238,50 +238,65 @@ func TestWidget_LabelsBlocks(t *testing.T) {
 	}
 }
 
-// A block with room for a second line says when its event ends, which
-// the block's length only shows approximately. One a line tall doesn't,
-// and neither does a reminder with no end.
-func TestWidget_TallBlocksSayWhenTheyEnd(t *testing.T) {
+// A block with room for more than one line gives them to the title: it
+// wraps at word boundaries onto the lines under the start time, and only
+// the last line that fits is cut with ». The block's height and its
+// continuation marks say where the event ends. A block one line tall
+// keeps the time and the title on that line, and draws nothing under it.
+func TestWidget_TallBlocksWrapTheTitle(t *testing.T) {
+	const title = "Quarterly planning session with the extended platform group"
 	tests := []struct {
-		label     string
-		from, to  time.Time
-		wantUntil string
+		label    string
+		title    string
+		from, to time.Time
+		// want is each line after the start time, the first beside it.
+		want []string
 	}{
-		{label: "upcoming two hours", from: at(15, 0), to: at(17, 0), wantUntil: "UNTIL 17:00"},
-		{label: "finished two hours", from: at(9, 0), to: at(11, 0), wantUntil: "UNTIL 11:00"},
-		{label: "runs past the window", from: at(20, 0), to: at(25, 0), wantUntil: "UNTIL 01:00"},
-		{label: "one hour", from: at(15, 0), to: at(16, 0)},
+		{
+			label: "upcoming, wrapped at a word",
+			title: title, from: at(15, 0), to: at(16, 30),
+			want: []string{"Quarterly planning session", "with the extended platform group"},
+		},
+		{
+			label: "finished, wrapped at a word",
+			title: title, from: at(9, 0), to: at(10, 30),
+			want: []string{"Quarterly planning session", "with the extended platform group"},
+		},
+		{
+			label: "the last line that fits is cut",
+			title: "Quarterly planning session with the extended platform engineering group",
+			from:  at(15, 0), to: at(16, 30),
+			want: []string{"Quarterly planning session", "with the extended platform enginee»"},
+		},
+		{
+			label: "one line tall",
+			title: title, from: at(15, 0), to: at(16, 0),
+			want: []string{"Quarterly planning session w»"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			e := span("Block", tt.from, tt.to)
+			e := span(tt.title, tt.from, tt.to)
 			frame := renderToFrame(t, newWidget(testBounds, []ical.Event{e}, defaultConfig()))
 			l, tl := gridOf(testBounds, defaultConfig().Window)
 			block := blockRect(l.Events, tl, e)
 
+			ref := newTestFrame()
+			drawkit.FillRect(ref, block, widget.PaperBlack)
 			contrast, inner := widget.PaperWhite, block
 			if finished(e, testTime) {
 				contrast, inner = widget.PaperBlack, block.Inset(outlineW)
-			}
-			// Everything under the first line.
-			below := image.Rect(inner.Min.X, inner.Min.Y+drawkit.BodyLineH(), inner.Max.X-markClear, inner.Max.Y)
-			if tt.wantUntil == "" {
-				if n := countIndexIn(frame, below, contrast); n != 0 {
-					t.Errorf("%d px under the first line of a block with no room for a second", n)
-				}
-				return
-			}
-			// The second line reads exactly the end time, written in
-			// the regular cut at the label's left.
-			ref := newTestFrame()
-			drawkit.FillRect(ref, block, widget.PaperBlack)
-			if finished(e, testTime) {
 				drawkit.FillWhite(ref, inner)
 			}
-			drawkit.DrawText(ref, inner.Min.X+labelPadX, labelBaseline(inner)+drawkit.BodyLineH(),
-				tt.wantUntil, drawkit.BodyFace, contrast)
-			if !sameIn(frame, ref, below) {
-				t.Errorf("second line doesn't read %q", tt.wantUntil)
+			x, baseline := inner.Min.X+labelPadX, labelBaseline(inner)
+			clip, _ := ref.SubImage(inner).(*image.Paletted)
+			drawkit.DrawText(clip, x, baseline, tt.from.Format("15:04"), drawkit.BodyBoldFace, contrast)
+			drawkit.DrawText(clip, x+6*drawkit.BodyAdvance(), baseline, tt.want[0], drawkit.BodyFace, contrast)
+			for i, line := range tt.want[1:] {
+				drawkit.DrawText(clip, x, baseline+(i+1)*drawkit.BodyLineH(), line, drawkit.BodyFace, contrast)
+			}
+			if !testutil.SameIn(frame, ref, block) {
+				t.Errorf("block doesn't read %q", tt.want)
 			}
 		})
 	}
@@ -290,7 +305,7 @@ func TestWidget_TallBlocksSayWhenTheyEnd(t *testing.T) {
 // An event too short for a legible label still gets one: its block
 // starts at its true time but is drawn a whole text line tall, so the
 // label is written in full rather than clipped or left off. The block
-// is exactly that line, with no second line saying when it ends.
+// is exactly that line, with no second line of title under it.
 func TestWidget_ShortBlocksGetAWholeLine(t *testing.T) {
 	tests := []struct {
 		label    string
@@ -333,14 +348,14 @@ func TestWidget_ShortBlocksGetAWholeLine(t *testing.T) {
 			}
 			drawkit.DrawText(ref, inner.Min.X+labelPadX, labelBaseline(inner), tt.from.Format("15:04"), drawkit.BodyBoldFace, contrast)
 			drawkit.DrawText(ref, inner.Min.X+labelPadX+6*drawkit.BodyAdvance(), labelBaseline(inner), "Standup", drawkit.BodyFace, contrast)
-			if !sameIn(frame, ref, block) {
+			if !testutil.SameIn(frame, ref, block) {
 				t.Errorf("block doesn't read %q in full", tt.from.Format("15:04")+" Standup")
 			}
 		})
 	}
 }
 
-// lane is one side of the event column when two events share it.
+// lane is one side of the events when two events share them.
 type lane int
 
 const (
@@ -348,7 +363,7 @@ const (
 	right
 )
 
-// Two events whose blocks would overlap share the event column side by
+// Two events whose blocks would overlap share the events' width side by
 // side, each at its own true start and end, so a partial overlap shows
 // as two blocks of different heights. Overlap is judged on the blocks as
 // drawn: a short event's line-tall block running into the next event
@@ -484,7 +499,7 @@ func TestWidget_CountsAThirdSimultaneousEventInATag(t *testing.T) {
 			}
 			ref := newTestFrame()
 			drawTag(ref, tg)
-			if !sameIn(frame, ref, tg.Rect) {
+			if !testutil.SameIn(frame, ref, tg.Rect) {
 				t.Errorf("no %q tag at %v", tt.wantTag, tg.Rect)
 			}
 			// The tag reads as ink on paper.
@@ -570,8 +585,8 @@ func TestWidget_ListsAllDayEventsInAStripAboveTheGrid(t *testing.T) {
 				if !l.AllDay.Empty() {
 					t.Fatalf("strip %v with nothing to list", l.AllDay)
 				}
-				if l.Grid.Min.Y != testBounds.Min.Y+gridPadY {
-					t.Errorf("grid starts at %d with no strip, want %d", l.Grid.Min.Y, testBounds.Min.Y+gridPadY)
+				if l.Grid.Min.Y != testBounds.Min.Y {
+					t.Errorf("grid starts at %d with no strip, want the widget's top, %d", l.Grid.Min.Y, testBounds.Min.Y)
 				}
 				return
 			}
@@ -584,8 +599,8 @@ func TestWidget_ListsAllDayEventsInAStripAboveTheGrid(t *testing.T) {
 
 			// The strip reads as the event list draws these events.
 			ref := newTestFrame()
-			eventlist.Style{Layout: eventlist.Inline, Location: time.UTC}.Draw(ref, stripText(l), tt.wantList)
-			if !sameIn(frame, ref, l.AllDay) {
+			eventlist.List{Layout: eventlist.Inline, Location: time.UTC}.Draw(ref, stripText(l), tt.wantList)
+			if !testutil.SameIn(frame, ref, l.AllDay) {
 				t.Error("strip differs from the event list of its events")
 			}
 		})
@@ -651,31 +666,21 @@ func TestWidget_LabelTimeIsInTheDisplayZone(t *testing.T) {
 	ref := newTestFrame()
 	drawkit.FillRect(ref, block, widget.PaperBlack)
 	drawLabel(ref, block, e, toronto, false, widget.PaperWhite)
-	if !sameIn(frame, ref, block) {
+	if !testutil.SameIn(frame, ref, block) {
 		t.Error("label differs from one written at 15:00")
 	}
 	wrong := newTestFrame()
 	drawkit.FillRect(wrong, block, widget.PaperBlack)
 	drawLabel(wrong, block, e, time.UTC, false, widget.PaperWhite)
-	if sameIn(frame, wrong, block) {
+	if testutil.SameIn(frame, wrong, block) {
 		t.Error("label matches one written in UTC")
 	}
 }
 
-// sameIn reports whether a and b agree on every pixel of r.
-func sameIn(a, b *image.Paletted, r image.Rectangle) bool {
-	for y := r.Min.Y; y < r.Max.Y; y++ {
-		for x := r.Min.X; x < r.Max.X; x++ {
-			if a.ColorIndexAt(x, y) != b.ColorIndexAt(x, y) {
-				return false
-			}
-		}
-	}
-	return true
-}
-
 // Every hour in the window gets a label in the gutter and a rule across
-// the event column, and the window's last edge gets a rule too.
+// the events, and the window's last edge gets a rule too. The
+// window's opening edge is the widget's top, ruled only when a band sits
+// above it (see TestWidget_TopEdge).
 func TestWidget_DrawsAnHourGrid(t *testing.T) {
 	tests := []struct {
 		label string
@@ -703,7 +708,7 @@ func TestWidget_DrawsAnHourGrid(t *testing.T) {
 				t.Errorf("rule between labels and events is %d/%d px", n, l.Grid.Dy())
 			}
 
-			for h := 0; h <= tt.win.EndHour-tt.win.StartHour; h++ {
+			for h := 1; h <= tt.win.EndHour-tt.win.StartHour; h++ {
 				y := tl.y(start.Add(time.Duration(h) * time.Hour))
 				if countIndexIn(frame, image.Rect(l.Events.Min.X, y, l.Events.Max.X, y+1), widget.PaperBlack) == 0 {
 					t.Errorf("no rule across the events at hour %d (y=%d)", tt.win.StartHour+h, y)
@@ -722,6 +727,58 @@ func TestWidget_DrawsAnHourGrid(t *testing.T) {
 				if countIndexIn(frame, row, widget.PaperBlack) == 0 {
 					t.Errorf("no label for hour %d", tt.win.StartHour+h)
 				}
+			}
+		})
+	}
+}
+
+// The window's opening edge gets a solid rule only when the widget has
+// its own band above the grid to close off. With nothing above, the grid
+// starts at the widget's top edge and draws no rule there: whatever sits
+// above the widget, a screen's separator or the panel's edge, already
+// closes it, and a second rule just under a separator reads as a double
+// line. The rule between the labels and the events then runs up to the
+// widget's edge, so it meets that separator.
+func TestWidget_TopEdge(t *testing.T) {
+	ruleX := testBounds.Min.X + gutterW + laneW
+	events := image.Rect(ruleX+ruleW+eventsPadX, 0, testBounds.Max.X-eventsPadX, 0)
+	tests := []struct {
+		label  string
+		events []ical.Event
+		// ruleY is the row the solid top edge rule is on, or -1 for none.
+		ruleY int
+	}{
+		{label: "nothing above the grid", ruleY: -1},
+		{
+			label:  "an earlier note above",
+			events: []ical.Event{span("Gym", at(5, 0), at(6, 0))},
+			ruleY:  testBounds.Min.Y + noteH(),
+		},
+		{
+			label:  "an all-day strip above",
+			events: []ical.Event{allDay("Car in for service")},
+			ruleY:  testBounds.Min.Y + stripH(1) + gridPadY,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			// Late in the evening, so no now marker crosses the top.
+			w := New(testBounds, daydata.InMemory(tt.events, nil), fixedClock(at(23, 30)), defaultConfig())
+			frame := renderToFrame(t, w)
+
+			if tt.ruleY < 0 {
+				top := image.Rect(events.Min.X, testBounds.Min.Y, events.Max.X, testBounds.Min.Y+2)
+				if n := countIndexIn(frame, top, widget.PaperBlack); n != 0 {
+					t.Errorf("%d px inked across the events' top rows, want no rule", n)
+				}
+				if frame.ColorIndexAt(ruleX, testBounds.Min.Y) != widget.PaperBlack {
+					t.Errorf("rule between labels and events doesn't reach the widget's top edge")
+				}
+				return
+			}
+			row := image.Rect(testBounds.Min.X, tt.ruleY, events.Max.X, tt.ruleY+1)
+			if n := countIndexIn(frame, row, widget.PaperBlack); n != row.Dx() {
+				t.Errorf("top edge rule at y=%d is %d/%d px", tt.ruleY, n, row.Dx())
 			}
 		})
 	}
@@ -885,18 +942,6 @@ func TestWidget_Golden(t *testing.T) {
 	}
 }
 
-// paintNeighbours inks every pixel of the frame outside bounds, standing
-// in for the widgets around this one.
-func paintNeighbours(frame *image.Paletted, bounds image.Rectangle) {
-	for y := range frame.Bounds().Dy() {
-		for x := range frame.Bounds().Dx() {
-			if !image.Pt(x, y).In(bounds) {
-				frame.SetColorIndex(x, y, widget.PaperBlack)
-			}
-		}
-	}
-}
-
 // The draw helpers clip to the frame, not the widget, so everything the
 // widget draws has to land inside its bounds by construction: on a busy
 // day, with notes on both sides, and at the smallest size it draws at.
@@ -924,7 +969,7 @@ func TestWidget_StaysInsideItsBounds(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			frame := newTestFrame()
-			paintNeighbours(frame, tt.bounds)
+			testutil.PaintOutside(frame, tt.bounds)
 			w := newWidget(tt.bounds, busy, defaultConfig())
 			if err := w.Render(frame); err != nil {
 				t.Fatalf("Render: %v", err)
@@ -945,7 +990,7 @@ func TestWidget_StaysInsideItsBounds(t *testing.T) {
 
 // Given less room than the grid needs, the widget leaves its bounds
 // blank rather than drawing a grid too cramped to read or spilling onto a
-// neighbour. A blank region is a misconfiguration you can see.
+// neighbour. Blank bounds are a misconfiguration you can see.
 func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 	tests := []struct {
 		label  string
@@ -957,7 +1002,7 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			frame := newTestFrame()
-			paintNeighbours(frame, tt.bounds)
+			testutil.PaintOutside(frame, tt.bounds)
 			drawkit.FillRect(frame, tt.bounds, widget.PaperBlack)
 			if err := newWidget(tt.bounds, typicalDay(), defaultConfig()).Render(frame); err != nil {
 				t.Fatalf("Render: %v", err)
@@ -1029,9 +1074,10 @@ func TestWidget_CountsEventsOutsideTheWindow(t *testing.T) {
 			if tt.wantLater != "" && !noteIn(frame, l.Later, l.Events.Min.X, tt.wantLater) {
 				t.Errorf("no %q note below the grid", tt.wantLater)
 			}
-			// Without a note the grid takes the height, and its edge
-			// rules sit at the bounds' padding.
-			if tt.wantEarlier == "" && l.Grid.Min.Y != testBounds.Min.Y+gridPadY {
+			// Without a note the grid takes the height: it starts at
+			// the bounds' top, unruled, and ends at the bottom rule's
+			// padding.
+			if tt.wantEarlier == "" && l.Grid.Min.Y != testBounds.Min.Y {
 				t.Errorf("grid starts at %d with nothing earlier", l.Grid.Min.Y)
 			}
 			if tt.wantLater == "" && l.Grid.Max.Y != testBounds.Max.Y-gridPadY {
@@ -1041,8 +1087,8 @@ func TestWidget_CountsEventsOutsideTheWindow(t *testing.T) {
 	}
 }
 
-// Nothing outside the window reaches the grid: down the event column's
-// edges there is no ink but the one-pixel hour rules.
+// Nothing outside the window reaches the grid: down the events' edges
+// there is no ink but the one-pixel hour rules.
 func TestWidget_DrawsNoBlockForEventsOutsideTheWindow(t *testing.T) {
 	events := []ical.Event{span("Gym", at(5, 0), at(7, 0)), span("Late call", at(22, 0), at(23, 0))}
 	// Late in the evening, so no now marker crosses the column either.

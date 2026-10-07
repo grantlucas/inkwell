@@ -95,7 +95,7 @@ func texts(ls []line) []string {
 func TestDraw_StackedEvent(t *testing.T) {
 	frame := newFrame()
 	r := image.Rect(10, 20, 210, 400)
-	style := eventlist.Style{Location: toronto}
+	style := eventlist.List{Location: toronto}
 
 	hidden := style.Draw(frame, r, []calendar.Event{timed("Standup", 14)})
 
@@ -122,22 +122,22 @@ func TestDraw_EventText(t *testing.T) {
 	tests := []struct {
 		label  string
 		event  calendar.Event
-		style  eventlist.Style
+		style  eventlist.List
 		titles []string
 	}{
-		{"an all-day event says so", allDay, eventlist.Style{}, []string{"Holiday"}},
-		{"the location follows an @ when shown", withPlace, eventlist.Style{ShowLocation: true}, []string{"Lunch @ Cafe"}},
-		{"the location is left off when not", withPlace, eventlist.Style{}, []string{"Lunch"}},
-		{"a long title wraps on words", long, eventlist.Style{TitleLines: 3}, []string{"Platform", "architecture", "review"}},
-		{"a title past its lines is cut with »", long, eventlist.Style{TitleLines: 2}, []string{"Platform", "architectur»"}},
-		{"a title gets one line by default", long, eventlist.Style{}, []string{"Platform»"}},
-		{"a word longer than the line is broken", timed("Supercalifragilistic", 9), eventlist.Style{TitleLines: 2},
+		{"an all-day event says so", allDay, eventlist.List{}, []string{"Holiday"}},
+		{"the location follows an @ when shown", withPlace, eventlist.List{ShowLocation: true}, []string{"Lunch @ Cafe"}},
+		{"the location is left off when not", withPlace, eventlist.List{}, []string{"Lunch"}},
+		{"a long title wraps on words", long, eventlist.List{TitleLines: 3}, []string{"Platform", "architecture", "review"}},
+		{"a title past its lines is cut with »", long, eventlist.List{TitleLines: 2}, []string{"Platform", "architectur»"}},
+		{"a title gets one line by default", long, eventlist.List{}, []string{"Platform»"}},
+		{"a word longer than the line is broken", timed("Supercalifragilistic", 9), eventlist.List{TitleLines: 2},
 			[]string{"Supercalifra", "gilistic"}},
-		{"a multi-byte title wraps on characters", timed("Réunion équipe café", 9), eventlist.Style{TitleLines: 2},
+		{"a multi-byte title wraps on characters", timed("Réunion équipe café", 9), eventlist.List{TitleLines: 2},
 			[]string{"Réunion", "équipe café"}},
-		{"a multi-byte title is cut on characters", timed("Ñandúñandúñandú", 9), eventlist.Style{},
+		{"a multi-byte title is cut on characters", timed("Ñandúñandúñandú", 9), eventlist.List{},
 			[]string{"Ñandúñandúñ»"}},
-		{"a blank title draws only the time", timed("   ", 9), eventlist.Style{}, nil},
+		{"a blank title draws only the time", timed("   ", 9), eventlist.List{}, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -220,14 +220,14 @@ func TestDraw_FitAndOverflow(t *testing.T) {
 	const gap, width = 8, 300
 	pitch := 2*lineH + gap
 	threeExactly := 2*pitch + 2*lineH
-	st := func(maxEvents int) eventlist.Style { return eventlist.Style{Gap: gap, MaxEvents: maxEvents} }
-	in := func(maxEvents int) eventlist.Style {
-		return eventlist.Style{Layout: eventlist.Inline, MaxEvents: maxEvents}
+	st := func(maxEvents int) eventlist.List { return eventlist.List{Gap: gap, MaxEvents: maxEvents} }
+	in := func(maxEvents int) eventlist.List {
+		return eventlist.List{Layout: eventlist.Inline, MaxEvents: maxEvents}
 	}
 
 	tests := []struct {
 		label      string
-		style      eventlist.Style
+		style      eventlist.List
 		width      int
 		height     int
 		events     int
@@ -272,7 +272,7 @@ func TestDraw_FitAndOverflow(t *testing.T) {
 func TestDraw_ScaledTimeWithRules(t *testing.T) {
 	const gap = 20
 	r := image.Rect(12, 0, 212, 400)
-	style := eventlist.Style{
+	style := eventlist.List{
 		TimeScale: 2, TitleLead: ascent, Gap: gap, Rules: true,
 		MaxEvents: 2, Location: time.UTC,
 	}
@@ -307,17 +307,17 @@ func TestDraw_Width(t *testing.T) {
 	tests := []struct {
 		label      string
 		chars      int
-		style      eventlist.Style
+		style      eventlist.List
 		events     []calendar.Event
 		wantHidden int
 		want       []line
 	}{
-		{"no events draws nothing", 20, eventlist.Style{}, nil, 0, nil},
-		{"too narrow for a title, the line still counts it", 2, eventlist.Style{}, events(1), 1, []line{
+		{"no events draws nothing", 20, eventlist.List{}, nil, 0, nil},
+		{"too narrow for a title, the line still counts it", 2, eventlist.List{}, events(1), 1, []line{
 			{text: "+»", face: bold, baseline: ascent},
 		}},
-		{"no room for a character draws nothing", 0, eventlist.Style{}, events(1), 1, nil},
-		{"the line is cut to a narrow list", 5, eventlist.Style{MaxEvents: 1}, events(13), 12, []line{
+		{"no room for a character draws nothing", 0, eventlist.List{}, events(1), 1, nil},
+		{"the line is cut to a narrow list", 5, eventlist.List{MaxEvents: 1}, events(13), 12, []line{
 			{text: "09:00", face: bold, baseline: ascent},
 			{text: "A", face: regular, baseline: ascent + lineH},
 			{text: "+12 »", face: bold, baseline: 2*lineH + ascent},
@@ -325,23 +325,23 @@ func TestDraw_Width(t *testing.T) {
 		// A clock time cut short reads as a different time ("0" for
 		// 09:00), so a time without room to be drawn whole is left off and
 		// its title keeps its place.
-		{"a large time with no room is left off", 3, eventlist.Style{TimeScale: 2}, events(1), 0, []line{
+		{"a large time with no room is left off", 3, eventlist.List{TimeScale: 2}, events(1), 0, []line{
 			{text: "A", face: regular, baseline: 2*ascent + lineH},
 		}},
-		{"a body-size time with no room is left off", 4, eventlist.Style{}, events(1), 0, []line{
+		{"a body-size time with no room is left off", 4, eventlist.List{}, events(1), 0, []line{
 			{text: "A", face: regular, baseline: ascent + lineH},
 		}},
-		{"an all-day label with no room is left off", 6, eventlist.Style{}, []calendar.Event{
+		{"an all-day label with no room is left off", 6, eventlist.List{}, []calendar.Event{
 			{Summary: "Off", AllDay: true, Start: time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC)},
 		}, 0, []line{
 			{text: "Off", face: regular, baseline: ascent + lineH},
 		}},
 		// Dilation spills a pixel past a 2x glyph's cell, so a 2x time
 		// needs that pixel beside its advance as well.
-		{"a large time needs room for its dilation", 10, eventlist.Style{TimeScale: 2}, events(1), 0, []line{
+		{"a large time needs room for its dilation", 10, eventlist.List{TimeScale: 2}, events(1), 0, []line{
 			{text: "A", face: regular, baseline: 2*ascent + lineH},
 		}},
-		{"a large time with room for its dilation is drawn", 11, eventlist.Style{TimeScale: 2}, events(1), 0, []line{
+		{"a large time with room for its dilation is drawn", 11, eventlist.List{TimeScale: 2}, events(1), 0, []line{
 			{text: "09:00", face: bold, scale: 2, baseline: 2 * ascent},
 			{text: "A", face: regular, baseline: 2*ascent + lineH},
 		}},
@@ -373,24 +373,24 @@ func TestLines(t *testing.T) {
 		label  string
 		layout eventlist.Layout
 		width  int
-		style  eventlist.Style
+		style  eventlist.List
 		events []calendar.Event
 		want   int
 	}{
-		{"stacked: no events need no lines", eventlist.Stacked, 20 * adv, eventlist.Style{}, nil, 0},
-		{"stacked: a time and a title each", eventlist.Stacked, 20 * adv, eventlist.Style{}, events(3), 6},
-		{"stacked: a wrapped title takes its lines", eventlist.Stacked, 12 * adv, eventlist.Style{TitleLines: 2}, []calendar.Event{long, long}, 6},
-		{"stacked: up to its title lines", eventlist.Stacked, 12 * adv, eventlist.Style{TitleLines: 3}, []calendar.Event{long}, 4},
-		{"stacked: a blank title takes none", eventlist.Stacked, 20 * adv, eventlist.Style{}, []calendar.Event{timed(" ", 9)}, 1},
-		{"stacked: the cap adds the +N MORE line", eventlist.Stacked, 20 * adv, eventlist.Style{MaxEvents: 2}, events(5), 5},
-		{"stacked: a cap the list is under adds nothing", eventlist.Stacked, 20 * adv, eventlist.Style{MaxEvents: 5}, events(2), 4},
-		{"stacked: too narrow to list events needs the +N MORE line", eventlist.Stacked, 2 * adv, eventlist.Style{}, events(2), 1},
-		{"stacked: too narrow with no events needs none", eventlist.Stacked, 2 * adv, eventlist.Style{}, nil, 0},
-		{"stacked: no room for a character needs none", eventlist.Stacked, adv - 1, eventlist.Style{}, events(2), 0},
-		{"inline: one line an event", eventlist.Inline, inlineWidth, eventlist.Style{}, events(3), 3},
-		{"inline: a long title still takes one", eventlist.Inline, inlineWidth, eventlist.Style{TitleLines: 3}, []calendar.Event{longer, longer}, 2},
-		{"inline: the cap adds the +N MORE line", eventlist.Inline, inlineWidth, eventlist.Style{MaxEvents: 3}, events(5), 4},
-		{"inline: narrower than the time column needs the +N MORE line", eventlist.Inline, timeColumn - 1, eventlist.Style{}, events(2), 1},
+		{"stacked: no events need no lines", eventlist.Stacked, 20 * adv, eventlist.List{}, nil, 0},
+		{"stacked: a time and a title each", eventlist.Stacked, 20 * adv, eventlist.List{}, events(3), 6},
+		{"stacked: a wrapped title takes its lines", eventlist.Stacked, 12 * adv, eventlist.List{TitleLines: 2}, []calendar.Event{long, long}, 6},
+		{"stacked: up to its title lines", eventlist.Stacked, 12 * adv, eventlist.List{TitleLines: 3}, []calendar.Event{long}, 4},
+		{"stacked: a blank title takes none", eventlist.Stacked, 20 * adv, eventlist.List{}, []calendar.Event{timed(" ", 9)}, 1},
+		{"stacked: the cap adds the +N MORE line", eventlist.Stacked, 20 * adv, eventlist.List{MaxEvents: 2}, events(5), 5},
+		{"stacked: a cap the list is under adds nothing", eventlist.Stacked, 20 * adv, eventlist.List{MaxEvents: 5}, events(2), 4},
+		{"stacked: too narrow to list events needs the +N MORE line", eventlist.Stacked, 2 * adv, eventlist.List{}, events(2), 1},
+		{"stacked: too narrow with no events needs none", eventlist.Stacked, 2 * adv, eventlist.List{}, nil, 0},
+		{"stacked: no room for a character needs none", eventlist.Stacked, adv - 1, eventlist.List{}, events(2), 0},
+		{"inline: one line an event", eventlist.Inline, inlineWidth, eventlist.List{}, events(3), 3},
+		{"inline: a long title still takes one", eventlist.Inline, inlineWidth, eventlist.List{TitleLines: 3}, []calendar.Event{longer, longer}, 2},
+		{"inline: the cap adds the +N MORE line", eventlist.Inline, inlineWidth, eventlist.List{MaxEvents: 3}, events(5), 4},
+		{"inline: narrower than the time column needs the +N MORE line", eventlist.Inline, timeColumn - 1, eventlist.List{}, events(2), 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -413,7 +413,7 @@ func TestDraw_LargeTimeStaysInsideTheList(t *testing.T) {
 	}
 	for _, scale := range []int{2, 3, 4} {
 		for _, e := range labels {
-			style := eventlist.Style{TimeScale: scale, Location: time.UTC}
+			style := eventlist.List{TimeScale: scale, Location: time.UTC}
 			// As tight as the list allows: exactly the time's height, and
 			// just wide enough for "ALL DAY" and its dilation.
 			grow := growAt(scale)
@@ -472,7 +472,7 @@ func TestDraw_EventHeight(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
-			style := eventlist.Style{TimeScale: tt.scale, TitleLead: tt.lead, Location: time.UTC}
+			style := eventlist.List{TimeScale: tt.scale, TitleLead: tt.lead, Location: time.UTC}
 			frame := newFrame()
 			events := []calendar.Event{timed(tt.title, 9)}
 			if hidden := style.Draw(frame, image.Rect(0, 0, 200, tt.height), events); hidden != tt.wantHidden {
@@ -493,7 +493,7 @@ var timeColumn = drawkit.TextWidth(regular, "ALL DAY ")
 func TestDraw_InlineEvent(t *testing.T) {
 	frame := newFrame()
 	r := image.Rect(10, 20, 310, 400)
-	style := eventlist.Style{Layout: eventlist.Inline, Location: toronto}
+	style := eventlist.List{Layout: eventlist.Inline, Location: toronto}
 
 	hidden := style.Draw(frame, r, []calendar.Event{timed("Standup", 14)})
 
@@ -520,21 +520,21 @@ func TestDraw_InlineEventText(t *testing.T) {
 	tests := []struct {
 		label      string
 		event      calendar.Event
-		style      eventlist.Style
+		style      eventlist.List
 		titleChars int
 		time       string
 		title      string
 	}{
-		{"an all-day event says so", allDay, eventlist.Style{}, 12, "ALL DAY", "Holiday"},
-		{"the location follows an @ when shown", withPlace, eventlist.Style{ShowLocation: true}, 12, "16:00", "Lunch @ Cafe"},
-		{"a long title is cut on characters with »", long, eventlist.Style{}, 12, "09:00", "Platform ar»"},
-		{"title lines do not wrap an inline title", long, eventlist.Style{TitleLines: 3}, 12, "09:00", "Platform ar»"},
-		{"a multi-byte title is cut on characters", timed("Ñandúñandúñandú", 9), eventlist.Style{}, 12, "09:00", "Ñandúñandúñ»"},
-		{"space around a title is dropped", timed("  Standup  ", 9), eventlist.Style{}, 12, "09:00", "Standup"},
+		{"an all-day event says so", allDay, eventlist.List{}, 12, "ALL DAY", "Holiday"},
+		{"the location follows an @ when shown", withPlace, eventlist.List{ShowLocation: true}, 12, "16:00", "Lunch @ Cafe"},
+		{"a long title is cut on characters with »", long, eventlist.List{}, 12, "09:00", "Platform ar»"},
+		{"title lines do not wrap an inline title", long, eventlist.List{TitleLines: 3}, 12, "09:00", "Platform ar»"},
+		{"a multi-byte title is cut on characters", timed("Ñandúñandúñandú", 9), eventlist.List{}, 12, "09:00", "Ñandúñandúñ»"},
+		{"space around a title is dropped", timed("  Standup  ", 9), eventlist.List{}, 12, "09:00", "Standup"},
 		// Three characters is the narrowest title the list writes: two and
 		// a » would read as punctuation.
-		{"the time is drawn alone with no room for a title", long, eventlist.Style{}, 2, "09:00", ""},
-		{"a title gets the narrowest room it can use", long, eventlist.Style{}, 3, "09:00", "Pl»"},
+		{"the time is drawn alone with no room for a title", long, eventlist.List{}, 2, "09:00", ""},
+		{"a title gets the narrowest room it can use", long, eventlist.List{}, 3, "09:00", "Pl»"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -566,29 +566,29 @@ func TestDraw_Empty(t *testing.T) {
 	dash := eventlist.Note{Text: "--", Centred: true}
 	tests := []struct {
 		label  string
-		style  eventlist.Style
+		style  eventlist.List
 		width  int
 		height int
 		want   line
 		lines  int
 	}{
-		{"an inline list says it", eventlist.Style{Layout: eventlist.Inline, Empty: note}, 30 * adv, 400,
+		{"an inline list says it", eventlist.List{Layout: eventlist.Inline, Empty: note}, 30 * adv, 400,
 			line{text: msg, face: regular, baseline: ascent}, 1},
-		{"a stacked list says it", eventlist.Style{Empty: note}, 30 * adv, 400,
+		{"a stacked list says it", eventlist.List{Empty: note}, 30 * adv, 400,
 			line{text: msg, face: regular, baseline: ascent}, 1},
-		{"it is cut to the width", eventlist.Style{Layout: eventlist.Inline, Empty: note}, 10 * adv, 400,
+		{"it is cut to the width", eventlist.List{Layout: eventlist.Inline, Empty: note}, 10 * adv, 400,
 			line{text: "NOTHING S»", face: regular, baseline: ascent}, 1},
-		{"it needs a whole line", eventlist.Style{Layout: eventlist.Inline, Empty: note}, 30 * adv, lineH - 1, line{}, 1},
-		{"too narrow for the list, too narrow for it", eventlist.Style{Layout: eventlist.Inline, Empty: note}, timeColumn - 1, 400, line{}, 0},
-		{"without one an empty list draws nothing", eventlist.Style{Layout: eventlist.Inline}, 30 * adv, 400, line{}, 0},
-		{"a scaled one is bold, a scaled ascent down", eventlist.Style{Empty: done}, 30 * adv, 400,
+		{"it needs a whole line", eventlist.List{Layout: eventlist.Inline, Empty: note}, 30 * adv, lineH - 1, line{}, 1},
+		{"too narrow for the list, too narrow for it", eventlist.List{Layout: eventlist.Inline, Empty: note}, timeColumn - 1, 400, line{}, 0},
+		{"without one an empty list draws nothing", eventlist.List{Layout: eventlist.Inline}, 30 * adv, 400, line{}, 0},
+		{"a scaled one is bold, a scaled ascent down", eventlist.List{Empty: done}, 30 * adv, 400,
 			line{text: done.Text, face: bold, scale: 2, baseline: 2 * ascent}, 1},
-		{"a scaled one is cut on scaled characters, clear of its dilation", eventlist.Style{Empty: done}, 10*adv + 1, 400,
+		{"a scaled one is cut on scaled characters, clear of its dilation", eventlist.List{Empty: done}, 10*adv + 1, 400,
 			line{text: "DONE»", face: bold, scale: 2, baseline: 2 * ascent}, 1},
-		{"a scaled one needs a scaled line", eventlist.Style{Empty: done}, 30 * adv, 2 * lineH, line{}, 1},
-		{"a centred one sits in the middle of the list", eventlist.Style{Empty: dash}, 30 * adv, 400,
+		{"a scaled one needs a scaled line", eventlist.List{Empty: done}, 30 * adv, 2 * lineH, line{}, 1},
+		{"a centred one sits in the middle of the list", eventlist.List{Empty: dash}, 30 * adv, 400,
 			line{text: "--", face: regular, x: 14 * adv, baseline: ascent}, 1},
-		{"a stacked list too narrow to list events is too narrow for it", eventlist.Style{Empty: dash}, 3*adv - 1, 400, line{}, 0},
+		{"a stacked list too narrow to list events is too narrow for it", eventlist.List{Empty: dash}, 3*adv - 1, 400, line{}, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {

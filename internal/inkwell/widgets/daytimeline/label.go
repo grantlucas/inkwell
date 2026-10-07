@@ -2,11 +2,14 @@ package daytimeline
 
 import (
 	"image"
+	"math"
+	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
 
 const (
@@ -31,15 +34,19 @@ const (
 // a continuation mark always has its corner to itself.
 const markClear = 2*markPad + markW
 
-// drawLabel writes e's start time, in loc, then its title, on one line
-// at the top of inner in ink, the block's contrast colour.
+// drawLabel writes e's start time, in loc, then its title, from the top
+// of inner in ink, the block's contrast colour. The title follows the time
+// on the first line and wraps at word boundaries onto as many lines as the
+// block has room for; only the last of them is cut with », when the title
+// runs on past it. The block's height and its continuation marks say
+// where the event ends, so no line is spent on it.
 //
 // The label is clipped to inner rather than left out of a block shorter
 // than a text line. A half-hour event is about half a line tall on the
 // default window; clipped, it loses its descenders and keeps its words,
 // where leaving it out would draw a bar nobody can identify. A block too
 // short even for the caps is left unlabelled, as is one too narrow for
-// the time; a title that doesn't fit the width is cut with ».
+// the time.
 //
 // It returns the box each line of text takes, clipped to inner, so the
 // now marker can pass behind the words rather than strike them through.
@@ -51,32 +58,53 @@ func drawLabel(frame *image.Paletted, inner image.Rectangle, e calendar.Event, l
 	if chars < timeChars || inner.Dy() < capH {
 		return nil
 	}
-	baseline := labelBaseline(inner)
-	drawkit.DrawText(clip, x, baseline, e.Start.In(loc).Format("15:04"), drawkit.BodyBoldFace, ink)
-	used := timeChars
-
 	title := e.Summary
 	if showLocation && e.Location != "" {
 		title += " @ " + e.Location
 	}
-	if room := chars - timeChars - 1; room > 0 {
-		title = truncate(title, room)
-		drawkit.DrawText(clip, x+(timeChars+1)*adv, baseline, title, drawkit.BodyFace, ink)
-		used += 1 + utf8.RuneCountInString(title)
-	}
-	boxes := []image.Rectangle{textBox(inner, x, baseline, used)}
+	start := e.Start.In(loc).Format("15:04")
 
-	// A block with room for a second line says when the event ends: the
-	// block's length only shows it to the nearest few minutes, and an
-	// event cut off at the window's end shows nothing of it at all. Only
-	// whole capitals are drawn, so a block one line tall doesn't carry
-	// the tops of a second.
-	if until := baseline + drawkit.BodyLineH(); until < inner.Max.Y && e.End.After(e.Start) {
-		text := "UNTIL " + e.End.In(loc).Format("15:04")
-		drawkit.DrawText(clip, x, until, text, drawkit.BodyFace, ink)
-		boxes = append(boxes, textBox(inner, x, until, len(text)))
+	// A line after the first is drawn only when its capitals are whole,
+	// so a block one line tall doesn't carry the tops of a second.
+	baseline := labelBaseline(inner)
+	lines := 1
+	for baseline+lines*drawkit.BodyLineH() < inner.Max.Y {
+		lines++
+	}
+
+	var boxes []image.Rectangle
+	for i, line := range labelLines(start, title, chars, lines) {
+		y := baseline + i*drawkit.BodyLineH()
+		if i == 0 {
+			drawkit.DrawText(clip, x, y, start, drawkit.BodyBoldFace, ink)
+			drawkit.DrawText(clip, x+timeChars*adv, y, line[len(start):], drawkit.BodyFace, ink)
+		} else {
+			drawkit.DrawText(clip, x, y, line, drawkit.BodyFace, ink)
+		}
+		boxes = append(boxes, textBox(inner, x, y, utf8.RuneCountInString(line)))
 	}
 	return boxes
+}
+
+// labelLines breaks a label into at most n lines of chars: the start time
+// and the title as one run of words, wrapped at word boundaries, so the
+// first line always opens with the time. When the title runs on past the
+// last line, that line is filled to the width and cut with ». The time
+// itself is never cut.
+func labelLines(start, title string, chars, n int) []string {
+	lines := eventlist.Wrap(start+" "+title, chars, math.MaxInt)
+	if len(lines) <= n {
+		return lines
+	}
+	rest := strings.Join(lines[n-1:], " ")
+	if n > 1 {
+		return append(lines[:n-1], cutTitle(rest, chars))
+	}
+	line := start
+	if room := chars - timeChars - 1; room > 0 {
+		line += " " + cutTitle(strings.TrimPrefix(rest, start+" "), room)
+	}
+	return []string{line}
 }
 
 // textBox is the box a line of chars characters takes when written from
@@ -94,13 +122,9 @@ func labelBaseline(inner image.Rectangle) int {
 	return inner.Min.Y + min((inner.Dy()-capH)/2, labelMaxPadY) + capH
 }
 
-// truncate shortens s to at most n characters, marking a cut with ».
-// It counts runes, so an accented title is neither cut early nor split
+// cutTitle shortens s, which runs past n characters, to n, the last of them
+// ». It counts runes, so an accented title is neither cut early nor split
 // mid-glyph.
-func truncate(s string, n int) string {
-	if utf8.RuneCountInString(s) <= n {
-		return s
-	}
-	r := []rune(s)
-	return string(r[:n-1]) + ellipsis
+func cutTitle(s string, n int) string {
+	return string([]rune(s)[:n-1]) + ellipsis
 }

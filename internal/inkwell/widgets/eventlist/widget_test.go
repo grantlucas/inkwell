@@ -44,11 +44,11 @@ var (
 	weekEvents = []calendar.Event{standup, review, dinner, dentist, movie, allWeek}
 )
 
-// listConfig is a parsed config listing day in preset.
-func listConfig(preset eventlist.Preset, day, maxEvents int) eventlist.Config {
+// listConfig is a parsed config listing day in style.
+func listConfig(style eventlist.Style, day, maxEvents int) eventlist.Config {
 	return eventlist.Config{
 		Config: daydata.Config{MaxEvents: maxEvents, Day: day},
-		Preset: preset,
+		Style:  style,
 	}
 }
 
@@ -65,11 +65,11 @@ func renderList(t *testing.T, w *eventlist.Widget, size image.Rectangle) *image.
 	return frame
 }
 
-// The widget lists its one day's events, the way its preset lists them,
+// The widget lists its one day's events, the way its style lists them,
 // into its bounds: today unless its config names a later day, the events
 // in the display zone, capped at max_events, and with hide_finished only
 // what is left of the day. Each row gives the events the list should end
-// up with, so the expected frame is the preset drawing exactly those.
+// up with, so the expected frame is the style drawing exactly those.
 func TestWidget_ListsItsDay(t *testing.T) {
 	bounds := image.Rect(20, 30, 330, 300)
 	str := func(s string) *string { return &s }
@@ -80,23 +80,23 @@ func TestWidget_ListsItsDay(t *testing.T) {
 		want  []calendar.Event
 		empty string
 	}{
-		{"today, all-day first", listConfig(eventlist.PresetStacked, 0, 4), []calendar.Event{allWeek, standup, review, dinner}, ""},
-		{"tomorrow", listConfig(eventlist.PresetInline, 1, 3), []calendar.Event{allWeek, dentist}, ""},
-		{"capped at max_events", listConfig(eventlist.PresetLarge, 0, 2), []calendar.Event{allWeek, standup, review, dinner}, ""},
+		{"today, all-day first", listConfig(eventlist.StackedStyle, 0, 4), []calendar.Event{allWeek, standup, review, dinner}, ""},
+		{"tomorrow", listConfig(eventlist.InlineStyle, 1, 3), []calendar.Event{allWeek, dentist}, ""},
+		{"capped at max_events", listConfig(eventlist.LargeStyle, 0, 2), []calendar.Event{allWeek, standup, review, dinner}, ""},
 		{"only what is left of today", eventlist.Config{
-			Config: daydata.Config{MaxEvents: 3}, Preset: eventlist.PresetLarge, HideFinished: true,
+			Config: daydata.Config{MaxEvents: 3}, Style: eventlist.LargeStyle, HideFinished: true,
 		}, []calendar.Event{allWeek, review, dinner}, ""},
 		{"an empty day says what the config says", eventlist.Config{
-			Config: daydata.Config{MaxEvents: 3, Day: 3}, Preset: eventlist.PresetLarge, Empty: str("ALL CLEAR"),
+			Config: daydata.Config{MaxEvents: 3, Day: 3}, Style: eventlist.LargeStyle, Empty: str("ALL CLEAR"),
 		}, nil, "ALL CLEAR"},
-		{"an empty day says the preset's note", listConfig(eventlist.PresetInline, 3, 3), nil, ""},
+		{"an empty day says the style's note", listConfig(eventlist.InlineStyle, 3, 3), nil, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			frame := renderList(t, newList(bounds, weekEvents, tt.cfg), image.Rect(0, 0, 400, 400))
 
 			ref := image.NewPaletted(image.Rect(0, 0, 400, 400), widget.PaperPalette)
-			style := tt.cfg.Preset.Style(tt.cfg.MaxEvents, false, toronto)
+			style := tt.cfg.Style.List(tt.cfg.MaxEvents, false, toronto)
 			if tt.empty != "" {
 				style.Empty.Text = tt.empty
 			}
@@ -117,7 +117,7 @@ func TestWidget_KeepsToItsBounds(t *testing.T) {
 		}
 	}
 
-	w := newList(bounds, weekEvents, listConfig(eventlist.PresetLarge, 0, 4))
+	w := newList(bounds, weekEvents, listConfig(eventlist.LargeStyle, 0, 4))
 	if err := w.Render(frame); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -148,12 +148,12 @@ func TestWidget_Golden(t *testing.T) {
 		cfg    eventlist.Config
 		bounds image.Rectangle
 	}{
-		{"stacked in a bold-five column", listConfig(eventlist.PresetStacked, 0, 4), image.Rect(0, 0, 148, 272)},
+		{"stacked in a bold-five column", listConfig(eventlist.StackedStyle, 0, 4), image.Rect(0, 0, 148, 272)},
 		{"large for what is left of today", eventlist.Config{
-			Config: daydata.Config{MaxEvents: 3}, Preset: eventlist.PresetLarge, HideFinished: true,
+			Config: daydata.Config{MaxEvents: 3}, Style: eventlist.LargeStyle, HideFinished: true,
 		}, image.Rect(0, 0, 310, 198)},
-		{"inline for tomorrow", listConfig(eventlist.PresetInline, 1, 3), image.Rect(0, 0, 440, 96)},
-		{"stacked on an empty day", listConfig(eventlist.PresetStacked, 3, 4), image.Rect(0, 0, 148, 272)},
+		{"inline for tomorrow", listConfig(eventlist.InlineStyle, 1, 3), image.Rect(0, 0, 440, 96)},
+		{"stacked on an empty day", listConfig(eventlist.StackedStyle, 3, 4), image.Rect(0, 0, 148, 272)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -163,9 +163,9 @@ func TestWidget_Golden(t *testing.T) {
 }
 
 // The widget lists events only, so it takes the calendar settings, day
-// and its own: which preset, whether finished events are dropped, and
+// and its own: which style, whether finished events are dropped, and
 // what an empty day says. max_events defaults to what the full-screen
-// widget the preset comes from shows.
+// widget the style comes from shows.
 func TestFactory(t *testing.T) {
 	deps := widget.Deps{
 		Now:      fixedClock(widgetTime),
@@ -189,18 +189,18 @@ func TestFactory(t *testing.T) {
 		wantErr string
 	}{
 		{label: "stacked today, four events, by default", config: with(), check: func(t *testing.T, c eventlist.Config) {
-			if c.Preset != eventlist.PresetStacked || c.Day != 0 || c.MaxEvents != 4 || c.HideFinished || c.Empty != nil {
+			if c.Style != eventlist.StackedStyle || c.Day != 0 || c.MaxEvents != 4 || c.HideFinished || c.Empty != nil {
 				t.Errorf("Config = %+v", c)
 			}
 		}},
 		{label: "large shows three", config: with("style", "large"), check: func(t *testing.T, c eventlist.Config) {
-			if c.Preset != eventlist.PresetLarge || c.MaxEvents != 3 {
-				t.Errorf("Preset, MaxEvents = %v, %d", c.Preset, c.MaxEvents)
+			if c.Style != eventlist.LargeStyle || c.MaxEvents != 3 {
+				t.Errorf("Style, MaxEvents = %v, %d", c.Style, c.MaxEvents)
 			}
 		}},
 		{label: "inline shows three", config: with("style", "inline"), check: func(t *testing.T, c eventlist.Config) {
-			if c.Preset != eventlist.PresetInline || c.MaxEvents != 3 {
-				t.Errorf("Preset, MaxEvents = %v, %d", c.Preset, c.MaxEvents)
+			if c.Style != eventlist.InlineStyle || c.MaxEvents != 3 {
+				t.Errorf("Style, MaxEvents = %v, %d", c.Style, c.MaxEvents)
 			}
 		}},
 		{
@@ -243,18 +243,5 @@ func TestFactory(t *testing.T) {
 			}
 			tt.check(t, w.(*eventlist.Widget).Config)
 		})
-	}
-}
-
-// A dashboard wired without a clock is a fault to report at load, not a
-// widget that quietly reads the wall clock.
-func TestFactory_NeedsAClock(t *testing.T) {
-	deps := widget.Deps{
-		Calendar: calendar.NewProvider(fakehttp.New(), fixedClock(widgetTime)),
-		Weather:  weather.NewProvider(fakehttp.New(), time.Hour, fixedClock(widgetTime), weather.Settings{}),
-	}
-	_, err := eventlist.Factory(image.Rect(0, 0, 160, 280), map[string]any{"feeds": []any{"https://example.com/a.ics"}}, deps)
-	if err == nil || err.Error() != "event-list: no clock" {
-		t.Fatalf("err = %v, want %q", err, "event-list: no clock")
 	}
 }

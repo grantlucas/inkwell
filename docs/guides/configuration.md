@@ -610,8 +610,11 @@ apart without reading a time. A solid block is a large black fill, but
 it moves with the schedule, so it does not burn in the way a fixed fill
 would.
 
-Each block is labelled with its start time and title, and a block with
-room for a second line adds "UNTIL" and its end time. A block is never
+Each block is labelled with its start time and title. A block with room
+for more than one line wraps the title onto the lines under the time, at
+word boundaries, and cuts only the last line that fits with "»"; the
+block's height and its continuation arrows say where the event ends. A
+block is never
 shorter than one line of text: an event too short for that, or with no
 end time, still starts at its real time but is drawn a line tall so its
 label reads in full.
@@ -639,6 +642,11 @@ arrowhead pointing the way it carries on. Events wholly outside the
 window are not drawn; a "+N EARLIER" note above the grid or a
 "+N LATER" note below it counts them, and each note takes height only
 when there is something to count.
+
+The grid's top edge is ruled only when the all-day strip or the
+"+N EARLIER" note sits above it. Otherwise the grid starts at the
+widget's top with no rule, so a separator placed above the widget, as
+under the clock band on the day-timeline screen, is the only line there.
 
 Between the hour labels and the events runs the weather lane: today's
 forecast for the same hours, one row per hour of the window. The chance
@@ -689,7 +697,7 @@ the condition name beneath. It is today-hero's weather block at the same
 sizes, so the two read alike. It draws no events and no chart, and has
 its own refresh cadence, separate from the widgets around it.
 
-It needs at least 254 × 108 px, the room for the widest high there is
+It needs at least 238 × 108 px, the room for the widest high there is
 ("-12°C"). Below that it logs and draws nothing rather than spilling
 onto its neighbours. When the high and low are both wide, the low takes
 its own line under the high. A third of the panel's width, 266 px, is
@@ -963,7 +971,7 @@ so it is the one shown at startup, and the one that stays if you remove
 |--------|--------|-----------|-------|
 | [`fuzzy_clock`](#fuzzy_clock) | `[0, 0, 800, 46]` | `"5m"` | `scale: 2`, the largest whose longest phrase fits 800 px. |
 | [`separator`](#separator) | `[0, 46, 800, 48]` | `"static"` | 2 px under the clock band. |
-| [`day-timeline`](#day-timeline) | `[0, 48, 532, 480]` | `"15m"` | The agenda and the weather lane, 07:00–22:00 by default. |
+| [`day-timeline`](#day-timeline) | `[0, 48, 532, 480]` | `"15m"` | The agenda and the weather lane, 07:00–22:00 by default. With no all-day strip or earlier note showing it draws no rule along its top, so the separator above is the only one. |
 | [`separator`](#separator) | `[532, 48, 534, 480]` | `"static"` | `orientation: vertical`, as heavy as the rule under the clock. |
 | [`today-weather`](#today-weather) | `[534, 48, 800, 168]` | `"1h"` | Hourly also turns the day over at midnight. |
 | [`separator`](#separator) | `[534, 168, 800, 169]` | `"static"` | 1 px, matching the rules between weather-ahead's rows; weather-ahead draws none above its first. |

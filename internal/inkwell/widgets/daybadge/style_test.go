@@ -191,17 +191,17 @@ func TestStyle_CompactTagsTomorrow(t *testing.T) {
 
 // A widget's config names its style. The names are what an operator
 // types, so each one round-trips, and anything else is refused.
-func TestParseStyle(t *testing.T) {
+func TestStyleNames(t *testing.T) {
 	for _, s := range styles {
-		got, ok := daybadge.ParseStyle(s.String())
+		got, ok := daybadge.StyleNames.Parse(s.String())
 		if !ok || got != s {
-			t.Errorf("ParseStyle(%q) = %v, %v", s.String(), got, ok)
+			t.Errorf("Parse(%q) = %v, %v", s.String(), got, ok)
 		}
 	}
-	if _, ok := daybadge.ParseStyle("header"); ok {
-		t.Error(`ParseStyle("header") accepted a style that doesn't exist`)
+	if _, ok := daybadge.StyleNames.Parse("header"); ok {
+		t.Error(`Parse("header") accepted a style that doesn't exist`)
 	}
-	if got := daybadge.StyleNames(); !reflect.DeepEqual(got, []string{"column", "row", "compact", "hero"}) {
+	if got := daybadge.StyleNames.List(); !reflect.DeepEqual(got, []string{"column", "row", "compact", "hero"}) {
 		t.Errorf("StyleNames = %v", got)
 	}
 }

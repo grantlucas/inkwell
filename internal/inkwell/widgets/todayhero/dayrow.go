@@ -36,7 +36,7 @@ type dayRowOptions struct {
 	// today's chart plots against.
 	TempRange weatherview.TempRange
 	// Agenda lists the row's events.
-	Agenda eventlist.Style
+	Agenda eventlist.List
 }
 
 // renderDayRow draws one following day: the day badge (tag, numeral,
@@ -85,8 +85,8 @@ func rowChart(row image.Rectangle) image.Rectangle {
 //
 // loc is the zone event clock labels are rendered in. It must never be
 // nil.
-func dayRowStyle(showLocation bool, loc *time.Location) eventlist.Style {
-	return eventlist.PresetInline.Style(rowMaxEvents, showLocation, loc)
+func dayRowStyle(showLocation bool, loc *time.Location) eventlist.List {
+	return eventlist.InlineStyle.List(rowMaxEvents, showLocation, loc)
 }
 
 // rowAgenda is the rectangle a row's events are listed in: right of the

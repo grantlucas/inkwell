@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"strings"
+	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
@@ -19,8 +20,8 @@ const (
 	rowW = rowGutterW + rowChartDX
 	rowH = 76
 
-	// rowGutterW is the date block: numeral plus the stacked weekday and
-	// month abbreviations.
+	// rowGutterW is the badge's date: the numeral plus the stacked
+	// weekday and month abbreviations.
 	rowGutterW = 122
 	rowPadX    = 10
 	rowScale   = 3
@@ -58,7 +59,7 @@ const (
 // panel. The high is body size, not scaled: the badge cannot hold a
 // 38 px icon, a display-sized temperature and a legible chart at once,
 // and the 3x date numeral already carries the row at distance.
-func drawRow(frame *image.Paletted, r image.Rectangle, day daydata.Day, unit string) {
+func drawRow(frame *image.Paletted, r image.Rectangle, day daydata.Day, _ time.Time, unit string) {
 	x := r.Min.X + rowPadX
 	numeral := fmt.Sprintf("%d", day.Start.Day())
 	drawer := drawkit.Scaled(drawkit.BodyBoldFace, rowScale, widget.PaperBlack)

@@ -111,8 +111,9 @@ func (w *Widget) Render(frame *image.Paletted) error {
 }
 
 // Factory creates a weekly-calendar Widget from config and dependencies.
-// It doesn't use daydata.Factory: its settings extend the shared ones, and
-// whether it fetches weather at all depends on one of its own.
+// It doesn't use daydata.Factory, which builds every widget's day data
+// with the same options: whether this one fetches weather at all depends
+// on one of its own settings.
 func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
 	cfg, err := parseConfig(config, deps.Weather)
 	if err != nil {

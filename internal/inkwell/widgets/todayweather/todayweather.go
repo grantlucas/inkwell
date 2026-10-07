@@ -7,7 +7,6 @@ package todayweather
 
 import (
 	"image"
-	"log"
 	"strings"
 	"time"
 
@@ -25,7 +24,9 @@ var _ widget.Widget = (*Widget)(nil)
 // screens read alike: a 58 px icon, the high at 3x and the low and the
 // condition at body size.
 const (
-	padX     = 14
+	// padX is weather-ahead's, so stacked in one column, as on the
+	// day-timeline screen, today's icon starts where the rows below do.
+	padX     = 6
 	padY     = 8
 	iconSize = 58
 	// iconGap is wider than today-hero's: some glyphs (partly cloudy's
@@ -48,9 +49,6 @@ const (
 
 	// widestHigh is the widest high there is, in either unit.
 	widestHigh = "-00°C"
-
-	// noForecast is what the widget says when no forecast reaches today.
-	noForecast = "NO FORECAST"
 )
 
 var (
@@ -68,7 +66,7 @@ func highDrawer() fonts.ScaledDrawer {
 
 // Widget renders today's weather.
 type Widget struct {
-	daydata.Base
+	daydata.Base[daydata.Config]
 }
 
 // New creates a today-weather Widget drawing today from days. Of cfg it
@@ -86,18 +84,14 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	b := w.Bounds()
 	drawkit.FillWhite(frame, b)
 
-	// The draw helpers clip to the frame, not to the widget, so a widget
-	// too small for its block would ink its neighbours.
-	if b.Dx() < minWidth || b.Dy() < minHeight {
-		log.Printf("%s: bounds are %dx%d, need at least %dx%d — drawing nothing",
-			widgetName, b.Dx(), b.Dy(), minWidth, minHeight)
+	if !daydata.Fits(widgetName, b, image.Pt(minWidth, minHeight), "") {
 		return nil
 	}
 
 	day := w.Days.Days(w.Now(), 1).Days[0].Forecast
 	if day == nil {
 		drawkit.DrawTextCentered(frame, b.Min.X, b.Max.X, b.Min.Y+(b.Dy()+drawkit.BodyAscent())/2,
-			noForecast, drawkit.BodyFace, widget.PaperBlack)
+			daydata.NoForecast, drawkit.BodyFace, widget.PaperBlack)
 		return nil
 	}
 	renderForecast(frame, b, *day, w.Config.Weather.TempUnit)
@@ -133,4 +127,4 @@ func renderForecast(frame *image.Paletted, b image.Rectangle, day weather.DailyF
 }
 
 // Factory creates a today-weather Widget from config and dependencies.
-var Factory = daydata.Factory(spec, New)
+var Factory = daydata.Factory(widgetName, daydata.Parser(spec), New)

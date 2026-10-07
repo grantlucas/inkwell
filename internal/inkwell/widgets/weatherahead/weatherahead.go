@@ -10,8 +10,8 @@
 package weatherahead
 
 import (
+	"fmt"
 	"image"
-	"log"
 	"strings"
 	"time"
 
@@ -51,9 +51,6 @@ const (
 	widestCondition = "P.CLOUDY"
 	widestHigh      = "-00°C"
 	widestLow       = "-00°"
-
-	// noForecast is what a row says when the forecast doesn't reach it.
-	noForecast = "NO FORECAST"
 )
 
 var (
@@ -86,16 +83,13 @@ var (
 
 // Widget renders the weather for the days after today.
 type Widget struct {
-	daydata.Base
-	// Config is the widget's parsed settings: the shared ones Base holds
-	// as well, and its own.
-	Config Config
+	daydata.Base[Config]
 }
 
 // New creates a weather-ahead Widget listing cfg.Days days after today
 // from days.
 func New(bounds image.Rectangle, days daydata.Source, now func() time.Time, cfg Config) *Widget {
-	return &Widget{Base: daydata.NewBase(bounds, days, now, cfg.Config), Config: cfg}
+	return &Widget{daydata.NewBase(bounds, days, now, cfg)}
 }
 
 // Render draws one row per day after today, splitting the bounds' height
@@ -109,14 +103,10 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	drawkit.FillWhite(frame, b)
 
 	n := w.Config.Days
-	rowH := b.Dy() / n
-	// The draw helpers clip to the frame, not to the widget, so a widget
-	// too small for its rows would ink its neighbours.
-	if b.Dx() < minWidth || rowH < minRowH {
-		log.Printf("%s: bounds are %dx%d, need at least %dx%d for %d days — drawing nothing",
-			widgetName, b.Dx(), b.Dy(), minWidth, n*minRowH, n)
+	if !daydata.Fits(widgetName, b, image.Pt(minWidth, n*minRowH), fmt.Sprintf("%d days", n)) {
 		return nil
 	}
+	rowH := b.Dy() / n
 
 	// Today is the first day asked for and today-weather's to show; the
 	// rows are the days after it.
@@ -159,7 +149,7 @@ func renderRow(frame *image.Paletted, r image.Rectangle, d daydata.Day, unit str
 		strings.ToUpper(d.Start.Format("Monday 2")), drawkit.BodyBoldFace, widget.PaperBlack)
 
 	if d.Forecast == nil {
-		drawkit.DrawText(frame, x, top+condBaseline, noForecast, drawkit.BodyFace, widget.PaperBlack)
+		drawkit.DrawText(frame, x, top+condBaseline, daydata.NoForecast, drawkit.BodyFace, widget.PaperBlack)
 		return
 	}
 	f := *d.Forecast

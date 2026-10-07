@@ -86,18 +86,6 @@ func TestFactory(t *testing.T) {
 	}
 }
 
-// A dashboard wired without a clock is a fault to report at load, not a
-// widget that quietly reads the wall clock.
-func TestFactory_NeedsAClock(t *testing.T) {
-	deps := widget.Deps{
-		Calendar: calendar.NewProvider(fakehttp.New(), fixedClock(testTime)),
-		Weather:  weather.NewProvider(fakehttp.New(), time.Hour, fixedClock(testTime), weather.Settings{}),
-	}
-	if _, err := Factory(rightColumn, nil, deps); err == nil || err.Error() != "weather-ahead: no clock" {
-		t.Fatalf("err = %v, want %q", err, "weather-ahead: no clock")
-	}
-}
-
 // A failed forecast fetch is not a render error: the compositor drops the
 // whole frame on the first one, which would blank every other widget on
 // the screen. With no forecast to draw, every row says so, as in the

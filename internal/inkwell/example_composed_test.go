@@ -70,7 +70,7 @@ func TestExampleConfig_ComposedScreen(t *testing.T) {
 		t.Fatalf("render: %v", err)
 	}
 	for _, w := range screen.Widgets() {
-		if !inked(frame, w.Bounds()) {
+		if !testutil.Inked(frame, w.Bounds()) {
 			t.Errorf("%T at %v drew nothing", w, w.Bounds())
 		}
 	}

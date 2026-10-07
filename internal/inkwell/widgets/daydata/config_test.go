@@ -13,13 +13,13 @@ import (
 var listing = daydata.Spec{Widget: "test-widget", MaxEvents: 3}
 
 // weatherOnly is a widget that draws the forecast and no events.
-var weatherOnly = daydata.Spec{Widget: "test-widget", WeatherOnly: true}
+var weatherOnly = daydata.Spec{Widget: "test-widget", Reads: daydata.WeatherOnly}
 
 // calendarOnly is a widget that lists events and draws no forecast.
-var calendarOnly = daydata.Spec{Widget: "test-widget", MaxEvents: 3, CalendarOnly: true}
+var calendarOnly = daydata.Spec{Widget: "test-widget", MaxEvents: 3, Reads: daydata.CalendarOnly}
 
 // oneDay is a widget that draws a single day, today or one after it.
-var oneDay = daydata.Spec{Widget: "test-widget", WeatherOnly: true, OneDay: true}
+var oneDay = daydata.Spec{Widget: "test-widget", Reads: daydata.WeatherOnly, OneDay: true}
 
 // topLevel is the dashboard's top-level weather settings.
 var topLevel = weather.NewProvider(nil, time.Hour, nil, weather.Settings{
@@ -187,7 +187,7 @@ func TestParseConfig_Accepts(t *testing.T) {
 		},
 		{
 			label: "a weather-only widget's own key", inherit: topLevel,
-			spec: daydata.Spec{Widget: "test-widget", WeatherOnly: true, Extra: []string{"days"}},
+			spec: daydata.Spec{Widget: "test-widget", Reads: daydata.WeatherOnly, Extra: []string{"days"}},
 			raw:  map[string]any{"days": 4},
 			check: func(*testing.T, daydata.Config) {
 			},

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"strings"
+	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
@@ -63,7 +64,7 @@ const (
 // or a column frame would spend ink restating what position already
 // says. (A framed column with an otherwise-normal header also read as
 // half-finished.)
-func drawColumn(frame *image.Paletted, r image.Rectangle, day daydata.Day, unit string) {
+func drawColumn(frame *image.Paletted, r image.Rectangle, day daydata.Day, _ time.Time, unit string) {
 	ascent := drawkit.BodyAscent()
 	drawkit.Scaled(drawkit.BodyBoldFace, weekdayScale, widget.PaperBlack).DrawCentered(
 		frame, r.Min.X, r.Max.X, r.Min.Y+weekdayTop+ascent*weekdayScale,

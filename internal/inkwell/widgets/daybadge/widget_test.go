@@ -216,15 +216,3 @@ func TestFactory(t *testing.T) {
 		})
 	}
 }
-
-// A dashboard wired without a clock is a fault to report at load, not a
-// widget that quietly reads the wall clock.
-func TestFactory_NeedsAClock(t *testing.T) {
-	deps := widget.Deps{
-		Calendar: calendar.NewProvider(fakehttp.New(), fixedClock(testTime)),
-		Weather:  weather.NewProvider(fakehttp.New(), time.Hour, fixedClock(testTime), weather.Settings{}),
-	}
-	if _, err := daybadge.Factory(image.Rect(0, 0, 160, 156), nil, deps); err == nil || err.Error() != "day-badge: no clock" {
-		t.Fatalf("err = %v, want %q", err, "day-badge: no clock")
-	}
-}

@@ -22,10 +22,10 @@ import (
 //
 // These are thin wrappers, but sharing them is what stops each screen
 // re-deciding what colour body text is. The answer is always solid
-// PaperBlack (or PaperWhite on an inverted block): a gray source has its
-// anti-aliased fringe chopped by the BW threshold and vanishes into
-// Gray4's light bucket, so hierarchy comes from weight and size. See
-// CLAUDE.md.
+// PaperBlack (or PaperWhite on an inverted block). A glyph is a 1-bit
+// mask, so a gray source paints solid pixels of that gray, and those obey
+// the BW threshold: light grays vanish on BW and land in Gray4's light
+// bucket, so hierarchy comes from weight and size. See CLAUDE.md.
 
 // BodyFace and BodyBoldFace are the 20 px tier in both weights.
 var (

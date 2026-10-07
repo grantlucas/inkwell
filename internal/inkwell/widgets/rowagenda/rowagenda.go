@@ -2,7 +2,6 @@ package rowagenda
 
 import (
 	"image"
-	"log"
 	"time"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
@@ -15,7 +14,7 @@ var _ widget.Widget = (*Widget)(nil)
 
 // Widget renders the row-agenda screen.
 type Widget struct {
-	daydata.Base
+	daydata.Base[daydata.Config]
 }
 
 // New creates a row-agenda Widget drawing the days from days. Of cfg it
@@ -30,12 +29,8 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	drawkit.FillWhite(frame, w.Bounds())
 
 	// Too small to draw into without spilling past the widget's bounds
-	// and over its neighbour on the shared frame. A blank region is a
-	// misconfiguration an operator can see; ink on another widget looks
-	// like a fault somewhere else entirely.
-	if w.Bounds().Dy() < minHeight || w.Bounds().Dx() < minWidth {
-		log.Printf("rowagenda: bounds are %dx%d, need at least %dx%d — drawing nothing",
-			w.Bounds().Dx(), w.Bounds().Dy(), minWidth, minHeight)
+	// and over its neighbour on the shared frame.
+	if !daydata.Fits(widgetName, w.Bounds(), image.Pt(minWidth, minHeight), "") {
 		return nil
 	}
 
@@ -81,4 +76,4 @@ func (w *Widget) Render(frame *image.Paletted) error {
 // Factory creates a row-agenda Widget from config and dependencies. Its
 // settings are the ones every calendar widget shares, so a screen can be
 // swapped between calendar widgets without rewriting its config.
-var Factory = daydata.Factory(spec, New)
+var Factory = daydata.Factory(widgetName, daydata.Parser(spec), New)

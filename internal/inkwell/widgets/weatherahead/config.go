@@ -1,11 +1,7 @@
 package weatherahead
 
 import (
-	"fmt"
-	"image"
-
 	"github.com/grantlucas/inkwell/internal/inkwell/weather"
-	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 )
 
@@ -28,9 +24,9 @@ const (
 // every day widget takes, no calendar, and days, which parseConfig reads
 // itself.
 var spec = daydata.Spec{
-	Widget:      widgetName,
-	WeatherOnly: true,
-	Extra:       []string{"days"},
+	Widget: widgetName,
+	Reads:  daydata.WeatherOnly,
+	Extra:  []string{"days"},
 }
 
 // Config is weather-ahead's parsed configuration: the shared weather
@@ -49,32 +45,10 @@ func parseConfig(raw map[string]any, inherit *weather.Provider) (Config, error) 
 	if err != nil {
 		return cfg, err
 	}
-	v, ok := raw["days"]
-	if !ok {
-		return cfg, nil
-	}
-	n, ok := v.(int)
-	if !ok {
-		return cfg, fmt.Errorf("%s: days must be an integer, got %T", widgetName, v)
-	}
-	if n < 1 || n > maxDays {
-		return cfg, fmt.Errorf("%s: days must be in [1, %d], got %d", widgetName, maxDays, n)
-	}
-	cfg.Days = n
-	return cfg, nil
+	keys := daydata.ReadKeys(widgetName, raw)
+	keys.Int("days", 1, maxDays, &cfg.Days)
+	return cfg, keys.Err()
 }
 
-// Factory creates a weather-ahead Widget from config and dependencies. It
-// doesn't use daydata.Factory, which hands the widget only the shared
-// settings, because days is the widget's own.
-func Factory(bounds image.Rectangle, config map[string]any, deps widget.Deps) (widget.Widget, error) {
-	cfg, err := parseConfig(config, deps.Weather)
-	if err != nil {
-		return nil, err
-	}
-	days, err := daydata.New(widgetName, cfg.Config, deps)
-	if err != nil {
-		return nil, err
-	}
-	return New(bounds, days, deps.Now, cfg), nil
-}
+// Factory creates a weather-ahead Widget from config and dependencies.
+var Factory = daydata.Factory(widgetName, parseConfig, New)
