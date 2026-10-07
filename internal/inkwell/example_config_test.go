@@ -219,9 +219,9 @@ func leftmostInk(frame *image.Paletted, r image.Rectangle) int {
 	return left
 }
 
-// The example rotates through the new screens, day-timeline first, and
+// The example rotates through the four screens, day-timeline first, and
 // each one loads with the example's bounds, tiles the panel and draws in
-// every widget. weekly-calendar is no longer part of it.
+// every widget.
 func TestExampleConfig_Rotation(t *testing.T) {
 	want := []string{"day-timeline", "bold-five", "today-hero", "row-agenda"}
 

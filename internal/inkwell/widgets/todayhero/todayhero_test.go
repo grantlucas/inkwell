@@ -1,6 +1,7 @@
 package todayhero
 
 import (
+	"fmt"
 	"image"
 	"math"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
 
 // testTime is a Monday mid-afternoon: today's agenda still has events
@@ -389,6 +391,44 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 	}
 }
 
+// With an unavailable feed, today's agenda says the calendar is
+// unavailable where it says "DONE FOR TODAY", at that size, and every day
+// row says it where it says "NOTHING SCHEDULED": the event list's note,
+// in each list's style.
+func TestWidget_SaysTheCalendarIsUnavailable(t *testing.T) {
+	bounds := image.Rect(0, 0, 800, 480)
+	w := New(bounds, daydata.Memory{Forecast: sampleForecast(), CalendarUnavailable: true}, fixedClock(testTime), drawConfig("C", false))
+	frame := renderToFrame(t, w)
+
+	// placedList is one of the widget's lists, where it draws.
+	type placedList struct {
+		label string
+		style eventlist.List
+		r     image.Rectangle
+	}
+	hero := computeHero(bounds).Agenda
+	lists := []placedList{
+		{"today's agenda", heroStyle(defaultMaxEvents, false, time.UTC),
+			image.Rect(hero.Min.X+heroPadX, hero.Min.Y+agendaTopPad, hero.Max.X-heroPadX, hero.Max.Y)},
+	}
+	for i, row := range computeDayRows(bounds) {
+		lists = append(lists, placedList{fmt.Sprintf("day row %d", i), dayRowStyle(false, time.UTC), rowAgenda(row)})
+	}
+	for _, l := range lists {
+		t.Run(l.label, func(t *testing.T) {
+			ref := newTestFrame(800, 480)
+			l.style.Unavailable = true
+			l.style.Draw(ref, l.r, nil)
+			if !testutil.Inked(ref, l.r) {
+				t.Fatal("the note did not fit the list")
+			}
+			if !testutil.SameIn(frame, ref, l.r) {
+				t.Error("the list does not say the calendar is unavailable")
+			}
+		})
+	}
+}
+
 func TestWidget_Golden(t *testing.T) {
 	tests := []struct {
 		label    string
@@ -397,7 +437,21 @@ func TestWidget_Golden(t *testing.T) {
 		clock    time.Time
 		unit     string
 		location bool
+		// unavailable serves the days with an unavailable feed.
+		unavailable bool
 	}{
+		{
+			label:       "calendar unavailable",
+			forecast:    sampleForecast(),
+			unavailable: true,
+		},
+		{
+			// What the other feeds sent is listed under the note.
+			label:       "calendar unavailable with events from another feed",
+			events:      sampleEvents(),
+			forecast:    sampleForecast(),
+			unavailable: true,
+		},
 		{
 			// Mid-afternoon: today still has events, the chart has its
 			// bars and marker, one day row overflows to "+N more" and
@@ -452,7 +506,7 @@ func TestWidget_Golden(t *testing.T) {
 			if clock.IsZero() {
 				clock = testTime
 			}
-			w := New(image.Rect(0, 0, 800, 480), daydata.InMemory(tt.events, tt.forecast), fixedClock(clock), drawConfig(unit, tt.location))
+			w := New(image.Rect(0, 0, 800, 480), daydata.Memory{Events: tt.events, Forecast: tt.forecast, CalendarUnavailable: tt.unavailable}, fixedClock(clock), drawConfig(unit, tt.location))
 			testutil.AssertGoldenPNG(t, renderToFrame(t, w))
 		})
 	}
@@ -485,7 +539,7 @@ func TestFactory(t *testing.T) {
 		},
 		{label: "caps events at its default", config: map[string]any{"feeds": []any{"https://example.com/a.ics"}}},
 		{
-			label:   "explains a weekly-calendar key",
+			label:   "explains a retired calendar key",
 			config:  map[string]any{"feeds": []any{"https://example.com/a.ics"}, "show_weather": false},
 			wantErr: "today-hero: show_weather is not supported: the weather band is part of the layout; a day with no forecast already draws nothing",
 		},

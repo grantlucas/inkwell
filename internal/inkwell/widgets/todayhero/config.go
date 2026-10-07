@@ -14,13 +14,13 @@ const (
 )
 
 // spec declares today-hero to the shared calendar-widget parser. It takes
-// only the shared settings. The weekly-calendar keys it has no equivalent
-// for are rejected with the reason rather than ignored: the docs promise
-// the config is swappable between the two, so a leftover key is a
-// reasonable thing to find in a pasted config, and silently dropping
-// show_weather: false would draw a weather band the operator explicitly
-// turned off, which looks like a bug in the widget rather than a key that
-// did not carry over.
+// only the shared settings. The keys of the old weekly-calendar widget it
+// has no equivalent for are rejected with the reason rather than ignored:
+// the docs promise the config is swappable between calendar widgets, so a
+// leftover key is a reasonable thing to find in a pasted config, and
+// silently dropping show_weather: false would draw a weather band the
+// operator explicitly turned off, which looks like a bug in the widget
+// rather than a key that did not carry over.
 var spec = daydata.Spec{
 	Widget:    widgetName,
 	MaxEvents: defaultMaxEvents,

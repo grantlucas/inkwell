@@ -217,6 +217,12 @@ defaults apply. Any individual widget can override any of these in its
 own `config:`; see any weather widget's table, such as
 [day-timeline](#day-timeline)'s.
 
+The per-widget overrides exist for the multi-location case — a second
+widget showing another city. If every widget wants the same values, set
+them once here and leave the overrides out; overriding a widget's
+location or model gives it a forecast of its own rather than the shared
+cached one.
+
 ## `dashboard` — screens and rotation
 
 ```yaml
@@ -426,8 +432,8 @@ inverted header would spend ink restating what position already says.
 <!-- markdownlint-enable MD013 -->
 
 Calendar keys this screen has no use for — `days`, `week_start`,
-`show_weather`, `show_weather_label`, `highlight_hour`, all carried over
-from the deprecated `weekly-calendar` — are **rejected with an
+`show_weather`, `show_weather_label`, `highlight_hour`, all left over
+from the removed `weekly-calendar` widget — are **rejected with an
 explanation** rather than ignored. Silently dropping
 `show_weather: false` would draw a weather band you had turned off,
 which reads as a bug in the widget rather than a key that did not carry
@@ -627,6 +633,20 @@ taken as the owner, since hiding events by someone else's answers would
 be worse than showing a declined one. Cancelled events, which the
 organizer has called off for everyone, are hidden on every feed.
 
+#### Unavailable calendars
+
+When a feed can't be fetched and there is no earlier copy of it to
+show, `bold-five`, `today-hero`, `row-agenda` and `event-list` say
+"CALENDAR UNAVAILABLE" at the top of each list where an empty day would
+say "--", "DONE FOR TODAY" or "NOTHING SCHEDULED", at the same size, so
+an unavailable feed never passes for a free day. In a narrow list, such
+as a `bold-five` column, it wraps to "CALENDAR" over "UNAVAILABLE". A
+list too short for that says it at body size, and then on one line cut
+to the width, so it is said whenever a line fits. Events from the feeds
+that did answer are listed under it. A feed that fails while an earlier
+copy is cached shows that copy, with no note, as though it had
+answered. `day-timeline` says the same in its own way, described below.
+
 ### `day-timeline`
 
 Today only, on an hourly grid. Each event is a block from its real
@@ -670,8 +690,15 @@ window are not drawn; a "+N EARLIER" note above the grid or a
 "+N LATER" note below it counts them, and each note takes height only
 when there is something to count.
 
-The grid's top edge is ruled only when the all-day strip or the
-"+N EARLIER" note sits above it. Otherwise the grid starts at the
+When a feed can't be fetched and there is no earlier copy of it to
+show, the widget says "CALENDAR UNAVAILABLE" in an outlined box across
+its top, so an unavailable feed never passes for a free day. Events from
+the feeds that did answer still draw beneath it. A feed that fails
+while an earlier copy is cached shows that copy, with no note, as
+though it had answered.
+
+The grid's top edge is ruled only when that note, the all-day strip or
+the "+N EARLIER" note sits above it. Otherwise the grid starts at the
 widget's top with no rule, so a separator placed above the widget, as
 under the clock band on the day-timeline screen, is the only line there.
 
@@ -928,50 +955,6 @@ today-hero's agenda is `style: large`, `hide_finished: true` and
 `empty: "DONE FOR TODAY"`, though that message is drawn at 2x there and
 at body size here.
 
-### `weekly-calendar`
-
-> **Deprecated, pending removal.** weekly-calendar is no longer in the
-> example config and will be deleted in a later release. Its filled
-> today header lands in the same place on every refresh, which is the
-> burn-in risk the newer screens avoid. Move to one of the screens that
-> replaced it: [`day-timeline`](#the-day-timeline-screen) for today hour
-> by hour, [`bold-five`](#bold-five) for the same five-column shape
-> sized for across the room, [`today-hero`](#today-hero) or
-> [`row-agenda`](#row-agenda). They take the same `feeds`, `refresh`,
-> `show_location` and weather keys. A key below that the new screen has
-> no equivalent for stops the config loading, with the reason where
-> there is one, rather than being silently dropped.
-
-A rolling calendar-and-weather view of up to seven days, one column
-per day starting with today — set `days` to show fewer and get wider
-columns.
-
-<!-- markdownlint-disable MD013 -->
-| Key | Type | Default | Accepted values | Impact |
-|-----|------|---------|-----------------|--------|
-| `feeds` | list | — | **Required**, non-empty | ICS feed URLs to merge. Each entry is a URL string, or an object with `url`, optional `name`, and optional `rules` — see [feed rules](#feed-rules). |
-| `refresh` | duration | `"15m"` | `>= 1m` | **Calendar data cache TTL** — how often feeds are re-fetched. Not the render cadence. |
-| `days` | integer | `7` | `[1, 7]` | Day columns to draw, counting from today. Fewer days means wider columns and more room for event text: across 800 px, `7` leaves 13 characters per line and `5` leaves 19. |
-| `max_events` | integer | `5` | Positive | Cap on events shown per day column. Extra events are dropped, not scrolled. |
-| `show_location` | bool | `false` | `true`, `false` | Draws each event's location on its own line below the title, when the event has one and the column has room. |
-| `show_weather` | bool | `true` | `true`, `false` | Renders the per-day weather block. When false, the space is given back to events. |
-| `show_weather_label` | bool | `true` | `true`, `false` | Shows the condition word (`CLOUDY`) above the temperatures. |
-| `week_start` | string | `"monday"` | `monday`, `sunday` | **Validated but not yet applied** — the view always starts on today. |
-| `highlight_hour` | integer | `15` | `[0, 23]` | **Validated but not yet applied** — the hourly chart always highlights the current hour. |
-| `latitude` | number | inherits `weather.latitude` | `[-90, 90]` | Per-widget forecast location override. |
-| `longitude` | number | inherits `weather.longitude` | `[-180, 180]` | Per-widget forecast location override. |
-| `temp_unit` | string | inherits `weather.temp_unit` | `C`, `F` | Per-widget unit override. |
-| `weather_model` | string | inherits `weather.model` | `gfs`, `ecmwf`, `gem` | Per-widget model override. |
-<!-- markdownlint-enable MD013 -->
-
-The four inheriting keys exist for the multi-location case — a second
-calendar widget showing another city. If every widget wants the same
-values, set them once under top-level [`weather`](#weather--shared-forecast-defaults)
-and leave these out; overriding here defeats the shared cache.
-
-Any key not in this table, such as a misspelt `max_event`, stops the
-dashboard loading with the list of keys the widget accepts.
-
 ## Worked examples
 
 ### The day-timeline screen
@@ -1013,9 +996,10 @@ agenda and the 1h weather land on minutes the 5m clock is already
 refreshing.
 
 A widget whose data does not arrive draws what it can and leaves the
-others alone. With the calendar feed down, the grid is drawn with no
-events while the clock and the weather draw as usual. With the forecast
-down, the weather lane is blank and both weather widgets say
+others alone. With the calendar feed unavailable, the day-timeline says
+"CALENDAR UNAVAILABLE" in an outlined box across its top, over a grid
+with no events, while the clock and the weather draw as usual. With the
+forecast down, the weather lane is blank and both weather widgets say
 `NO FORECAST`, while the agenda and the clock draw as usual. The screen
 is tested in both cases, along with a golden of the whole screen, by
 loading this entry from the example config.

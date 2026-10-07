@@ -3,6 +3,7 @@ package weatherview
 import (
 	"image"
 	"math"
+	"slices"
 	"testing"
 
 	"github.com/grantlucas/inkwell/internal/inkwell/testutil"
@@ -329,7 +330,7 @@ func TestRenderCombinedChart_TraceHourDrawsAStub(t *testing.T) {
 	}
 }
 
-// The axis carries three 24-hour marks — 6, 12 and 18. The live chart's
+// The axis carries three 24-hour marks — 6, 12 and 18. A 12-hour
 // "6 9 12 3 8" mixes morning and afternoon on one axis and has to be
 // worked out; these match the 15:04 format the rest of the panel is set
 // in, and each sits under its own hour slot, below the ticks and inside
@@ -629,6 +630,42 @@ func TestRenderCombinedChart_Golden(t *testing.T) {
 			frame := newTestFrame(tc.w, tc.h)
 			RenderCombinedChart(frame, image.Rect(0, 0, tc.w, tc.h-bandSlack), tc.hourly, sharedRange, tc.opts)
 			testutil.AssertGoldenPNG(t, frame)
+		})
+	}
+}
+
+// chartHasInk reports whether any pixel in frame is non-white. The chart
+// draws gray bars as well as black strokes, so asserting on PaperBlack
+// alone would miss them.
+func chartHasInk(frame *image.Paletted) bool {
+	for _, px := range frame.Pix {
+		if px != widget.PaperWhite {
+			return true
+		}
+	}
+	return false
+}
+
+// filterHours keeps the hours inside the window, both ends included.
+func TestFilterHours(t *testing.T) {
+	tests := []struct {
+		label  string
+		hourly []weather.HourlyPoint
+		want   []int
+	}{
+		{label: "a whole day", hourly: flatHourly(15, nil), want: []int{6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}},
+		{label: "nothing in the window", hourly: []weather.HourlyPoint{{Hour: 3}, {Hour: 23}}, want: nil},
+		{label: "no points", hourly: nil, want: nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			var got []int
+			for _, hp := range filterHours(tt.hourly, 6, 20) {
+				got = append(got, hp.Hour)
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("filterHours kept hours %v, want %v", got, tt.want)
+			}
 		})
 	}
 }

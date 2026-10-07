@@ -46,6 +46,9 @@ func (w *Widget) Render(frame *image.Paletted) error {
 	now := w.Now()
 	data := w.Days.Days(now, columns)
 	agenda := agendaStyle(w.Config.MaxEvents, w.Config.ShowLocation, now.Location())
+	// A feed with nothing to draw from leaves every day short, so every
+	// column says so rather than a "--" that reads as a free day.
+	agenda.Unavailable = data.CalendarUnavailable
 
 	for i, col := range computeColumns(w.Bounds()) {
 		day := data.Days[i]

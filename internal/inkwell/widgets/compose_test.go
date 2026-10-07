@@ -70,16 +70,21 @@ func composeSky(day, hour int) (temp, precip float64) {
 	return math.Round(temp*10) / 10, precip
 }
 
-// composeDeps is what the app hands every widget, fetching the week's
-// calendar and forecast through one fake upstream.
-func composeDeps() widget.Deps {
+// composeClient is one fake upstream serving the week's forecast, and the
+// calendar feed with feed.
+func composeClient(feed fakehttp.Reply) *fakehttp.Client {
 	client := fakehttp.New()
-	client.Serve(composeFeed, composeWeek())
+	client.Set(composeFeed, feed)
 	client.Handle(composeForecast, fakehttp.OpenMeteo{
 		Now: composeNow, Site: composeNow.Location(), Sky: composeSky,
 		Codes: []int{80, 63, 2, 45, 3, 0, 0, 0},
 	}.Reply)
-	now := func() time.Time { return composeNow }
+	return client
+}
+
+// composeDeps is what the app hands every widget, fetching the calendar
+// and forecast through client, with its clock reading now.
+func composeDeps(client *fakehttp.Client, now func() time.Time) widget.Deps {
 	return widget.Deps{
 		Now:      now,
 		Calendar: calendar.NewProvider(client, now),
@@ -128,7 +133,7 @@ func boldFiveFromWidgets() []placed {
 // clips to its bounds.
 func TestComposedScreen_DrawsBoldFive(t *testing.T) {
 	r := widgets.NewDefaultRegistry()
-	deps := composeDeps()
+	deps := composeDeps(composeClient(fakehttp.Reply{Body: composeWeek()}), func() time.Time { return composeNow })
 	panel := image.Rect(0, 0, 800, 480)
 
 	whole, err := r.Create("bold-five", panel, map[string]any{"feeds": []any{composeFeed}}, deps)

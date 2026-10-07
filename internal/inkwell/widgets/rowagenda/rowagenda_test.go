@@ -284,6 +284,29 @@ func TestWidget_EmptyDayStaysInBounds(t *testing.T) {
 	}
 }
 
+// With an unavailable feed, every row says the calendar is unavailable
+// where an empty day says "NOTHING SCHEDULED": the event list's note, one
+// line, in a row planned for that line.
+func TestWidget_EveryRowSaysTheCalendarIsUnavailable(t *testing.T) {
+	bounds := image.Rect(0, 0, 800, 480)
+	w := New(bounds, daydata.Memory{Forecast: sampleForecast(), CalendarUnavailable: true}, fixedClock(testTime), drawConfig("C", false))
+	frame := renderToFrame(t, w)
+
+	style := agendaStyle(false, time.UTC)
+	style.Unavailable = true
+	for i, row := range planRows(bounds, []int{1, 1, 1, 1, 1}) {
+		list := agendaList(row)
+		ref := newTestFrame(800, 480)
+		style.Draw(ref, list, nil)
+		if !testutil.Inked(ref, list) {
+			t.Fatalf("row %d: the note did not fit the row's list", i)
+		}
+		if !testutil.SameIn(frame, ref, list) {
+			t.Errorf("row %d: the list does not say the calendar is unavailable", i)
+		}
+	}
+}
+
 func TestWidget_Golden(t *testing.T) {
 	tests := []struct {
 		label    string
@@ -291,7 +314,22 @@ func TestWidget_Golden(t *testing.T) {
 		forecast []weather.DailyForecast
 		unit     string
 		location bool
+		// unavailable serves the days with an unavailable feed.
+		unavailable bool
 	}{
+		{
+			label:       "calendar unavailable",
+			forecast:    sampleForecast(),
+			unavailable: true,
+		},
+		{
+			// The note takes a line of each row's budget, so the packed
+			// rows give up one more event to "+N MORE".
+			label:       "calendar unavailable in a week that overflows",
+			events:      overflowingEvents(),
+			forecast:    sampleForecast(),
+			unavailable: true,
+		},
 		{
 			// Every event gets a line: today's row and Thursday's grow,
 			// the rest share the spare room, Friday says it is empty.
@@ -344,7 +382,7 @@ func TestWidget_Golden(t *testing.T) {
 			if unit == "" {
 				unit = "C"
 			}
-			w := New(image.Rect(0, 0, 800, 480), daydata.InMemory(tt.events, tt.forecast), fixedClock(testTime), drawConfig(unit, tt.location))
+			w := New(image.Rect(0, 0, 800, 480), daydata.Memory{Events: tt.events, Forecast: tt.forecast, CalendarUnavailable: tt.unavailable}, fixedClock(testTime), drawConfig(unit, tt.location))
 			testutil.AssertGoldenPNG(t, renderToFrame(t, w))
 		})
 	}
@@ -382,7 +420,7 @@ func TestFactory(t *testing.T) {
 			wantErr: "row-agenda: max_events is not supported: each row grows to fit its events, and when the week is too full the busiest rows give up lines first",
 		},
 		{
-			label:   "explains a weekly-calendar key",
+			label:   "explains a retired calendar key",
 			config:  map[string]any{"feeds": []any{"https://example.com/a.ics"}, "show_weather": false},
 			wantErr: "row-agenda: show_weather is not supported: the weather badge is part of the layout; a day with no forecast already draws nothing",
 		},

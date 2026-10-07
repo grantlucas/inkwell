@@ -47,10 +47,22 @@ type Data struct {
 	// ForecastArrived is whether a forecast came back at all, even one
 	// that reaches none of the days. Whether a day has weather is its own
 	// Forecast; this is for a layout that sizes itself on the forecast's
-	// arrival, as weekly-calendar's band does, so a 200 response with no
-	// daily data doesn't reflow the screen for one cycle.
+	// arrival, so a 200 response with no daily data doesn't reflow the
+	// screen for one cycle.
 	ForecastArrived bool
+	// CalendarUnavailable is whether any of the widget's feeds was
+	// unavailable on this render: its fetch failed and there was no
+	// earlier good copy. The days then carry only the other feeds' events,
+	// and a day with none would read as a free day, so a widget says the
+	// calendar is unavailable (NoCalendar) rather than draw it empty. A
+	// feed that failed while it had a copy cached served that copy, and is
+	// not unavailable.
+	CalendarUnavailable bool
 }
+
+// NoCalendar is what a widget says when its calendar is unavailable,
+// rather than let an empty day stand for one it couldn't read.
+const NoCalendar = "CALENDAR UNAVAILABLE"
 
 // New builds a widget's day data module from its configuration and the
 // dependencies the app hands every widget. A missing dependency is a
@@ -75,9 +87,8 @@ func New(widgetName string, cfg Config, deps widget.Deps, opts ...Option) (Sourc
 type Option func(*module)
 
 // WithoutWeather leaves the forecast unfetched, so every day's Forecast is
-// nil and ForecastArrived is false. weekly-calendar passes it for
-// show_weather: false, so a screen that hides its weather doesn't fetch a
-// forecast to throw away.
+// nil and ForecastArrived is false. event-list passes it, so a widget that
+// draws no weather doesn't fetch a forecast to throw away.
 func WithoutWeather() Option {
 	return func(m *module) { m.weather = nil }
 }
@@ -95,20 +106,24 @@ func (m *module) Days(now time.Time, n int) Data {
 	ctx, cancel := fetchContext()
 	defer cancel()
 	got := fetch(ctx, m.widget, m.cal, m.weather, days, m.location)
-	return assemble(days, got.events, got.forecast, got.arrived)
+	return assemble(days, got)
 }
 
 // assemble gives each day its events and its forecast, and takes the
-// shared temperature range across the days that have one. arrived is
-// whether a forecast came back at all.
-func assemble(days []Day, events []calendar.Event, forecast []weather.DailyForecast, arrived bool) Data {
+// shared temperature range across the days that have one.
+func assemble(days []Day, got fetched) Data {
 	var known []weather.DailyForecast
 	for i := range days {
-		days[i].Events = filterEventsForDay(events, days[i])
-		if f := forecastFor(forecast, days[i]); f != nil {
+		days[i].Events = filterEventsForDay(got.events, days[i])
+		if f := forecastFor(got.forecast, days[i]); f != nil {
 			days[i].Forecast = f
 			known = append(known, *f)
 		}
 	}
-	return Data{Days: days, TempRange: weatherview.GlobalTempRange(known), ForecastArrived: arrived}
+	return Data{
+		Days:                days,
+		TempRange:           weatherview.GlobalTempRange(known),
+		ForecastArrived:     got.arrived,
+		CalendarUnavailable: got.calendarUnavailable,
+	}
 }

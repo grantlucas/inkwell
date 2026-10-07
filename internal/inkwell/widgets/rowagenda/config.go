@@ -11,13 +11,13 @@ const widgetName = "row-agenda"
 // event the week has room for, and when the week is too full the busiest
 // rows give up lines first, so a separate cap could only contradict that.
 //
-// max_events and the weekly-calendar keys this screen has no equivalent
-// for are rejected with the reason rather than ignored. The docs promise
-// the config is swappable between calendar widgets, so a leftover key is a
-// reasonable thing to find in a pasted config, and silently dropping
-// show_weather: false would draw a weather badge the operator explicitly
-// turned off, which looks like a bug in the widget rather than a key that
-// did not carry over.
+// max_events and the keys of the old weekly-calendar widget this screen
+// has no equivalent for are rejected with the reason rather than ignored.
+// The docs promise the config is swappable between calendar widgets, so a
+// leftover key is a reasonable thing to find in a pasted config, and
+// silently dropping show_weather: false would draw a weather badge the
+// operator explicitly turned off, which looks like a bug in the widget
+// rather than a key that did not carry over.
 var spec = daydata.Spec{
 	Widget: widgetName,
 	Rejected: map[string]string{

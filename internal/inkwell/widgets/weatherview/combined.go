@@ -202,3 +202,14 @@ func DrawContrastLine(frame *image.Paletted, pts []image.Point, run LineRun) {
 		setPixel(frame, p.X, p.Y, ink[i])
 	}
 }
+
+// filterHours keeps the points from start to end, both inclusive.
+func filterHours(hourly []weather.HourlyPoint, start, end int) []weather.HourlyPoint {
+	var out []weather.HourlyPoint
+	for _, hp := range hourly {
+		if hp.Hour >= start && hp.Hour <= end {
+			out = append(out, hp)
+		}
+	}
+	return out
+}

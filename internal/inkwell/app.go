@@ -132,10 +132,10 @@ func NewApp(cfg *Config, opts ...AppOption) (*App, error) {
 		registry = widgets.NewDefaultRegistry()
 	}
 	// Hand every widget a clock already in the dashboard's display zone.
-	// clock, date, fuzzy_clock and weekly-calendar all format whatever
-	// time.Time they are given, so zoning here is the single place that
-	// decides what the whole panel reads — rather than each widget
-	// re-resolving it and drifting apart.
+	// clock, date, fuzzy_clock and the calendar screens all format
+	// whatever time.Time they are given, so zoning here is the single
+	// place that decides what the whole panel reads — rather than each
+	// widget re-resolving it and drifting apart.
 	loc, err := cfg.Location()
 	if err != nil {
 		return nil, err

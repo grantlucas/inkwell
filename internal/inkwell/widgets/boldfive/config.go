@@ -3,8 +3,9 @@ package boldfive
 import "github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 
 const (
-	// defaultMaxEvents is four rather than weekly's five: the taller
-	// line height this screen exists for costs one event per column.
+	// defaultMaxEvents is four rather than the five the old weekly view
+	// showed: the taller line height this screen exists for costs one
+	// event per column.
 	defaultMaxEvents = 4
 
 	// widgetName prefixes every config error so a dashboard that fails
@@ -13,11 +14,11 @@ const (
 )
 
 // spec declares bold-five to the shared calendar-widget parser. It takes
-// only the shared settings. The weekly-calendar keys it has no equivalent
-// for are rejected with the reason rather than ignored: silently dropping
-// show_weather: false would draw a weather band the operator explicitly
-// turned off, which looks like a bug in the widget rather than a key that
-// did not carry over.
+// only the shared settings. The keys of the old weekly-calendar widget it
+// has no equivalent for are rejected with the reason rather than ignored:
+// silently dropping show_weather: false would draw a weather band the
+// operator explicitly turned off, which looks like a bug in the widget
+// rather than a key that did not carry over.
 var spec = daydata.Spec{
 	Widget:    widgetName,
 	MaxEvents: defaultMaxEvents,

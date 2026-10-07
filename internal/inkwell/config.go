@@ -87,7 +87,7 @@ type ScreenConfig struct {
 // the only refresh setting in the config and is fed into the refresh queue,
 // which aligns cadences to wall-clock boundaries so widgets sharing a cadence
 // coalesce. It is distinct from any widget-specific data-refresh setting nested
-// under Config (e.g. the weekly-calendar's config.refresh, which is its data
+// under Config (e.g. a calendar widget's config.refresh, which is its data
 // cache TTL): Refresh controls when the screen is refreshed, not when the
 // widget refetches data.
 type WidgetConfig struct {

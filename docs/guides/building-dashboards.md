@@ -304,8 +304,7 @@ dashboard:
 > The built-in widget types are `clock`, `date`, `fuzzy_clock`,
 > `separator`, the calendar-and-weather screens `bold-five`,
 > `today-hero`, `row-agenda` and `day-timeline`, and the weather-only
-> `today-weather` and `weather-ahead`. `weekly-calendar` is still
-> registered but deprecated and due for removal. The
+> `today-weather` and `weather-ahead`. The
 > [configuration reference](configuration.md#widget-reference) covers
 > each one. The `label` widget above is the one you build in
 > [Creating a Widget](#creating-a-widget); register it before using it.

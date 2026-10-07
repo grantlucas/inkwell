@@ -6,9 +6,6 @@
 // width is what titles were starving for. Every row has one event
 // column running the width of the agenda, so a title gets 35-odd
 // characters whatever else the day holds.
-//
-// It is a separate widget type rather than a mode of weekly-calendar,
-// so the current view stays available as a control in the rotation.
 package rowagenda
 
 import (

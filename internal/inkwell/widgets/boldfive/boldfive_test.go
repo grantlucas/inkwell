@@ -133,6 +133,30 @@ func TestWidget_DrawsColumnDividers(t *testing.T) {
 	}
 }
 
+// With an unavailable feed, every column says the calendar is unavailable
+// where an empty day says "--": the event list's note, in the column's
+// list. A "--" would tell the viewer the day is free.
+func TestWidget_EveryColumnSaysTheCalendarIsUnavailable(t *testing.T) {
+	bounds := image.Rect(0, 0, 800, 480)
+	w := New(bounds, daydata.Memory{Forecast: sampleForecast(), CalendarUnavailable: true}, fixedClock(testTime), drawConfig(defaultMaxEvents, "C"))
+	frame := renderToFrame(t, w)
+
+	for i, col := range computeColumns(bounds) {
+		list := image.Rect(col.Events.Min.X+eventsPadX, col.Events.Min.Y+eventsTopPad, col.Events.Max.X-eventsPadX, col.Events.Max.Y)
+		ref := image.NewPaletted(bounds, widget.PaperPalette)
+		drawkit.FillWhite(ref, bounds)
+		style := agendaStyle(defaultMaxEvents, false, time.UTC)
+		style.Unavailable = true
+		style.Draw(ref, list, nil)
+		if !testutil.Inked(ref, list) {
+			t.Fatalf("column %d: the note did not fit the column's list", i)
+		}
+		if !testutil.SameIn(frame, ref, list) {
+			t.Errorf("column %d: the list does not say the calendar is unavailable", i)
+		}
+	}
+}
+
 // Today is the leftmost column and gets no highlight, so the five
 // header bands must be structurally alike — none of them inverted.
 func TestWidget_NoColumnIsHighlighted(t *testing.T) {
@@ -333,6 +357,8 @@ func TestWidget_Golden(t *testing.T) {
 		cfg      func(*daydata.Config)
 		// bounds defaults to the whole panel.
 		bounds image.Rectangle
+		// unavailable serves the days with an unavailable feed.
+		unavailable bool
 	}{
 		{
 			label:    "full week",
@@ -390,6 +416,21 @@ func TestWidget_Golden(t *testing.T) {
 			cfg:      func(c *daydata.Config) { c.MaxEvents = 3 },
 			bounds:   belowHeader,
 		},
+		// An unavailable feed: every column says so where an empty day
+		// says "--", and lists what the other feeds sent under it.
+		{
+			label:       "calendar unavailable",
+			forecast:    sampleForecast(),
+			unavailable: true,
+		},
+		{
+			label:       "calendar unavailable below header busiest day",
+			events:      append(busiestDay(), sampleEvents()[5:]...),
+			forecast:    sampleForecast(),
+			cfg:         func(c *daydata.Config) { c.MaxEvents = 3 },
+			bounds:      belowHeader,
+			unavailable: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
@@ -401,7 +442,7 @@ func TestWidget_Golden(t *testing.T) {
 			if bounds.Empty() {
 				bounds = image.Rect(0, 0, 800, 480)
 			}
-			w := New(bounds, daydata.InMemory(tt.events, tt.forecast), fixedClock(testTime), cfg)
+			w := New(bounds, daydata.Memory{Events: tt.events, Forecast: tt.forecast, CalendarUnavailable: tt.unavailable}, fixedClock(testTime), cfg)
 			testutil.AssertGoldenPNG(t, renderToFrame(t, w))
 		})
 	}
@@ -424,7 +465,7 @@ func TestFactory(t *testing.T) {
 	}{
 		{label: "caps events at its default", config: map[string]any{"feeds": []any{"https://example.com/a.ics"}}},
 		{
-			label:   "explains a weekly-calendar key",
+			label:   "explains a retired calendar key",
 			config:  map[string]any{"feeds": []any{"https://example.com/a.ics"}, "show_weather": false},
 			wantErr: "bold-five: show_weather is not supported: the weather band is part of the layout; a day with no forecast already draws nothing",
 		},

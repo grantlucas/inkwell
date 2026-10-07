@@ -15,7 +15,6 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/todayhero"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/todayweather"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weatherahead"
-	"github.com/grantlucas/inkwell/internal/inkwell/widgets/weekly"
 )
 
 // NewDefaultRegistry creates a Registry pre-loaded with all built-in widgets.
@@ -34,6 +33,5 @@ func NewDefaultRegistry() *widget.Registry {
 	r.Register("today-hero", todayhero.Factory)
 	r.Register("today-weather", todayweather.Factory)
 	r.Register("weather-ahead", weatherahead.Factory)
-	r.Register("weekly-calendar", weekly.Factory)
 	return r
 }

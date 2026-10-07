@@ -46,7 +46,6 @@ from `inkwell.yaml`:
 | `day-badge` | One day's date and weather in brief, in the shape bold-five, row-agenda or today-hero draws it. |
 | `combined-chart` | One day's precipitation bars with the temperature line over them, on a range it shares with every chart asking for the same span of days. |
 | `event-list` | One day's events in the shape bold-five, today-hero or row-agenda lists them, ending in "+N MORE" when some don't fit. |
-| `weekly-calendar` | **Deprecated, pending removal.** The original rolling calendar + weather view of up to 7 days. Use `day-timeline`, `bold-five`, `today-hero` or `row-agenda` instead. |
 <!-- markdownlint-enable MD013 -->
 
 The calendar widgets read one or more iCal feeds through a built-in parser,

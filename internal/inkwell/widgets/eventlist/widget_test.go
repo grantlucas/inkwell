@@ -106,6 +106,40 @@ func TestWidget_ListsItsDay(t *testing.T) {
 	}
 }
 
+// With an unavailable feed, the day's list says the calendar is
+// unavailable rather than what an empty day says, whatever the config
+// sets that to, and lists what the other feeds sent under it. The
+// expected frame is the style drawing those events as unavailable.
+func TestWidget_SaysWhenItsCalendarIsUnavailable(t *testing.T) {
+	bounds := image.Rect(20, 30, 330, 300)
+	str := func(s string) *string { return &s }
+
+	tests := []struct {
+		label string
+		cfg   eventlist.Config
+		want  []calendar.Event
+	}{
+		{"an empty day", listConfig(eventlist.StackedStyle, 3, 4), nil},
+		{"an empty day the config gives its own note", eventlist.Config{
+			Config: daydata.Config{MaxEvents: 3, Day: 3}, Style: eventlist.LargeStyle, Empty: str("ALL CLEAR"),
+		}, nil},
+		{"what arrived for tomorrow", listConfig(eventlist.InlineStyle, 1, 3), []calendar.Event{allWeek, dentist}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			days := daydata.Memory{Events: weekEvents, CalendarUnavailable: true}
+			w := eventlist.New(bounds, days, fixedClock(widgetTime), tt.cfg)
+			frame := renderList(t, w, image.Rect(0, 0, 400, 400))
+
+			ref := image.NewPaletted(image.Rect(0, 0, 400, 400), widget.PaperPalette)
+			style := tt.cfg.Style.List(tt.cfg.MaxEvents, false, toronto)
+			style.Unavailable = true
+			style.Draw(ref, bounds, tt.want)
+			assertFrame(t, frame, ref, nil)
+		})
+	}
+}
+
 // Every widget clears its own bounds and draws nothing outside them, so
 // it can be placed beside any other on the shared frame.
 func TestWidget_KeepsToItsBounds(t *testing.T) {
@@ -158,6 +192,28 @@ func TestWidget_Golden(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.label, func(t *testing.T) {
 			testutil.AssertGoldenPNG(t, renderList(t, newList(tt.bounds, weekEvents, tt.cfg), tt.bounds))
+		})
+	}
+}
+
+// Golden renders with an unavailable feed, at the sizes the full-screen
+// widgets give their lists: the note in each style's empty state, above
+// whatever the other feeds sent.
+func TestWidget_GoldenCalendarUnavailable(t *testing.T) {
+	tests := []struct {
+		label  string
+		cfg    eventlist.Config
+		bounds image.Rectangle
+	}{
+		{"stacked in a bold-five column", listConfig(eventlist.StackedStyle, 0, 4), image.Rect(0, 0, 148, 272)},
+		{"stacked on an empty day", listConfig(eventlist.StackedStyle, 3, 4), image.Rect(0, 0, 148, 272)},
+		{"large on an empty day", listConfig(eventlist.LargeStyle, 3, 3), image.Rect(0, 0, 310, 198)},
+		{"inline for tomorrow", listConfig(eventlist.InlineStyle, 1, 3), image.Rect(0, 0, 440, 96)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			days := daydata.Memory{Events: weekEvents, CalendarUnavailable: true}
+			testutil.AssertGoldenPNG(t, renderList(t, eventlist.New(tt.bounds, days, fixedClock(widgetTime), tt.cfg), tt.bounds))
 		})
 	}
 }
