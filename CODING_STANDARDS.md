@@ -23,9 +23,10 @@ writes its own version of any of these:
   reason.
 - **Bounds too small to draw in.** `daydata.Fits` logs and reports it, and
   the widget draws nothing.
-- **Missing data.** A widget draws a defined empty state (for weather,
-  `daydata.NoForecast`) and never returns an error from `Render`: the
-  compositor drops the whole frame on the first error.
+- **Missing data.** When its data is unavailable, a widget draws a defined
+  empty state (for weather, `daydata.NoForecast`) and its `Render` returns
+  nil. Other rendering failures still return an error, and the compositor
+  then returns no frame at all, so missing data must never take that path.
 
 ## Test helpers live in `testutil`
 
