@@ -4,16 +4,17 @@ How and when the panel refreshes, and why the driver is the way it is.
 Read this before touching refresh waveforms, panel sleep, the init
 sequences in `profile.go`, or the per-widget refresh gate.
 
-How often the panel flashes is a separate axis from how a frame is
-rendered. The render loop picks a refresh waveform per cycle
-(`refreshPlanner` in `refresh.go`): BW does a full-screen fast refresh on
-every changed cycle (a single flash) plus a periodic full refresh to clear
-ghosting, while Gray4 has no fast waveform and only skips refreshing when
-the frame is unchanged. A windowed, flicker-free per-change refresh was
-tried and abandoned — the force-drive it needs to redraw changed pixels
-cleanly settles the box inverted under the partial waveform on real
-hardware (inkwell-6jq). The flash is hardware-only — the web preview can't
-show it.
+How often the panel flashes is a separate axis from how a frame is rendered.
+The render loop picks a refresh waveform per cycle (`refreshPlanner` in
+`refresh.go`): BW does a full-screen fast refresh on every changed cycle (a
+single flash), plus a full refresh on the first cycle and periodically after
+that to clear ghosting. Gray4 has no fast waveform: it refreshes in
+grayscale on those same first and periodic cycles and on every changed
+cycle, and skips only when the frame is unchanged. A windowed, flicker-free
+per-change refresh was tried and abandoned — the force-drive it needs to
+redraw changed pixels cleanly settles the box inverted under the partial
+waveform on real hardware (inkwell-6jq). The flash is hardware-only — the
+web preview can't show it.
 
 Every push runs a hardware reset + the waveform's init sequence, the frame,
 then `EPD.Sleep`: a settle of a few seconds, the sleep sequence (power off
