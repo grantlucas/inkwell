@@ -1,6 +1,7 @@
 package todayhero
 
 import (
+	"fmt"
 	"image"
 	"math"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 )
 
 // testTime is a Monday mid-afternoon: today's agenda still has events
@@ -389,6 +391,46 @@ func TestWidget_TooSmallDrawsNothing(t *testing.T) {
 	}
 }
 
+// With a feed down and nothing cached, today's agenda says the calendar
+// is unavailable where it says "DONE FOR TODAY", at that size, and every
+// day row says it where it says "NOTHING SCHEDULED": the event list's
+// note, in each list's style.
+func TestWidget_SaysTheCalendarIsUnavailable(t *testing.T) {
+	bounds := image.Rect(0, 0, 800, 480)
+	w := New(bounds, daydata.InMemory(nil, sampleForecast(), daydata.CalendarDown()), fixedClock(testTime), drawConfig("C", false))
+	frame := renderToFrame(t, w)
+
+	hero := computeHero(bounds).Agenda
+	lists := []struct {
+		label string
+		style eventlist.List
+		r     image.Rectangle
+	}{
+		{"today's agenda", heroStyle(defaultMaxEvents, false, time.UTC),
+			image.Rect(hero.Min.X+heroPadX, hero.Min.Y+agendaTopPad, hero.Max.X-heroPadX, hero.Max.Y)},
+	}
+	for i, row := range computeDayRows(bounds) {
+		lists = append(lists, struct {
+			label string
+			style eventlist.List
+			r     image.Rectangle
+		}{fmt.Sprintf("day row %d", i), dayRowStyle(false, time.UTC), rowAgenda(row)})
+	}
+	for _, l := range lists {
+		t.Run(l.label, func(t *testing.T) {
+			ref := newTestFrame(800, 480)
+			l.style.Unavailable = true
+			l.style.Draw(ref, l.r, nil)
+			if !testutil.Inked(ref, l.r) {
+				t.Fatal("the note did not fit the list")
+			}
+			if !testutil.SameIn(frame, ref, l.r) {
+				t.Error("the list does not say the calendar is unavailable")
+			}
+		})
+	}
+}
+
 func TestWidget_Golden(t *testing.T) {
 	tests := []struct {
 		label    string
@@ -397,7 +439,21 @@ func TestWidget_Golden(t *testing.T) {
 		clock    time.Time
 		unit     string
 		location bool
+		// down serves the days with a feed down and nothing cached.
+		down bool
 	}{
+		{
+			label:    "calendar unavailable",
+			forecast: sampleForecast(),
+			down:     true,
+		},
+		{
+			// What the other feeds sent is listed under the note.
+			label:    "calendar unavailable with events from another feed",
+			events:   sampleEvents(),
+			forecast: sampleForecast(),
+			down:     true,
+		},
 		{
 			// Mid-afternoon: today still has events, the chart has its
 			// bars and marker, one day row overflows to "+N more" and
@@ -452,7 +508,11 @@ func TestWidget_Golden(t *testing.T) {
 			if clock.IsZero() {
 				clock = testTime
 			}
-			w := New(image.Rect(0, 0, 800, 480), daydata.InMemory(tt.events, tt.forecast), fixedClock(clock), drawConfig(unit, tt.location))
+			var opts []daydata.MemoryOption
+			if tt.down {
+				opts = append(opts, daydata.CalendarDown())
+			}
+			w := New(image.Rect(0, 0, 800, 480), daydata.InMemory(tt.events, tt.forecast, opts...), fixedClock(clock), drawConfig(unit, tt.location))
 			testutil.AssertGoldenPNG(t, renderToFrame(t, w))
 		})
 	}

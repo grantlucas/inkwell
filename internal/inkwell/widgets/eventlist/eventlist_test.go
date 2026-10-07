@@ -7,6 +7,7 @@ import (
 
 	"github.com/grantlucas/inkwell/internal/inkwell/calendar"
 	"github.com/grantlucas/inkwell/internal/inkwell/widget"
+	"github.com/grantlucas/inkwell/internal/inkwell/widgets/daydata"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/drawkit"
 	"github.com/grantlucas/inkwell/internal/inkwell/widgets/eventlist"
 	"golang.org/x/image/font"
@@ -600,6 +601,109 @@ func TestDraw_Empty(t *testing.T) {
 			}
 			assertLines(t, frame, 0, []line{tt.want})
 			if got := style.Lines(nil, tt.width); got != tt.lines {
+				t.Errorf("Lines = %d, want %d", got, tt.lines)
+			}
+		})
+	}
+}
+
+// below is ls moved dy further down the list.
+func below(dy int, ls []line) []line {
+	out := make([]line, len(ls))
+	for i, l := range ls {
+		l.baseline += dy
+		out[i] = l
+	}
+	return out
+}
+
+// A list whose calendar is unavailable says so on its first lines, in its
+// Empty note's style, in place of what an empty day says: an empty list
+// would read as a free day. The note wraps on words rather than being
+// cut, since a cut "CALENDAR UNAVAIL»" no longer says what is wrong. The
+// events that did arrive are listed under it, a gap below, by the usual
+// fit and overflow rules, with no hairline between the note and the
+// first event: it is not an event. A list without room for the whole
+// note lists what arrived without it, and never its Empty line.
+func TestDraw_Unavailable(t *testing.T) {
+	adv := drawkit.BodyAdvance()
+	const msg, gap = daydata.NoCalendar, 8
+	nothing := eventlist.Note{Text: eventlist.NothingScheduled}
+	dash := eventlist.Note{Text: "--", Centred: true}
+	done := eventlist.Note{Text: "DONE FOR TODAY", Scale: 2}
+	inlineList := eventlist.List{Layout: eventlist.Inline, Empty: nothing}
+	said := line{text: msg, face: regular, baseline: ascent}
+	tests := []struct {
+		label  string
+		style  eventlist.List
+		width  int
+		height int
+		events int
+		hidden int
+		want   []line
+		// rule is the y of the one hairline drawn, 0 for none.
+		rule int
+		// lines is what Lines counts for the list at width.
+		lines int
+	}{
+		{
+			label: "an empty list says it in place of its Empty line", style: inlineList, width: 30 * adv, height: 400,
+			want: []line{said}, lines: 1,
+		},
+		{
+			label: "the events that arrived follow a gap under it", style: eventlist.List{Gap: gap}, width: 30 * adv, height: 400,
+			events: 2, want: append([]line{said}, below(lineH+gap, stacked(2, gap, ""))...), lines: 5,
+		},
+		{
+			label: "in a narrow column it wraps on words, each line centred as its Empty line is", style: eventlist.List{Empty: dash},
+			width: 18 * adv, height: 400, lines: 2, want: []line{
+				{text: "CALENDAR", face: regular, x: (18*adv - 8*adv) / 2, baseline: ascent},
+				{text: "UNAVAILABLE", face: regular, x: (18*adv - 11*adv) / 2, baseline: ascent + lineH},
+			},
+		},
+		{
+			label: "a scaled Empty line makes it bold at that scale, a scaled line apart", style: eventlist.List{Empty: done},
+			width: 30 * adv, height: 400, lines: 2, want: []line{
+				{text: "CALENDAR", face: bold, scale: 2, baseline: 2 * ascent},
+				{text: "UNAVAILABLE", face: bold, scale: 2, baseline: 2*ascent + 2*lineH},
+			},
+		},
+		{
+			label: "events that do not fit under it are counted as usual", style: inlineList, width: 30 * adv, height: 3 * lineH,
+			events: 4, hidden: 3, want: append([]line{said}, below(lineH, inline(1, "+3 MORE"))...), lines: 5,
+		},
+		{
+			label: "no hairline between it and the first event", style: eventlist.List{Gap: gap, Rules: true}, width: 30 * adv, height: 400,
+			events: 2, want: append([]line{said}, below(lineH+gap, stacked(2, gap, ""))...),
+			rule: lineH + gap + 2*lineH + gap/2, lines: 5,
+		},
+		{
+			label: "without room for it, an empty list draws nothing rather than its Empty line", style: inlineList,
+			width: 30 * adv, height: lineH - 1, lines: 1,
+		},
+		{
+			label: "without room for all of it, what arrived is listed in its place", style: inlineList, width: 10 * adv, height: lineH,
+			events: 2, hidden: 2, want: inline(0, "+2 MORE"), lines: 4,
+		},
+		{
+			label: "too narrow for one character of it, what arrived is listed in its place", style: eventlist.List{Empty: eventlist.Note{Scale: 3}},
+			width: 3 * adv, height: 400, events: 1, want: []line{{text: "A", face: regular, baseline: ascent + lineH}}, lines: 2,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.label, func(t *testing.T) {
+			style := tt.style
+			style.Location, style.Unavailable = time.UTC, true
+			frame := newFrame()
+			if hidden := style.Draw(frame, image.Rect(0, 0, tt.width, tt.height), events(tt.events)); hidden != tt.hidden {
+				t.Errorf("hidden = %d, want %d", hidden, tt.hidden)
+			}
+			ref := drawLines(0, tt.want)
+			if tt.rule != 0 {
+				drawkit.DrawHLine(ref, 0, tt.width, tt.rule, widget.PaperBlack)
+			}
+			assertFrame(t, frame, ref, tt.want)
+			if got := style.Lines(events(tt.events), tt.width); got != tt.lines {
 				t.Errorf("Lines = %d, want %d", got, tt.lines)
 			}
 		})

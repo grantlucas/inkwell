@@ -46,6 +46,10 @@ func (w *Widget) Render(frame *image.Paletted) error {
 
 	agenda := heroStyle(w.Config.MaxEvents, w.Config.ShowLocation, now.Location())
 	rowStyle := dayRowStyle(w.Config.ShowLocation, now.Location())
+	// A feed with nothing to draw from leaves every day short, so today
+	// and every row say so rather than read as done or free.
+	agenda.Unavailable = data.CalendarUnavailable
+	rowStyle.Unavailable = data.CalendarUnavailable
 
 	// Every chart on the screen plots against the one temperature range
 	// the module takes across the days shown.

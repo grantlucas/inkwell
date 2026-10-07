@@ -633,6 +633,19 @@ taken as the owner, since hiding events by someone else's answers would
 be worse than showing a declined one. Cancelled events, which the
 organizer has called off for everyone, are hidden on every feed.
 
+#### Unavailable calendars
+
+When a feed can't be fetched and there is no earlier copy of it to
+show, `bold-five`, `today-hero`, `row-agenda` and `event-list` say
+"CALENDAR UNAVAILABLE" at the top of each list where an empty day would
+say "--", "DONE FOR TODAY" or "NOTHING SCHEDULED", at the same size, so
+a missing calendar never passes for a free day. In a narrow list, such
+as a `bold-five` column, it wraps to "CALENDAR" over "UNAVAILABLE".
+Events from the feeds that did answer are listed under it. A feed that
+fails while an earlier copy is cached shows that copy, with no note, as
+though it had answered. `day-timeline` says the same in its own way,
+described below.
+
 ### `day-timeline`
 
 Today only, on an hourly grid. Each event is a block from its real
