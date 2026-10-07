@@ -13,6 +13,7 @@ package eventlist
 import (
 	"fmt"
 	"image"
+	"math"
 	"strings"
 	"time"
 
@@ -79,9 +80,10 @@ type List struct {
 	Empty Note
 	// Unavailable is set when a calendar the events come from could not
 	// be read, so the list may be missing some. The list then says so
-	// (daydata.NoCalendar) on its first lines, in the Empty note's style,
-	// and lists what did arrive under it. It never says Empty: a day it
-	// could not read is not a free one.
+	// (daydata.NoCalendar) on its first lines, in the Empty note's style
+	// or a shorter form when that does not fit, and lists what did arrive
+	// under it. It never says Empty: a day it could not read is not a
+	// free one.
 	Unavailable bool
 	// ShowLocation writes " @ " and the location after a title.
 	ShowLocation bool
@@ -145,7 +147,8 @@ type placed struct {
 // different time. A list too narrow to list events still draws the
 // "+N MORE" line, cut to its width, so hidden events are announced
 // whenever any line fits. An empty list draws its Empty line, or
-// nothing when there is none.
+// nothing when there is none. An Unavailable list draws its note first,
+// in whatever form fits, and its events under it.
 func (s List) Draw(frame *image.Paletted, r image.Rectangle, events []calendar.Event) int {
 	blocks, hidden := s.layout(r, events)
 	for i, b := range blocks {
@@ -165,10 +168,10 @@ func (s List) Draw(frame *image.Paletted, r image.Rectangle, events []calendar.E
 // pixels: every listed event's lines (a stacked event's time and title
 // lines, an inline event's one), and the "+N MORE" line when MaxEvents
 // hides any. An empty list needs its Empty line, if it has one. An
-// Unavailable list needs its note's lines instead, ahead of its events'. A line
-// is one row of text, whatever size it is drawn at. A width too narrow
-// to list events needs only the "+N MORE" line, and one without a
-// character of room needs none.
+// Unavailable list needs its note's lines instead, in full, ahead of its
+// events'. A line is one row of text, whatever size it is drawn at. A
+// width too narrow to list events needs only the "+N MORE" line, and one
+// without a character of room needs none.
 func (s List) Lines(events []calendar.Event, width int) int {
 	if maxChars, ok := s.charsIn(width); !ok {
 		if len(events) > 0 && maxChars >= 1 {
@@ -176,12 +179,12 @@ func (s List) Lines(events []calendar.Event, width int) int {
 		}
 		return 0
 	}
-	n := 0
-	if s.Unavailable {
-		n, s.Empty = s.unavailable().block(width, noteLines).rows, Note{}
-	}
-	if len(events) == 0 && s.Empty.Text != "" {
+	if len(events) == 0 && s.empty().Text != "" {
 		return 1
+	}
+	n := 0
+	if note, ok := s.unavailable(width, math.MaxInt); ok {
+		n = note.rows
 	}
 	listed := s.listed(events)
 	for _, e := range listed {
@@ -214,33 +217,54 @@ func (s List) listed(events []calendar.Event) []calendar.Event {
 	return events
 }
 
-// layout places as many events as fit in r, then the "+N MORE" line
-// when any are left over, and reports how many were left over.
+// layout places the unavailable-calendar note when there is one, then as
+// many events as fit in r under it, then the "+N MORE" line when any are
+// left over, and reports how many were left over.
 func (s List) layout(r image.Rectangle, events []calendar.Event) ([]placed, int) {
-	if !s.Unavailable {
-		return s.list(r, events)
+	var head []placed
+	if note, ok := s.unavailable(r.Dx(), r.Dy()); ok {
+		head = append(head, placed{block: note, top: r.Min.Y})
+		r.Min.Y += note.height + s.Gap
 	}
-
-	// What arrived is listed by the usual rules, under the note when it
-	// fits and in its place when it does not. Never with the Empty line:
-	// a day the list could not read is not a free one.
-	rest := s
-	rest.Unavailable, rest.Empty = false, Note{}
-	note := s.unavailable().block(r.Dx(), noteLines)
-	if _, ok := s.charsIn(r.Dx()); !ok || note.rows == 0 || r.Min.Y+note.height > r.Max.Y {
-		return rest.list(r, events)
-	}
-	note.note = true
-	head := placed{block: note, top: r.Min.Y}
-	r.Min.Y += note.height + s.Gap
-	out, hidden := rest.list(r, events)
-	return append([]placed{head}, out...), hidden
+	out, hidden := s.list(r, events)
+	return append(head, out...), hidden
 }
 
-// unavailable is the note the list says when its calendar could not be
-// read, in the style of its Empty note.
-func (s List) unavailable() Note {
-	return Note{Text: daydata.NoCalendar, Scale: s.Empty.Scale, Centred: s.Empty.Centred}
+// empty is what the list says when it has no events: its Empty note, or
+// nothing when its calendar is unavailable, since a day the list could
+// not read is not a free one.
+func (s List) empty() Note {
+	if s.Unavailable {
+		return Note{}
+	}
+	return s.Empty
+}
+
+// unavailable resolves the note an Unavailable list says ahead of its
+// events, in a list width by height pixels, and reports whether it has
+// one. The note takes its Empty note's style, wrapped on words, and
+// falls back to shorter forms when that does not fit: at body size, then
+// on one body line cut to the width, so a list with a line of room never
+// leaves a calendar it could not read looking like a free day. Like the
+// Empty note it gives out with the list: a width too narrow to list
+// events says nothing.
+func (s List) unavailable(width, height int) (block, bool) {
+	if _, ok := s.charsIn(width); !s.Unavailable || !ok {
+		return block{}, false
+	}
+	said := Note{Text: daydata.NoCalendar, Scale: s.Empty.Scale, Centred: s.Empty.Centred}
+	body := Note{Text: said.Text, Centred: said.Centred}
+	forms := []struct {
+		note  Note
+		lines int
+	}{{said, noteLines}, {body, noteLines}, {body, 1}}
+	for _, f := range forms {
+		if b := f.note.block(width, f.lines); b.rows > 0 && b.height <= height {
+			b.note = true
+			return b, true
+		}
+	}
+	return block{}, false
 }
 
 // list places as many events as fit in r, then the "+N MORE" line when
@@ -254,8 +278,9 @@ func (s List) list(r image.Rectangle, events []calendar.Event) ([]placed, int) {
 	fits := func(b block, top int) bool { return top+b.height <= r.Max.Y }
 
 	if len(events) == 0 {
-		if empty := s.Empty.block(r.Dx(), 1); ok && s.Empty.Text != "" && fits(empty, r.Min.Y) {
-			return []placed{{block: empty, top: r.Min.Y}}, 0
+		empty := s.empty()
+		if b := empty.block(r.Dx(), 1); ok && empty.Text != "" && fits(b, r.Min.Y) {
+			return []placed{{block: b, top: r.Min.Y}}, 0
 		}
 		return nil, 0
 	}
